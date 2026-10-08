@@ -10,10 +10,12 @@ defmodule Mix.Tasks.Nidhox do
   `--data` defaults to `config :nidhox, :data` (which `NIDHOX_DATA` sets), then the
   usual install places `Nidhox.Assets.candidates/0` lists. `--area` is the area fought
   across (`Cemetery`, `Castle`, `Mines`, `Sky`, `Wilds`; default `Cemetery`); `--room`
-  picks the area of the room of that name.
+  picks the area of the room of that name. Each bout's result is kept in NidhOX's ledger
+  (`Cauldron2D.Paths.data(:nidhox, "ledger.dets")`).
   """
 
   use Mix.Task
+  alias Nidhox.Match
 
   @switches [data: :string, area: :string, room: :string, name: :string]
 
@@ -35,6 +37,19 @@ defmodule Mix.Tasks.Nidhox do
   end
 
   defp play(opts) do
+    area = Keyword.get(opts, :area) || Match.area(Keyword.get(opts, :room)) || "Cemetery"
+
+    :ok =
+      Cauldron2D.Worlds.register(Nidhox.Client.world_id(),
+        game: Nidhox.Game,
+        game_opts: [area: area],
+        hz: 60,
+        name: "NidhOX",
+        children: fn %{world: world} ->
+          [{Cauldron2D.Ledger.Recorder, world: world, label: "NidhOX", ledger: Nidhox.Ledger}]
+        end
+      )
+
     Code.ensure_loaded!(Cauldron2D.Drafter.Surface)
     Drafter.Widget.Registry.register(Cauldron2D.Drafter.Surface)
 
@@ -42,9 +57,7 @@ defmodule Mix.Tasks.Nidhox do
       refresh_rate: "60fps",
       props: %{
         game: Nidhox.Client,
-        username: Keyword.get(opts, :name, "fencer"),
-        room: Keyword.get(opts, :room),
-        area: Keyword.get(opts, :area)
+        username: Keyword.get(opts, :name, "fencer")
       }
     )
   end

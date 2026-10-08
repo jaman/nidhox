@@ -16,7 +16,7 @@ defmodule Nidhox.Assets do
   @key {__MODULE__, :assets}
 
   @enforce_keys [:path, :data, :pictures]
-  defstruct [:path, :data, :pictures]
+  defstruct [:path, :data, :pictures, :pages]
 
   @type t :: %__MODULE__{
           path: Path.t(),
@@ -55,8 +55,11 @@ defmodule Nidhox.Assets do
   def load(path) do
     with {:ok, data} <- Data.read(path),
          {:ok, pages} <- Pictures.new(data) do
-      pictures = Map.merge(Pictures.table(pages, data), Nidhox.Art.table())
-      assets = %__MODULE__{path: path, data: data, pictures: pictures}
+      pictures =
+        Pictures.table(pages, data)
+        |> Map.merge(Nidhox.Sprites.table(pages, data))
+
+      assets = %__MODULE__{path: path, data: data, pictures: pictures, pages: pages}
       :persistent_term.put(@key, assets)
       {:ok, assets}
     end

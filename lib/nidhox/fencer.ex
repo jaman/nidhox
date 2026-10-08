@@ -53,7 +53,7 @@ defmodule Nidhox.Fencer do
 
   @gravity 0.22
   @fall_limit 5.0
-  @jump -4.2
+  @jump -5.5
   @walk 1.1
   @run 2.4
   @grip 0.45
@@ -70,6 +70,14 @@ defmodule Nidhox.Fencer do
   @doc "A fresh fencer of side `side` at `position`, facing `facing`, sword in hand."
   @spec new(1 | 2, {number(), number()}, 1 | -1) :: t()
   def new(side, position, facing), do: %__MODULE__{side: side, position: position, facing: facing}
+
+  @doc "The total steps of a thrust."
+  @spec thrust_steps() :: non_neg_integer()
+  def thrust_steps, do: @thrust_steps
+
+  @doc "The total steps of a throw."
+  @spec throw_steps() :: non_neg_integer()
+  def throw_steps, do: @throw_steps
 
   @doc "The steps of a thrust during which the blade reaches out."
   @spec thrust_active() :: Range.t()

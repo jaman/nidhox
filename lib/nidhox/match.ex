@@ -19,7 +19,7 @@ defmodule Nidhox.Match do
     * Two fencers who are both up never stand closer than `@personal_space` pixels at
       the same height: they are pushed apart about their midpoint.
     * In the end room, the fencer with the right of way reaching the goal zone wins.
-      The bout starts again in the centre `@win_steps` steps later.
+      The bout is `finished?/1` `@win_steps` steps later.
   """
 
   alias Cauldron2D.GameMaker.Collide
@@ -40,13 +40,14 @@ defmodule Nidhox.Match do
     swords: [],
     winner: nil,
     winner_timer: 0,
-    events: []
+    events: [],
+    frame: 0
   ]
 
   @type t :: %__MODULE__{}
 
   @respawn_steps 90
-  @win_steps 240
+  @win_steps 120
   @view_width 320
   @lead 0.35
   @edge_margin 4
@@ -65,8 +66,13 @@ defmodule Nidhox.Match do
         do: index
   end
 
-  @doc "The area a room named `name` belongs to, `nil` for a room that is no area's."
-  @spec area(String.t()) :: String.t() | nil
+  @doc """
+  The area a room named `name` belongs to; `nil` for a room that is no area's, and for
+  no room at all.
+  """
+  @spec area(String.t() | nil) :: String.t() | nil
+  def area(nil), do: nil
+
   def area(name) do
     case Regex.run(
            ~r/^r([A-Z][a-z]+)(LeftEnd|LeftC|LeftB|LeftA|Center|RightA|RightB|RightC|RightEnd)$/,
@@ -105,9 +111,7 @@ defmodule Nidhox.Match do
   @doc "The bout one step on, with each side's input; gives the world as the bout leaves it."
   @spec step(t(), World.t(), %{1 => map(), 2 => map()}) :: {t(), World.t()}
   def step(%__MODULE__{winner: winner} = match, world, _inputs) when winner != nil do
-    if match.winner_timer >= @win_steps,
-      do: new(world, match.area),
-      else: {%{match | winner_timer: match.winner_timer + 1, events: []}, world}
+    {%{match | winner_timer: match.winner_timer + 1, frame: match.frame + 1, events: []}, world}
   end
 
   def step(%__MODULE__{} = match, world, inputs) do
@@ -119,13 +123,18 @@ defmodule Nidhox.Match do
 
     {fencers, swords, events} = Duel.step(fencers, match.swords, match.terrain)
 
-    %{match | fencers: separate(fencers), swords: swords, events: events}
+    %{match | fencers: separate(fencers), swords: swords, events: events, frame: match.frame + 1}
     |> right_of_way(events)
     |> fall_out()
     |> respawn()
     |> keep_in_view(world)
     |> advance(world)
   end
+
+  @doc "Whether the bout is won and the winner has been shown for `@win_steps` steps."
+  @spec finished?(t()) :: boolean()
+  def finished?(%__MODULE__{winner: nil}), do: false
+  def finished?(%__MODULE__{winner_timer: timer}), do: timer >= @win_steps
 
   @doc "Side `side`'s goal direction: `1` to the right, `-1` to the left."
   @spec goal(1 | 2) :: 1 | -1

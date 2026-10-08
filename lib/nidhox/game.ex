@@ -1,44 +1,81 @@
 defmodule Nidhox.Game do
   @moduledoc """
-  NidhOX as a `Cauldron2D.Game`: a bout (`Nidhox.Match`) fought across one area's rooms,
-  the rooms themselves running in `Cauldron2D.GameMaker`, stepped 60 times a second.
+  NidhOX as a `Cauldron2D.Game`: the whole flow from the title to the end of a bout,
+  stepped 60 times a second, the rooms running in `Cauldron2D.GameMaker`.
 
       Cauldron2D.World.start_link(game: Nidhox.Game, game_opts: [area: "Wilds"], hz: 60)
 
   Options: `:area` (`"Cemetery"`, `"Castle"`, `"Mines"`, `"Sky"`, `"Wilds"`; default
-  `"Cemetery"`), or `:room`, any of an area's rooms, to fight in that room's area.
+  `"Cemetery"`), the area shown behind the title and selected first for a bout.
   `Nidhox.Assets.load/1` must have run first.
 
+  ## Screens
+
+    * `:title` — the game's name over the area's centre room; any `:start`, `:attack` or
+      `:jump` goes on to the main menu
+    * `:main` — Arcade, Exhibition, Multiplayer, Credits
+    * `:areas` — the area to fight in, for Exhibition and Multiplayer; the room behind
+      the menu is the selected area's centre; `:jump` goes back
+    * `:en_garde` — the fencers placed and still under "EN GARDE" for `@en_garde_steps`
+      steps
+    * `:bout` — the bout (`Nidhox.Match`) until it is finished
+    * `:results` — the winner and the session's tally; going on returns to the main menu,
+      or in Arcade after a win goes to the next area's bout
+    * `:credits` — any choice returns to the main menu
+
+  ## Modes
+
+    * `:arcade` — side 2 is the computer (`Nidhox.AI`); the areas are fought in `@arcade`
+      order, and a loss or the last win ends the run
+    * `:exhibition` — side 2 is the computer, in the area chosen
+    * `:multiplayer` — both sides are players, in the area chosen
+
   The first two players to join take sides `1` and `2`; anyone joining after them
-  watches. Each step the rooms are stepped, then the bout with each side's held,
-  pressed and released `Nidhox.Controls` actions, and every viewer is sent that step's
-  frame.
+  watches. Where the computer plays side 2, the input of a player on side 2 is not used.
+
+  Each finished bout sends a `{:result, row}` event for every player who fought it, with
+  the player's id and name, `won?`, the area and the mode.
   """
 
   @behaviour Cauldron2D.Game
 
   alias Cauldron2D.GameMaker.Data
   alias Cauldron2D.GameMaker.Draw
+  alias Cauldron2D.GameMaker.Rooms
   alias Cauldron2D.GameMaker.Step
   alias Cauldron2D.GameMaker.World
-  alias Nidhox.{Assets, Look, Match}
+  alias Nidhox.{AI, Assets, Look, Match}
+  alias Nidhox.Screen.{Credits, Menu, Results, Text, Title}
 
   @sides [1, 2]
   @no_keys %{held: MapSet.new(), pressed: MapSet.new(), released: MapSet.new()}
+  @areas ["Cemetery", "Castle", "Mines", "Sky", "Wilds"]
+  @arcade @areas
+  @en_garde_steps 90
+  @gold {245, 205, 70}
 
   @impl true
   def init(opts) do
     %Assets{data: data} = Assets.get()
-    area = area(opts)
-    centre = Data.index(data, :rooms, "r#{area}Center")
-    {match, world} = Match.new(World.new(data, Nidhox.Code, room: centre), area)
+    area = Keyword.get(opts, :area) || "Cemetery"
+    world = World.new(data, Nidhox.Code, room: centre(data, area))
 
-    draw(%{
+    present(%{
       world: world,
-      match: match,
+      screen: :title,
+      menu: nil,
+      mode: nil,
+      area: area,
+      arcade: 0,
+      match: nil,
+      brain: nil,
+      timer: 0,
+      steps: 0,
+      tally: %{1 => 0, 2 => 0},
       sides: %{},
       held: Map.new(@sides, &{&1, MapSet.new()}),
       previous: Map.new(@sides, &{&1, MapSet.new()}),
+      events: [],
       frame: nil
     })
   end
@@ -46,8 +83,11 @@ defmodule Nidhox.Game do
   @impl true
   def join(state, id, _props) do
     taken = state.sides |> Map.values() |> MapSet.new()
-    side = Enum.find(@sides, &(&1 not in taken))
-    {:ok, if(side, do: put_in(state.sides[id], side), else: state)}
+
+    case Enum.find(@sides, &(&1 not in taken)) do
+      nil -> {:ok, state}
+      side -> {:ok, put_in(state.sides[id], side)}
+    end
   end
 
   @impl true
@@ -68,22 +108,12 @@ defmodule Nidhox.Game do
 
   @impl true
   def step(state, _dt) do
-    players =
-      Map.new(@sides, fn side ->
-        held = state.held[side]
-        previous = state.previous[side]
+    players = inputs(state)
+    state = %{state | previous: state.held, steps: state.steps + 1, timer: state.timer + 1}
 
-        {side,
-         %{
-           held: held,
-           pressed: MapSet.difference(held, previous),
-           released: MapSet.difference(previous, held)
-         }}
-      end)
-
-    world = Step.run(state.world, Map.put(@no_keys, :players, players))
-    {match, world} = Match.step(state.match, world, players)
-    draw(%{state | world: world, match: match, previous: state.held})
+    state
+    |> screen(players)
+    |> present()
   end
 
   @impl true
@@ -91,34 +121,200 @@ defmodule Nidhox.Game do
 
   @impl true
   def drain_events(state) do
-    {events, world} = World.take_outbox(state.world)
-    {events ++ state.match.events, %{state | world: world}}
+    {outbox, world} = World.take_outbox(state.world)
+    bout = if state.match, do: state.match.events, else: []
+    {outbox ++ bout ++ Enum.reverse(state.events), %{state | world: world, events: []}}
   end
 
-  defp area(opts) do
-    case Keyword.get(opts, :room) do
-      nil -> Keyword.get(opts, :area) || "Cemetery"
-      room -> Match.area(room) || raise ArgumentError, "#{inspect(room)} is not an arena room"
+  defp inputs(state) do
+    Map.new(@sides, fn side ->
+      held = state.held[side]
+      previous = state.previous[side]
+
+      {side,
+       %{
+         held: held,
+         pressed: MapSet.difference(held, previous),
+         released: MapSet.difference(previous, held)
+       }}
+    end)
+  end
+
+  defp screen(%{screen: :title} = state, players) do
+    state = scenery(state, players)
+    if Title.continue?(players), do: main_menu(state), else: state
+  end
+
+  defp screen(%{screen: :main} = state, players) do
+    state = scenery(state, players)
+
+    case Menu.input(state.menu, players) do
+      {:choose, :arcade} -> en_garde(%{state | mode: :arcade, arcade: 0}, Enum.at(@arcade, 0))
+      {:choose, :credits} -> %{state | screen: :credits, timer: 0}
+      {:choose, mode} -> area_menu(%{state | mode: mode})
+      :back -> %{state | screen: :title, timer: 0}
+      {:stay, menu} -> %{state | menu: menu}
     end
   end
 
-  defp draw(state) do
-    {world, items} = Draw.run(state.world)
-    {world, gui} = Draw.gui(world)
-    window = world.data.general.window
+  defp screen(%{screen: :areas} = state, players) do
+    state = scenery(state, players)
+
+    case Menu.input(state.menu, players) do
+      {:choose, area} -> en_garde(state, area)
+      :back -> main_menu(state)
+      {:stay, menu} -> preview(%{state | menu: menu}, Menu.selected(menu))
+    end
+  end
+
+  defp screen(%{screen: :credits} = state, players) do
+    state = scenery(state, players)
+    if Title.continue?(players), do: main_menu(state), else: state
+  end
+
+  defp screen(%{screen: :en_garde} = state, players) do
+    state = scenery(state, players)
+    if state.timer >= @en_garde_steps, do: %{state | screen: :bout, timer: 0}, else: state
+  end
+
+  defp screen(%{screen: :bout} = state, players) do
+    world = Step.run(state.world, Map.put(@no_keys, :players, players))
+    {players, state} = computer(state, players)
+    {match, world} = Match.step(state.match, world, players)
+    state = %{state | world: world, match: match}
+    if Match.finished?(match), do: results(state), else: state
+  end
+
+  defp screen(%{screen: :results} = state, players) do
+    state = scenery(state, players)
+
+    cond do
+      not Title.continue?(players) ->
+        state
+
+      next_arcade?(state) ->
+        en_garde(%{state | arcade: state.arcade + 1}, Enum.at(@arcade, state.arcade + 1))
+
+      true ->
+        main_menu(state)
+    end
+  end
+
+  defp scenery(state, players),
+    do: %{state | world: Step.run(state.world, Map.put(@no_keys, :players, players))}
+
+  defp main_menu(state) do
+    menu =
+      Menu.new("NIDHOX", [
+        {"ARCADE", :arcade},
+        {"EXHIBITION", :exhibition},
+        {"MULTIPLAYER", :multiplayer},
+        {"CREDITS", :credits}
+      ])
+
+    %{state | screen: :main, menu: menu, match: nil, brain: nil, timer: 0}
+  end
+
+  defp area_menu(state) do
+    selected = Enum.find_index(@areas, &(&1 == state.area)) || 0
+    menu = Menu.new("CHOOSE AN AREA", Enum.map(@areas, &{String.upcase(&1), &1}), selected)
+    %{state | screen: :areas, menu: menu, timer: 0}
+  end
+
+  defp preview(%{area: area} = state, area), do: state
+
+  defp preview(state, area),
+    do: %{state | area: area, world: Rooms.enter(state.world, centre(state.world.data, area))}
+
+  defp en_garde(state, area) do
+    {match, world} = Match.new(state.world, area)
+    brain = if state.mode in [:arcade, :exhibition], do: AI.new(2, 1, AI.pick_personality())
+    %{state | screen: :en_garde, area: area, world: world, match: match, brain: brain, timer: 0}
+  end
+
+  defp computer(%{brain: nil} = state, players), do: {players, state}
+
+  defp computer(%{brain: brain, match: match} = state, players) do
+    {brain, input} = AI.step(brain, match.fencers[2], match.fencers[1], players[2], match)
+    {Map.put(players, 2, input), %{state | brain: brain}}
+  end
+
+  defp results(%{match: match} = state) do
+    winner = match.winner
+    tally = Map.update!(state.tally, winner, &(&1 + 1))
 
     %{
       state
-      | world: world,
-        frame: %{
-          items: items ++ Look.items(state.match),
-          gui: gui ++ Look.banner(state.match, window),
+      | screen: :results,
+        tally: tally,
+        timer: 0,
+        events: result_events(state, winner) ++ state.events
+    }
+  end
+
+  defp result_events(state, winner) do
+    for {id, side} <- state.sides, side == 1 or state.brain == nil do
+      {:result,
+       %{id: id, name: to_string(id), won?: side == winner, area: state.area, mode: state.mode}}
+    end
+  end
+
+  defp next_arcade?(%{mode: :arcade, match: %Match{winner: 1}, arcade: index}),
+    do: index + 1 < length(@arcade)
+
+  defp next_arcade?(_state), do: false
+
+  defp present(state) do
+    window = state.world.data.general.window
+    {world, room} = Draw.run(state.world)
+    {world, room_gui} = Draw.gui(world)
+    state = %{state | world: world}
+    {fencers, overlay} = layer(state, window)
+
+    %{
+      state
+      | frame: %{
+          items: room ++ fencers,
+          gui: room_gui ++ overlay,
           background: Draw.background(world),
           view: view_rectangle(world),
-          window: window
+          window: window,
+          screen: state.screen
         }
     }
   end
+
+  defp layer(%{screen: :title} = state, window), do: {[], Title.items(state.steps, window)}
+
+  defp layer(%{screen: screen} = state, window) when screen in [:main, :areas],
+    do: {[], Menu.items(state.menu, window)}
+
+  defp layer(%{screen: :credits}, window), do: {[], Credits.items(window)}
+
+  defp layer(%{screen: :en_garde} = state, window),
+    do: {Look.items(state.match), [Text.centred("EN GARDE", @gold, 7, 200, window)]}
+
+  defp layer(%{screen: :bout} = state, window),
+    do: {Look.items(state.match), Look.banner(state.match, window)}
+
+  defp layer(%{screen: :results} = state, window) do
+    overlay = Results.items(state.match.winner, state.tally, results_note(state), window)
+    {Look.items(state.match), overlay}
+  end
+
+  defp results_note(%{mode: :arcade, match: %Match{winner: 1}, arcade: index}) do
+    case Enum.at(@arcade, index + 1) do
+      nil -> "THE ARCADE IS WON"
+      area -> "NEXT: #{String.upcase(area)}"
+    end
+  end
+
+  defp results_note(%{mode: :arcade, arcade: index}),
+    do: "THE RUN ENDS AT #{String.upcase(Enum.at(@arcade, index))}"
+
+  defp results_note(_state), do: "BACK TO THE MENU"
+
+  defp centre(%Data{} = data, area), do: Data.index(data, :rooms, "r#{area}Center")
 
   defp view_rectangle(%World{views: [%{view: rectangle} | _]}), do: rectangle
 

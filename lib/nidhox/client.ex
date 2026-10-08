@@ -11,10 +11,9 @@ defmodule Nidhox.Client do
 
   @behaviour Cauldron2D.Client.Game
 
-  alias Cauldron2D.DrawList
-  alias Nidhox.{Assets, Controls}
-
   @atlas :nidhox
+  alias Cauldron2D.DrawList
+  alias Nidhox.{Assets, Controls, Game, Music, Sound}
 
   @impl true
   def title, do: %{name: "NidhOX", tagline: "Nidhogg Open-source eXperience"}
@@ -35,13 +34,10 @@ defmodule Nidhox.Client do
   def keymaps, do: [keyboard: Controls.keys(1)]
 
   @impl true
-  def local_seats(_props), do: [Controls.keys(2)]
+  def toggles, do: []
 
   @impl true
   def padmap(_props), do: Controls.pad()
-
-  @impl true
-  def toggles, do: []
 
   @impl true
   def start, do: {:play, :nidhox}
@@ -58,11 +54,9 @@ defmodule Nidhox.Client do
   @impl true
   def client_keys do
     %{
-      menu: :escape,
       back: nil,
       settings: nil,
       settings_menu: nil,
-      title: nil,
       talk: nil,
       watch: nil,
       team: nil,
@@ -80,19 +74,27 @@ defmodule Nidhox.Client do
   end
 
   @impl true
-  def worlds(props) do
-    [
-      %{
-        id: :nidhox,
-        name: "NidhOX",
-        world:
-          {Nidhox.Game,
-           [hz: 60, game_opts: [room: Map.get(props, :room), area: Map.get(props, :area)]]},
-        players: 0,
-        humans: []
-      }
-    ]
+  def sounds, do: fn event -> Map.get(Sound.effects(), event) end
+
+  @impl true
+  def music do
+    Music.specs()
+    |> Map.to_list()
   end
+
+  @impl true
+  def cue(%{menu: :title}, _screen), do: Music.cue(%{menu: :title}, :title)
+  def cue(%{menu: :menu}, :play), do: Music.cue(%{menu: :menu}, :play)
+  def cue(%{menu: :play}, :play), do: Music.cue(%{menu: :play}, :play)
+  def cue(_view, _screen), do: nil
+
+  @impl true
+  def worlds(_props),
+    do: [%{id: world_id(), name: "NidhOX", world: Cauldron2D.Worlds.world_name(world_id())}]
+
+  @doc "The id NidhOX's world is registered under with `Cauldron2D.Worlds`."
+  @spec world_id() :: atom()
+  def world_id, do: :nidhox
 
   @impl true
   def scene(frame) do
@@ -166,12 +168,23 @@ defmodule Nidhox.Client do
   @impl true
   def listener(_frame), do: nil
 
-  @impl true
-  def sounds, do: fn _event -> nil end
+  # ---- Game integration ----
 
-  @impl true
-  def music, do: []
+  @doc "Start the game world."
+  @spec start_game(keyword()) :: :ok
+  def start_game(opts \\ []) do
+    case Nidhox.Assets.find(Keyword.get(opts, :data)) do
+      nil ->
+        raise "give the game's data file: mix nidhox --data path/to/data.win"
 
-  @impl true
-  def cue(_frame, _screen), do: nil
+      path ->
+        case Nidhox.Assets.load(path) do
+          {:ok, _assets} ->
+            Cauldron2D.World.start_link(game: Game, game_opts: opts)
+
+          {:error, reason} ->
+            raise "could not read #{path}: #{inspect(reason)}"
+        end
+    end
+  end
 end

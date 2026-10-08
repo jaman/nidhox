@@ -4,6 +4,13 @@
 
 ### Added
 
+- The flow from the title to the results: title, main menu (Arcade, Exhibition,
+  Multiplayer, Credits), area choice with each area shown behind the menu, "EN GARDE",
+  the bout, and the results with the session's tally (`Nidhox.Screen.*`).
+- Arcade through every area against the computer; Exhibition against the computer in
+  one area. `:start` on `Enter` and the controller's Start.
+- Each bout's result kept in NidhOX's ledger through `Cauldron2D.Worlds` and
+  `Cauldron2D.Ledger.Recorder`.
 - Fencing: stances, thrusts, parries, disarms, thrown swords, punches and picking a
   sword up (`Nidhox.Fencer`, `Nidhox.Duel`), on the room's ground (`Nidhox.Terrain`).
 - Bouts across an area's rooms: the right of way, respawning ahead of the runner, the

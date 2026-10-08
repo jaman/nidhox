@@ -32,6 +32,22 @@ Two players share the keyboard, or play with a controller each:
 
 The first controller to send anything plays side 1, the second side 2.
 
+## Modes
+
+NidhOX opens on its title. Press `Enter` (or attack) to reach the menu:
+
+- **Arcade** — you against the computer through every area in turn: Cemetery,
+  Castle, Mines, Sky, Wilds. A loss ends the run.
+- **Exhibition** — you against the computer in the area you choose.
+- **Multiplayer** — two players at one keyboard, or a controller each, in the area you
+  choose.
+- **Credits**
+
+On the menus, up and down move, `Enter` or attack chooses, and jump goes back. Each
+bout starts with the fencers held for a moment under "EN GARDE"; after it, the results
+show both sides' wins this session. Every bout's result is kept, per player, in
+`~/.local/share/nidhox/ledger.dets`.
+
 ## How it plays
 
 Two fencers start in the middle of an area. Yellow wants to reach the far right end,
