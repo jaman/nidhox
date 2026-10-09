@@ -216,7 +216,7 @@ defmodule Nidhox.Game do
     %{
       state
       | frame: %{
-          items: room ++ fencers,
+          items: fencers ++ room,
           gui: room_gui,
           overlay: overlay,
           background: Draw.background(world),

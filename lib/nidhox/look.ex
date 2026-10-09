@@ -8,16 +8,24 @@ defmodule Nidhox.Look do
   sprite drawn with the body, or `sSword` held out from the hand — each placed by its
   own origin from the copy and turned the way the fencer faces. A sword in play is
   `Nidhox.Sprites`' `:sword` or `:flying_sword`.
+
+  Depths are the game's own: the fencer `@fencer_depth`, its held sword `@held_depth`,
+  swords in play `@sword_depth`. The room's own instances at an equal depth, its grass
+  among them, are drawn over these items.
   """
 
+  alias Cauldron2D.GameMaker.Colour
   alias Nidhox.{Assets, Ending, Fencer, Match, Pose}
   alias Nidhox.Screen.Art
 
-  @fencer_depth -100
-  @sword_depth -101
+  @fencer_depth 0
+  @held_depth 1
+  @sword_depth 0
   @banner_at {160, 22}
-  @go_blink 40
-  @go_shown 28
+  @arrow_reach 124
+  @arrow_top 12
+  @arrow_band 5
+  @screen_middle 160
   @colours %{1 => {245, 205, 70}, 2 => {240, 120, 45}}
 
   @doc "Side `side`'s colour."
@@ -39,8 +47,17 @@ defmodule Nidhox.Look do
 
   @doc """
   The banner for `window` `{width, height}`, from the copy's sprites: the winner's
-  `sWinner` in its colour, or, for the side with the right of way, `sGO` pointing the
-  way it runs in its colour, shown for `@go_shown` of every `@go_blink` steps.
+  `sWinner` in its colour, or the right of way's arrow (`Arrow`), as the game draws it
+  on its GUI:
+
+    * `sGO`, frame 1 for side 1 and 2 for side 2, its left edge at
+      `@screen_middle ± @arrow_reach − width / 2` on that side of the screen, and its top
+      at `@arrow_top + (@screen_middle − |left − @screen_middle|) × 0.1`
+    * first its shadow in black at `(left − 1 + ±sin(frame / 30), top − 1 + cos(frame /
+      50) / 2)`
+    * then the arrow in bands `@arrow_band` pixels tall, band `i` (from its top) in the
+      side's colour merged towards that colour 5% darkened by `0.5 + sin(i² / 10 + frame
+      / 4) × 0.5`
   """
   @spec banner(Match.t(), {number(), number()}) :: [map()]
   def banner(%Match{winner: side}, window) when side != nil,
@@ -49,15 +66,41 @@ defmodule Nidhox.Look do
   def banner(%Match{advancing: nil}, _window), do: []
 
   def banner(%Match{advancing: side, frame: frame}, window) do
-    if rem(frame, @go_blink) < @go_shown,
-      do: [
-        Art.centred("sGO", go_frame(Match.goal(side)), @banner_at, window, blend: @colours[side])
-      ],
-      else: []
+    {width, height} = Art.size("sGO")
+    toward = if side == 1, do: 1, else: -1
+    left = @screen_middle + toward * @arrow_reach - width / 2
+    top = @arrow_top + (@screen_middle - abs(left - @screen_middle)) * 0.1
+
+    shadow =
+      Art.part(
+        "sGO",
+        side,
+        {0, 0, width, height},
+        {left - 1 + toward * :math.sin(frame / 30), top - 1 + :math.cos(frame / 50) / 2},
+        window,
+        blend: {0, 0, 0}
+      )
+
+    [shadow | arrow_bands(side, frame, {left, top}, {width, height}, window)]
   end
 
-  defp go_frame(1), do: 1
-  defp go_frame(-1), do: 2
+  defp arrow_bands(side, frame, {left, top}, {width, height}, window) do
+    colour = @colours[side]
+    darker = Colour.merge(colour, {0, 0, 0}, 0.05)
+
+    for band <- 0..(height - 1)//@arrow_band do
+      shade = 0.5 + :math.sin(band * band / 10 + frame / 4) * 0.5
+
+      Art.part(
+        "sGO",
+        side,
+        {0, band, width, min(@arrow_band, height - band)},
+        {left, top + band},
+        window,
+        blend: Colour.merge(colour, darker, shade)
+      )
+    end
+  end
 
   defp fencer(%Fencer{} = fencer) do
     %{body: {name, frame}, sword: held} = Pose.of(fencer)
@@ -90,7 +133,7 @@ defmodule Nidhox.Look do
       position: position,
       origin: origin,
       scale: {facing, 1},
-      depth: @sword_depth
+      depth: @held_depth
     }
   end
 

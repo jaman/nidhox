@@ -87,6 +87,11 @@
   castle's black backdrop and its chandelier's swing, squeak and glow; grass laid,
   swaying and tinted, dark grass breathing deeper, trodden flat by fencers, shaken by
   passing fencers, flying swords and cats, and rising again (`Nidhox.Objects.Grass`).
+- The right of way's arrow as the game draws it: steady, on the leader's side of the
+  screen, with its wobbling shadow and shimmering bands.
+- The bout drawn at the game's own depths: grass stands in front of the fencers, so a
+  fencer standing still in tall grass is hidden by it; held swords sit behind the body.
+- `mix run tools/render_bout.exs`: plays into a bout and saves its frames.
 - The wind surface as the game churns it — random patches nudged across a tiled
   `bWindSurface` canvas — in the cemetery's sky and, faintly, across the title; the
   castle centre's edge sounds (`sfxEdgeOfCenter`), and the wind sound only there.

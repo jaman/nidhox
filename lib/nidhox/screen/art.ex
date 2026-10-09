@@ -46,6 +46,24 @@ defmodule Nidhox.Screen.Art do
     |> Map.put_new(:depth, 0)
   end
 
+  @doc """
+  The part `{left, top, width, height}` of frame `frame` of the copy's sprite `name`,
+  its top-left corner at `{x, y}` (`draw_sprite_part_ext`); options as `sprite/5`'s.
+  """
+  @spec part(
+          String.t(),
+          non_neg_integer(),
+          {number(), number(), number(), number()},
+          {number(), number()},
+          {number(), number()},
+          keyword()
+        ) :: map()
+  def part(name, frame, rectangle, {x, y}, window, opts \\ []) do
+    name
+    |> sprite(frame, {x, y}, window, opts)
+    |> then(&%{&1 | picture: {:part, &1.picture, rectangle}, origin: {0, 0}})
+  end
+
   @doc "Frame `frame` of the copy's sprite `name` with its middle at `{x, y}`; options as `sprite/5`'s."
   @spec centred(
           String.t(),

@@ -7,7 +7,8 @@ defmodule Nidhox.Client do
   The whole pane is the game's picture: exactly the room's view, at the largest scale
   that fits the pane, centred between black bars, with what the game draws on its GUI
   over it in window pixels, and the game's options (`Nidhox.Options`) over that while
-  they are open. Keys and controller buttons are `Nidhox.Controls`'.
+  they are open. Keys and controller buttons are `Nidhox.Controls`'. A draw item's
+  picture `{:part, key, {left, top, width, height}}` shows that part of picture `key`.
 
   The world is this machine's NidhOX world, or with the mount prop `source:
   {:node, node}` the NidhOX world of that connected node (ONLINE VERSUS's joining,
@@ -183,6 +184,13 @@ defmodule Nidhox.Client do
       raster -> FrenchCurve.Raster.crop(raster, {left, top}, {width, height})
     end
   end
+  defp lookup(pictures, surfaces, {:part, key, {left, top, width, height}}) do
+    case lookup(pictures, surfaces, key) do
+      nil -> nil
+      raster -> FrenchCurve.Raster.crop(raster, {left, top}, {width, height})
+    end
+  end
+
   defp lookup(pictures, _surfaces, key), do: Map.get(pictures, key)
 
   defp letterbox(room, {shown_width, shown_height}, {width, height} = size) do
