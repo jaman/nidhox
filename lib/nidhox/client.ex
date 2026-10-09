@@ -6,14 +6,19 @@ defmodule Nidhox.Client do
 
   The whole pane is the game's picture: exactly the room's view, at the largest scale
   that fits the pane, centred between black bars, with what the game draws on its GUI
-  over it in window pixels. Keys and controller buttons are `Nidhox.Controls`'.
+  over it in window pixels, and the game's options (`Nidhox.Options`) over that while
+  they are open. Keys and controller buttons are `Nidhox.Controls`'.
+
+  The world is this machine's NidhOX world, or with the mount prop `source:
+  {:node, node}` the NidhOX world of that connected node (ONLINE VERSUS's joining,
+  `Nidhox.Online`).
   """
 
   @behaviour Cauldron2D.Client.Game
 
   @atlas :nidhox
   alias Cauldron2D.DrawList
-  alias Nidhox.{Assets, Controls, Game, Music, Sound}
+  alias Nidhox.{Assets, Controls, Music, Options}
 
   @impl true
   def title, do: %{name: "NidhOX", tagline: "Nidhogg Open-source eXperience"}
@@ -37,6 +42,12 @@ defmodule Nidhox.Client do
   def toggles, do: []
 
   @impl true
+  def local_seats(props), do: [Controls.seat_keys(props)]
+
+  @impl true
+  def options, do: %{player_2: Controls.keys(2)}
+
+  @impl true
   def padmap(_props), do: Controls.pad()
 
   @impl true
@@ -55,6 +66,7 @@ defmodule Nidhox.Client do
   def client_keys do
     %{
       back: nil,
+      menu: :escape,
       settings: nil,
       settings_menu: nil,
       talk: nil,
@@ -74,27 +86,40 @@ defmodule Nidhox.Client do
   end
 
   @impl true
-  def sounds, do: fn event -> Map.get(Sound.effects(), event) end
+  def sounds, do: &Nidhox.Sounds.voice/1
 
   @impl true
-  def music do
-    Music.specs()
-    |> Map.to_list()
-  end
+  def music, do: Music.specs()
 
   @impl true
-  def cue(%{menu: :title}, _screen), do: Music.cue(%{menu: :title}, :title)
-  def cue(%{menu: :menu}, :play), do: Music.cue(%{menu: :menu}, :play)
-  def cue(%{menu: :play}, :play), do: Music.cue(%{menu: :play}, :play)
-  def cue(_view, _screen), do: nil
+  def cue(%{area: area, screen: screen} = frame, _client_screen),
+    do: Music.cue(area, screen, Map.get(frame, :progress, 0.0))
+
+  def cue(_frame, _client_screen), do: nil
 
   @impl true
+  def worlds(%{source: {:node, node}}),
+    do: [%{id: world_id(), name: "NidhOX", world: Cauldron2D.Worlds.world_name(world_id(), node)}]
+
   def worlds(_props),
     do: [%{id: world_id(), name: "NidhOX", world: Cauldron2D.Worlds.world_name(world_id())}]
 
   @doc "The id NidhOX's world is registered under with `Cauldron2D.Worlds`."
   @spec world_id() :: atom()
   def world_id, do: :nidhox
+
+  @impl true
+  def scene(frame, %{menu: %Options{} = menu}) do
+    scene(Map.put(frame, :overlay, Options.items(menu, frame.window)))
+  end
+
+  def scene(frame, _look), do: scene(frame)
+
+  @impl true
+  def open_menu(settings), do: Options.open(settings)
+
+  @impl true
+  def menu_event(menu, event, settings), do: Options.event(menu, event, settings)
 
   @impl true
   def scene(frame) do
@@ -109,15 +134,16 @@ defmodule Nidhox.Client do
 
   @doc """
   The pane's picture of `frame` at `size` `{width, height}` pixels: the room's view
-  scaled to fit, the GUI over it, centred between black bars.
+  scaled to fit, the room's GUI and then the overlay over it, centred between black bars.
   """
   @spec picture(map() | nil, {pos_integer(), pos_integer()}) :: FrenchCurve.Raster.t()
   def picture(
-        %{items: items, gui: gui, view: {view_x, view_y, view_width, view_height}} = frame,
+        %{items: items, view: {view_x, view_y, view_width, view_height}} = frame,
         {width, height} = size
       ) do
     pictures = Assets.get().pictures
-    lookup = &lookup(pictures, &1)
+    surfaces = Map.get(frame, :surfaces, %{})
+    lookup = &lookup(pictures, surfaces, &1)
     zoom = min(width / view_width, height / view_height)
     shown = {max(round(view_width * zoom), 1), max(round(view_height * zoom), 1)}
 
@@ -129,11 +155,11 @@ defmodule Nidhox.Client do
       )
 
     room =
-      case gui do
+      case frame.gui ++ Map.get(frame, :overlay, []) do
         [] ->
           room
 
-        _ ->
+        gui ->
           {window_width, window_height} = frame.window
           {shown_width, shown_height} = shown
 
@@ -149,10 +175,15 @@ defmodule Nidhox.Client do
   def picture(_frame, {width, height}),
     do: FrenchCurve.Raster.new(width, height, background: {0, 0, 0, 255})
 
-  defp lookup(_pictures, {:text, words, colour, scale}),
-    do: Linocut.Font.render(words, colour, scale: scale)
+  defp lookup(_pictures, surfaces, {:surface, id}), do: Map.get(surfaces, id)
 
-  defp lookup(pictures, key), do: Map.get(pictures, key)
+  defp lookup(_pictures, surfaces, {:surface_part, id, {left, top, width, height}}) do
+    case Map.get(surfaces, id) do
+      nil -> nil
+      raster -> FrenchCurve.Raster.crop(raster, {left, top}, {width, height})
+    end
+  end
+  defp lookup(pictures, _surfaces, key), do: Map.get(pictures, key)
 
   defp letterbox(room, {shown_width, shown_height}, {width, height} = size) do
     Cauldron2D.Render.render(
@@ -166,25 +197,13 @@ defmodule Nidhox.Client do
   def hud(_frame), do: []
 
   @impl true
+  def ask(%{ask: ask}), do: ask
+  def ask(_frame), do: nil
+
+  @impl true
+  def listener(%{view: {x, y, width, height}}), do: {(x + width / 2) / 16, (y + height / 2) / 16}
   def listener(_frame), do: nil
 
-  # ---- Game integration ----
-
-  @doc "Start the game world."
-  @spec start_game(keyword()) :: :ok
-  def start_game(opts \\ []) do
-    case Nidhox.Assets.find(Keyword.get(opts, :data)) do
-      nil ->
-        raise "give the game's data file: mix nidhox --data path/to/data.win"
-
-      path ->
-        case Nidhox.Assets.load(path) do
-          {:ok, _assets} ->
-            Cauldron2D.World.start_link(game: Game, game_opts: opts)
-
-          {:error, reason} ->
-            raise "could not read #{path}: #{inspect(reason)}"
-        end
-    end
-  end
+  @impl true
+  def audio, do: [earshot: 20, voices: 24]
 end

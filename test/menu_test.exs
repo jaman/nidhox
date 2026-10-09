@@ -13,7 +13,7 @@ defmodule Nidhox.Screen.MenuTest do
     })
   end
 
-  defp menu, do: Menu.new("PICK", [{"ONE", :one}, {"TWO", :two}, {"THREE", :three}])
+  defp menu, do: Menu.new([{"ONE", :one}, {"TWO", :two}, {"THREE", :three}])
 
   test "nothing pressed keeps the menu as it is, even with keys held" do
     held = %{pressing(1, []) | 1 => %{pressing(1, [])[1] | held: MapSet.new([:attack])}}
@@ -27,16 +27,25 @@ defmodule Nidhox.Screen.MenuTest do
     {:stay, top} = Menu.input(menu(), pressing(2, [:up]))
     assert Menu.selected(top) == :one
 
-    bottom = Menu.new("PICK", menu().choices, 2)
+    bottom = %{menu() | selected: 2}
     assert {:stay, ^bottom} = Menu.input(bottom, pressing(1, [:down]))
   end
 
-  test "start or attack from either side chooses, and jump goes back" do
-    assert Menu.input(menu(), pressing(1, [:start])) == {:choose, :one}
+  test "a disabled choice is passed over and never selected first" do
+    menu = Menu.new([{"OFF", :disabled}, {"ONE", :one}, {"DIM", :disabled}, {"TWO", :two}])
+    assert Menu.selected(menu) == :one
 
-    assert Menu.input(Menu.new("PICK", menu().choices, 1), pressing(2, [:attack])) ==
-             {:choose, :two}
+    {:stay, moved} = Menu.input(menu, pressing(1, [:down]))
+    assert Menu.selected(moved) == :two
 
-    assert Menu.input(menu(), pressing(1, [:jump])) == :back
+    {:stay, back} = Menu.input(moved, pressing(1, [:up]))
+    assert Menu.selected(back) == :one
+    assert {:stay, ^back} = Menu.input(back, pressing(1, [:up]))
+  end
+
+  test "start or attack from either side chooses, and jump goes back, naming the side" do
+    assert Menu.input(menu(), pressing(1, [:start])) == {:choose, :one, 1}
+    assert Menu.input(%{menu() | selected: 1}, pressing(2, [:attack])) == {:choose, :two, 2}
+    assert Menu.input(menu(), pressing(2, [:jump])) == {:back, 2}
   end
 end

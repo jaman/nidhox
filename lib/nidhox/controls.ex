@@ -10,7 +10,8 @@ defmodule Nidhox.Controls do
   | `:jump` | `G` | `,` | `A` |
   | `:start` | `Enter` | | `Start` |
 
-  Side 1 is the terminal's own player and side 2 a second seat at the same keyboard;
+  Side 1 is the terminal's own player and side 2 a second seat at the same keyboard
+  (`seat_keys/1`); either's keys can be remapped in OPTIONS (`Nidhox.Options`);
   the first controller to report plays side 1 and the second side 2. On the title and
   the menus, `:start` and `:attack` choose and `:jump` goes back.
   """
@@ -36,6 +37,14 @@ defmodule Nidhox.Controls do
 
   def keys(2),
     do: %{left: [:left], right: [:right], up: [:up], down: [:down], attack: [:.], jump: [:","]}
+
+  @doc """
+  The keys side 2's seat plays with, from a client's props: the keymap saved in the
+  player's settings as the game option `:player_2`, else `keys(2)`.
+  """
+  @spec seat_keys(map()) :: %{atom() => [term()]}
+  def seat_keys(%{settings: %{options: %{player_2: keys}}}) when is_map(keys), do: keys
+  def seat_keys(_props), do: keys(2)
 
   @doc "The controller buttons and stick directions for each action."
   @spec pad() :: map()

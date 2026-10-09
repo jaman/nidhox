@@ -1,123 +1,145 @@
 defmodule Nidhox.Music do
   @moduledoc """
-  Background music for NidhOX.
+  The music of the player's copy of the game, one `Cauldron2D.Audio.Music` piece per
+  area, played from the copy's own recordings.
 
-  Two pieces:
-  - `"menu"` — ambient tension, low and steady, for the title screen and main menu
-  - `"match"` — rhythmic pulse, higher tension, during fencing
+  Each piece, `"nidhox/<area>"`, has two sections:
 
-  Each piece uses Strudel chains (strings) for live performance. The client
-  transitions between sections via `cue/2`.
+    * `:title` — the area's title track, for the title, the menus and the results
+    * `:bout` — the layers of the area's music, for the bout, mixed as `cue/3` says
+
+  | area | stems (`music_<name>_…`) | title |
+  | --- | --- | --- |
+  | Cemetery | `Cemetery_Melody`, `_Drums` | `Cemetery_Distant` |
+  | Castle | `Castle_Drms1`, `_Drms2`, `_Synth1`, `_Synth2` | `CastleTitle` |
+  | Mines | `Mines_BasicDrums`, `_Drums4Part2`, `_MechanicalLayer`, `_Synth1`, `_Synth2`, `_Synth4Part2`, `_Synth4Part3` | `MinesTitle` |
+  | Sky | `Clouds_Drums`, `_SynthsPart1`–`4` | `CloudsTitle` |
+  | Wilds | `Forest_Drums`, `_Synth1`–`3` | `WildsTitle` |
+
+  Each recording is `Nidhox.Recordings`' of that name, decoded the first time its
+  section is cued and fitted to the stage's 44.1 kHz stereo; one the copy
+  lacks is silence.
   """
 
-  @bpm 80
+  alias Nidhox.Recordings
+
+  @rate 44_100
+
+  @areas %{
+    "Cemetery" => {["Cemetery_Melody", "Cemetery_Drums"], "Cemetery_Distant"},
+    "Castle" =>
+      {["Castle_Drms1", "Castle_Drms2", "Castle_Synth1", "Castle_Synth2"], "CastleTitle"},
+    "Mines" =>
+      {[
+         "Mines_BasicDrums",
+         "Mines_Drums4Part2",
+         "Mines_MechanicalLayer",
+         "Mines_Synth1",
+         "Mines_Synth2",
+         "Mines_Synth4Part2",
+         "Mines_Synth4Part3"
+       ], "MinesTitle"},
+    "Sky" =>
+      {[
+         "Clouds_Drums",
+         "Clouds_SynthsPart1",
+         "Clouds_SynthsPart2",
+         "Clouds_SynthsPart3",
+         "Clouds_SynthsPart4"
+       ], "CloudsTitle"},
+    "Wilds" => {["Forest_Drums", "Forest_Synth1", "Forest_Synth2", "Forest_Synth3"], "WildsTitle"}
+  }
+
+  @doc "Every area's piece, by name, as `Cauldron2D.Client.Game`'s `music/0` gives them."
+  @spec specs() :: [{String.t(), Cauldron2D.Audio.Music.spec()}]
+  def specs, do: Enum.map(@areas, fn {area, stems} -> {piece(area), spec(stems)} end)
 
   @doc """
-  Background music specs, mapped by piece name.
+  The cue for a frame on `screen` in `area` with the bout `progress` from its centre
+  (`Nidhox.Match.progress/1`, `0.0`–`1.0`): the area's `:bout` section while the bout is
+  being fought, paused or about to begin, its `:title` section otherwise.
 
-  Each spec uses Strudel chains (strings) for live audio synthesis.
+  In the bout, the stems play in the table's order: the first alone in the centre, one
+  more joining with each step towards an end room, every one of them in the end rooms.
+  Each playing stem is at `1 / n` of the level for `n` playing, so together they never
+  go past full scale; the rest are silent.
   """
-  @spec specs() :: %{String.t() => map()}
-  def specs do
-    %{
-      "menu" => menu_spec(),
-      "match" => match_spec()
-    }
+  @spec cue(String.t(), atom(), number()) :: Cauldron2D.Audio.Music.cue() | nil
+  def cue(area, screen, progress \\ 0.0)
+
+  def cue(area, screen, progress) when is_map_key(@areas, area) do
+    if screen in [:en_garde, :bout, :paused],
+      do: %{piece: piece(area), section: :bout, layers: gains(area, progress)},
+      else: %{piece: piece(area), section: :title}
   end
 
-  # Menu music — ambient tension, slow and steady.
-  defp menu_spec do
+  def cue(_area, _screen, _progress), do: nil
+
+  defp gains(area, progress) do
+    {stems, _title} = Map.fetch!(@areas, area)
+    count = length(stems)
+    playing = min(count, 1 + floor(progress * (count - 1) + 1.0e-9))
+
+    stems
+    |> Enum.with_index()
+    |> Map.new(fn {stem, index} ->
+      {layer(stem), if(index < playing, do: 1 / playing, else: 0.0)}
+    end)
+  end
+
+  defp piece(area), do: "nidhox/" <> String.downcase(area)
+
+  defp spec({stems, title}) do
+    layers = Enum.map(stems, &layer/1)
+
     %{
-      bpm: @bpm,
+      bpm: 120,
       beats_per_bar: 4,
-      layers: [:drone, :pulse, :string],
+      layers: [:title | layers],
       sections: %{
-        idle: %{
-          drone: ~s|s("bd2*4, hh2*8").bank("RolandTR808").gain(0.3)|,
-          pulse: ~s|s("bd2*8, sn*4").bank("RolandTR808").gain(0.2)|,
-          string: ~s|s("fs2*2, a2*4").gain(0.1).saw(0.4).cutoff(0.45).lpf(0.35, 0.8, 0.12)|
-        },
-        tension: %{
-          drone: ~s|s("bd2*4, hh2*8").bank("RolandTR808").gain(0.35)|,
-          pulse: ~s|s("bd2*4, sn*2").bank("RolandTR808").gain(0.25)|,
-          string: ~s|s("fs2, a2, c3, a2").gain(0.15).saw(0.4).cutoff(0.45).lpf(0.35, 0.8, 0.12)|
-        }
-      }
+        title: %{title: fn -> recording(title) end},
+        bout: Map.new(stems, &{layer(&1), fn -> recording(&1) end})
+      },
+      fingerprint: Enum.join([title | stems], ","),
+      render: :on_cue
     }
   end
 
-  # Match music — rhythmic pulse, urgent.
-  defp match_spec do
-    %{
-      bpm: @bpm + 20,
-      beats_per_bar: 4,
-      layers: [:pulse, :bass, :string, :arpeggio],
-      sections: %{
-        neutral: %{
-          pulse: ~s|s("bd2*4, hh4, sn*2").bank("RolandTR808").gain(0.2)|,
-          bass: ~s|s("fs1*2, a1*2").sine().gain(0.25)|,
-          string: ~s|s("fs2*2, a2*4").gain(0.1).saw(0.4).cutoff(0.45).lpf(0.35, 0.8, 0.12)|,
-          arpeggio: ""
-        },
-        combat: %{
-          pulse: ~s|s("bd2*2, hh8, sn*4").bank("RolandTR808").gain(0.3)|,
-          bass: ~s|s("fs1*4, a1*4").sine().gain(0.3)|,
-          string: ~s|s("fs2, a2, c3, fs2").gain(0.15).saw(0.4).cutoff(0.45).lpf(0.35, 0.8, 0.12)|,
-          arpeggio:
-            ~s|s("fs2*8, a2*4, c3*8, a2*4").gain(0.08).saw(0.4).cutoff(0.45).lpf(0.35, 0.8, 0.12)|
-        }
-      }
-    }
-  end
+  defp layer(stem), do: stem |> String.downcase() |> String.to_atom()
 
-  @doc """
-  The music cue for the current screen.
-
-  Accepts both the old 3-argument form `(view, screen, match)` and the
-  new 2-argument form `(view, screen)` where `screen` is `:title`, `:play`, etc.
-  """
-  @spec cue(term(), atom(), term() | nil) :: map() | nil
-  def cue(_view, :title, _match), do: nil
-  def cue(_view, :lobby, _match), do: nil
-  def cue(_view, :summary, _match), do: nil
-  def cue(_view, :guide, _match), do: nil
-
-  def cue(view, :play, match) do
-    piece =
-      case Map.get(view, :menu, :play) do
-        :title -> "menu"
-        :menu -> "menu"
-        _ -> "match"
-      end
-
-    case match do
-      nil -> %{piece: piece, section: :idle, layers: %{}}
-      %{winner: nil} -> %{piece: piece, section: :neutral, layers: %{}}
-      %{winner: _} -> %{piece: piece, section: :tension, layers: %{}}
+  defp recording(stem) do
+    case Recordings.wave("music_" <> stem) do
+      {:ok, wave} -> fit(wave)
+      {:error, _missing} -> <<>>
     end
   end
 
-  def cue(_view, :title), do: nil
-  def cue(_view, :lobby), do: nil
-  def cue(_view, :summary), do: nil
-  def cue(_view, :guide), do: nil
-
-  # 2-argument: view has :menu key telling us what we're showing
-  def cue(%{menu: :title}, _screen), do: nil
-
-  def cue(%{menu: :menu}, :play) do
-    %{piece: "menu", section: :idle, layers: %{}}
+  defp fit(%{rate: rate, channels: channels, pcm: pcm}) do
+    pcm
+    |> stereo(channels)
+    |> resample(rate)
   end
 
-  def cue(%{menu: :play}, :play) do
-    %{piece: "match", section: :neutral, layers: %{}}
+  defp stereo(pcm, 2), do: pcm
+  defp stereo(pcm, 1), do: for(<<s::binary-2 <- pcm>>, into: <<>>, do: s <> s)
+
+  defp stereo(pcm, channels) do
+    extra = channels * 2 - 4
+
+    for <<left::binary-2, right::binary-2, _rest::binary-size(^extra) <- pcm>>,
+      into: <<>>,
+      do: left <> right
   end
 
-  @doc "Whether `match` has active combat (someone attacking or parrying)."
-  @spec combat?(term()) :: boolean()
-  def combat?(%{advancing: adv, swords: swords})
-      when not is_nil(adv) and length(swords) > 0,
-      do: true
+  defp resample(pcm, @rate), do: pcm
 
-  def combat?(_match), do: false
+  defp resample(pcm, rate) do
+    frames = div(byte_size(pcm), 4)
+    out = div(frames * @rate, rate)
+
+    for index <- 0..(out - 1)//1, into: <<>> do
+      source = min(div(index * rate, @rate), frames - 1)
+      binary_part(pcm, source * 4, 4)
+    end
+  end
 end

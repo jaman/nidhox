@@ -1,33 +1,86 @@
 defmodule Nidhox.Screen.Results do
   @moduledoc """
-  The screen after a bout: who won, both sides' wins this session, in Arcade how far
-  the run has come, and the prompt to go on.
+  The match's statistics after a bout, over `rMatchStats`, in `fMenu`: who won, how long
+  the bout took, and each side's kills and suicides (falls out of the room), and the
+  results' menu under them (`menu/0`).
+
+  A bout's `t:stats/0` start with `new/0` and are kept up by `count/3` with every step's
+  `Nidhox.Match` events.
   """
 
-  alias Nidhox.Screen.Text
+  @type stats :: %{
+          steps: non_neg_integer(),
+          kills: %{1 => non_neg_integer(), 2 => non_neg_integer()},
+          suicides: %{1 => non_neg_integer(), 2 => non_neg_integer()}
+        }
 
-  @names %{1 => "YELLOW", 2 => "ORANGE"}
-  @colours %{1 => {245, 205, 70}, 2 => {240, 120, 45}}
-  @white {235, 235, 235}
+  alias Nidhox.Screen.{Art, Menu}
 
-  @doc """
-  The GUI items for a bout won by `winner`, with `tally` `%{1 => wins, 2 => wins}` and
-  `note`, a line about what comes next, for a window `{width, height}`.
-  """
-  @spec items(
-          1 | 2,
-          %{1 => non_neg_integer(), 2 => non_neg_integer()},
-          String.t(),
-          {number(), number()}
-        ) ::
-          [map()]
-  def items(winner, tally, note, window) do
-    [
-      Text.shade(window, {0, 0, 0}, 0.55),
-      Text.centred("#{@names[winner]} WINS", @colours[winner], 7, 120, window),
-      Text.centred("YELLOW #{tally[1]}  -  #{tally[2]} ORANGE", @white, 3, 280, window),
-      Text.centred(note, @white, 2, 360, window),
-      Text.centred("PRESS ENTER OR ATTACK", @white, 2, 460, window)
+  @hz 60
+  @winner {160, 40}
+  @time {160, 64}
+  @rows_top 88
+  @row 16
+  @left 96
+  @right 224
+  @label 160
+  @menu_top {160, 130}
+  @colours %{1 => {255, 214, 60}, 2 => {255, 140, 40}}
+
+  @doc "Statistics for a bout not yet begun."
+  @spec new() :: stats()
+  def new, do: %{steps: 0, kills: %{1 => 0, 2 => 0}, suicides: %{1 => 0, 2 => 0}}
+
+  @doc "`stats` after one more step of the bout, in which `events` happened."
+  @spec count(stats(), [tuple()]) :: stats()
+  def count(stats, events) do
+    Enum.reduce(events, %{stats | steps: stats.steps + 1}, fn
+      {:killed, killer, _victim}, stats -> update_in(stats.kills[killer], &(&1 + 1))
+      {:fell, side}, stats -> update_in(stats.suicides[side], &(&1 + 1))
+      _event, stats -> stats
+    end)
+  end
+
+  @doc "The results' menu: CONTINUE, WATCH REPLAY, BACK TO MAIN MENU."
+  @spec menu() :: Menu.t()
+  def menu,
+    do:
+      Menu.new([{"CONTINUE", :continue}, {"WATCH REPLAY", :replay}, {"BACK TO MAIN MENU", :main}])
+
+  @doc "The GUI items for a bout won by `winner` with `stats`, the results' `menu` under them."
+  @spec items(1 | 2, stats(), Menu.t(), {number(), number()}) :: [map()]
+  def items(winner, stats, %Menu{} = menu, window) do
+    rows = [
+      {"kills", stats.kills[1], stats.kills[2]},
+      {"suicides", stats.suicides[1], stats.suicides[2]}
     ]
+
+    [
+      Art.shade(window, {0, 0, 0}, 0.6),
+      Art.text("fMenu", "player #{winner} won!", @winner, window,
+        halign: :center,
+        colour: @colours[winner]
+      ),
+      Art.text("fMenu", "time #{clock(stats.steps)}", @time, window, halign: :center),
+      Enum.with_index(rows) |> Enum.map(&row(&1, window)),
+      Menu.items(menu, @menu_top, window)
+    ]
+    |> List.flatten()
+  end
+
+  defp row({{label, yellow, orange}, index}, window) do
+    y = @rows_top + index * @row
+
+    [
+      Art.text("fMenu", "#{yellow}", {@left, y}, window, halign: :center, colour: @colours[1]),
+      Art.text("fMenu", label, {@label, y}, window, halign: :center),
+      Art.text("fMenu", "#{orange}", {@right, y}, window, halign: :center, colour: @colours[2])
+    ]
+  end
+
+  defp clock(steps) do
+    seconds = div(steps, @hz)
+
+    "#{div(seconds, 60)}:#{seconds |> rem(60) |> Integer.to_string() |> String.pad_leading(2, "0")}"
   end
 end

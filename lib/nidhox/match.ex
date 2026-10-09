@@ -12,14 +12,27 @@ defmodule Nidhox.Match do
       gives it to the other fencer if that one is up. The fencer killed comes back after
       `@respawn_steps` steps on the ground ahead of the killer, sword in hand.
     * The camera follows the fencer with the right of way, keeping more of the room ahead
-      of it in view; with nobody holding it, it centres between the two.
+      of it in view; with nobody holding it, it centres between the two. Up and down it
+      keeps the middle of that fencer's body — or the average of both living fencers' —
+      at least the room view's vertical border inside its top and bottom edges. It moves
+      `@camera_ease` of the way to where it should be each step, arriving once within
+      `@landed` pixels, never past the room's
+      edges, and is placed there at once when a bout starts or enters a room.
     * Only the fencer with the right of way may leave the camera's view, and only
       towards its goal: past the room's edge it takes the bout into the next room, where
       it enters at its own entry point and the other fencer comes back ahead of it.
     * Two fencers who are both up never stand closer than `@personal_space` pixels at
       the same height: they are pushed apart about their midpoint.
     * In the end room, the fencer with the right of way reaching the goal zone wins.
-      The bout is `finished?/1` `@win_steps` steps later.
+      The Nidhogg then comes for the winner (`Nidhox.Ending`, in `ending`, its sounds in
+      `events`); the bout is `finished?/1` once it has flown off with them.
+    * The bout follows its `rules` (`Nidhox.Rules`): its variant, and its time limit —
+      `overtime?/1` once it has run out, when `sudden_death/2` moves the bout to the
+      area's sudden death room, where the first kill wins.
+
+  `events` holds what happened in the last step: `Nidhox.Duel`'s `{:killed, killer,
+  victim}`, `{:parried, point}` and `{:disarmed, side}`, and `{:fell, side}` for a
+  fencer that fell out of the room.
   """
 
   alias Cauldron2D.GameMaker.Collide
@@ -27,7 +40,7 @@ defmodule Nidhox.Match do
   alias Cauldron2D.GameMaker.Rooms
   alias Cauldron2D.GameMaker.World
   alias Cauldron2D.Shape
-  alias Nidhox.{Duel, Fencer, Terrain}
+  alias Nidhox.{Duel, Ending, Fencer, Rules, Terrain}
 
   @enforce_keys [:area, :rooms, :index, :fencers, :terrain]
   defstruct [
@@ -39,17 +52,21 @@ defmodule Nidhox.Match do
     advancing: nil,
     swords: [],
     winner: nil,
-    winner_timer: 0,
+    ending: nil,
     events: [],
-    frame: 0
+    frame: 0,
+    elapsed: 0,
+    rules: %Rules{}
   ]
 
   @type t :: %__MODULE__{}
 
   @respawn_steps 90
-  @win_steps 120
   @view_width 320
   @lead 0.35
+  @camera_ease 0.15
+  @landed 0.5
+  @body_middle 14
   @edge_margin 4
   @personal_space 10
   @order ~w(LeftEnd LeftC LeftB LeftA Center RightA RightB RightC RightEnd)
@@ -84,17 +101,66 @@ defmodule Nidhox.Match do
   end
 
   @doc "A bout in area `area`, starting in its centre room; gives the world in that room too."
-  @spec new(World.t(), String.t()) :: {t(), World.t()}
-  def new(%World{} = world, area) do
-    rooms = rooms(world.data, area)
-    index = Enum.find_index(rooms, &(Enum.at(world.data.rooms, &1).name == "r#{area}Center"))
+  @spec new(World.t(), String.t(), Rules.t()) :: {t(), World.t()}
+  def new(%World{} = world, area, %Rules{} = rules \\ %Rules{}) do
+    if Rules.sudden_death_only?(rules) do
+      in_room(world, area, sudden_death_room(world, area), %{rules | sudden_death: true})
+    else
+      rooms = rooms(world.data, area)
+      index = Enum.find_index(rooms, &(Enum.at(world.data.rooms, &1).name == "r#{area}Center"))
+      begin(world, area, rooms, index, rules)
+    end
+  end
+
+  @doc "Whether the bout's time limit has run out with nobody having won, and it is not yet in sudden death."
+  @spec overtime?(t()) :: boolean()
+  def overtime?(%__MODULE__{
+        winner: nil,
+        rules: %Rules{sudden_death: false} = rules,
+        elapsed: elapsed
+      }) do
+    case Rules.limit_steps(rules) do
+      nil -> false
+      limit -> elapsed >= limit
+    end
+  end
+
+  def overtime?(%__MODULE__{}), do: false
+
+  @doc "The bout gone on in its area's sudden death room, where the first kill wins; gives the world there too."
+  @spec sudden_death(t(), World.t()) :: {t(), World.t()}
+  def sudden_death(%__MODULE__{area: area, rules: rules} = match, world) do
+    {sudden, world} =
+      in_room(world, area, sudden_death_room(world, area), %{rules | sudden_death: true})
+
+    {%{sudden | elapsed: match.elapsed}, world}
+  end
+
+  defp sudden_death_room(world, area), do: Data.index(world.data, :rooms, "r#{area}SuddenDeath")
+
+  @doc """
+  A bout in the single room named `room` (an index into `data.rooms`), with `area` the
+  name it goes by; gives the world in that room too. The bout cannot leave the room.
+  """
+  @spec in_room(World.t(), String.t(), non_neg_integer(), Rules.t()) :: {t(), World.t()}
+  def in_room(%World{} = world, area, room, %Rules{} = rules \\ %Rules{}),
+    do: begin(world, area, [room], 0, rules)
+
+  defp begin(world, area, rooms, index, rules) do
     centre = Enum.at(rooms, index)
     world = if world.room == centre, do: world, else: Rooms.enter(world, centre)
-    terrain = Terrain.new(world)
+    terrain = %{Terrain.new(world) | gravity: Rules.gravity(rules)}
+    armed = Rules.armed?(rules)
 
     fencers = %{
-      1 => Fencer.new(1, entry(world, terrain, "YellowPlayerMatchEntryPoint", 0.3), 1),
-      2 => Fencer.new(2, entry(world, terrain, "OrangePlayerMatchEntryPoint", 0.7), -1)
+      1 => %{
+        Fencer.new(1, entry(world, terrain, "YellowPlayerMatchEntryPoint", 0.3), 1)
+        | armed: armed
+      },
+      2 => %{
+        Fencer.new(2, entry(world, terrain, "OrangePlayerMatchEntryPoint", 0.7), -1)
+        | armed: armed
+      }
     }
 
     match = %__MODULE__{
@@ -102,16 +168,24 @@ defmodule Nidhox.Match do
       rooms: rooms,
       index: index,
       fencers: fencers,
-      terrain: terrain
+      terrain: terrain,
+      rules: rules
     }
 
-    {match, camera(match, world)}
+    {match, camera(match, world, :snap)}
   end
 
   @doc "The bout one step on, with each side's input; gives the world as the bout leaves it."
   @spec step(t(), World.t(), %{1 => map(), 2 => map()}) :: {t(), World.t()}
   def step(%__MODULE__{winner: winner} = match, world, _inputs) when winner != nil do
-    {%{match | winner_timer: match.winner_timer + 1, frame: match.frame + 1, events: []}, world}
+    ending = Ending.step(match.ending, match.fencers[winner].position)
+
+    {%{
+       match
+       | ending: ending,
+         frame: match.frame + 1,
+         events: ending.events
+     }, world}
   end
 
   def step(%__MODULE__{} = match, world, inputs) do
@@ -121,9 +195,16 @@ defmodule Nidhox.Match do
          Fencer.step(match.fencers[side], inputs[side], match.fencers[other(side)], match.terrain)}
       end)
 
-    {fencers, swords, events} = Duel.step(fencers, match.swords, match.terrain)
+    {fencers, swords, events} = Duel.step(fencers, match.swords, match.terrain, match.rules)
 
-    %{match | fencers: separate(fencers), swords: swords, events: events, frame: match.frame + 1}
+    %{
+      match
+      | fencers: separate(fencers),
+        swords: swords,
+        events: events,
+        frame: match.frame + 1,
+        elapsed: match.elapsed + 1
+    }
     |> right_of_way(events)
     |> fall_out()
     |> respawn()
@@ -131,10 +212,38 @@ defmodule Nidhox.Match do
     |> advance(world)
   end
 
-  @doc "Whether the bout is won and the winner has been shown for `@win_steps` steps."
+  @doc "Whether the bout is won and the Nidhogg has flown off with the winner (`Nidhox.Ending`)."
   @spec finished?(t()) :: boolean()
   def finished?(%__MODULE__{winner: nil}), do: false
-  def finished?(%__MODULE__{winner_timer: timer}), do: timer >= @win_steps
+  def finished?(%__MODULE__{ending: ending}), do: Ending.done?(ending)
+
+  @doc "The living fencers' bodies: where each stands, `{x, y}`, and how fast it moves, `{vx, vy}`."
+  @spec bodies(t()) :: [%{position: {number(), number()}, velocity: {number(), number()}}]
+  def bodies(%__MODULE__{fencers: fencers}) do
+    for {_side, %Fencer{action: action} = fencer} <- fencers,
+        action != :dead,
+        do: %{position: fencer.position, velocity: fencer.velocity}
+  end
+
+  @doc "Where the living fencers stand, as `{x, y}`."
+  @spec positions(t()) :: [{number(), number()}]
+  def positions(%__MODULE__{fencers: fencers}),
+    do:
+      for(
+        {_side, %Fencer{action: action} = fencer} <- fencers,
+        action != :dead,
+        do: fencer.position
+      )
+
+  @doc """
+  How far the bout has gone from the centre room towards an end room: `0.0` in the
+  centre, `1.0` in either end room.
+  """
+  @spec progress(t()) :: float()
+  def progress(%__MODULE__{rooms: rooms, index: index}) do
+    centre = div(length(rooms) - 1, 2)
+    if centre == 0, do: 0.0, else: abs(index - centre) / centre
+  end
 
   @doc "Side `side`'s goal direction: `1` to the right, `-1` to the left."
   @spec goal(1 | 2) :: 1 | -1
@@ -182,7 +291,13 @@ defmodule Nidhox.Match do
   defp fallen(match, side, fencer) do
     rival = match.fencers[other(side)]
     advancing = if rival.action == :dead, do: match.advancing, else: other(side)
-    %{match | fencers: Map.put(match.fencers, side, Fencer.kill(fencer)), advancing: advancing}
+
+    %{
+      match
+      | fencers: Map.put(match.fencers, side, Fencer.kill(fencer)),
+        advancing: advancing,
+        events: [{:fell, side} | match.events]
+    }
   end
 
   defp respawn(match) do
@@ -209,7 +324,10 @@ defmodule Nidhox.Match do
       |> Stream.take_while(&(step * (rx - &1) >= 0))
       |> Enum.find(rx, &(Terrain.ground(match.terrain, &1) != nil))
 
-    Fencer.new(side, {x, Terrain.ground(match.terrain, x) || ry}, -ahead)
+    %{
+      Fencer.new(side, {x, Terrain.ground(match.terrain, x) || ry}, -ahead)
+      | armed: Rules.armed?(match.rules)
+    }
   end
 
   defp keep_in_view(match, world) do
@@ -237,20 +355,33 @@ defmodule Nidhox.Match do
 
   defp leaving?(_match, _side, _x, _view_x, _view_width, _room_width), do: false
 
-  defp advance(%__MODULE__{advancing: nil} = match, world), do: {match, camera(match, world)}
+  defp advance(%__MODULE__{rules: %Rules{sudden_death: true}, events: events} = match, world) do
+    case Enum.find(events, &match?({:killed, _killer, _victim}, &1)) do
+      {:killed, killer, _victim} ->
+        ending = Ending.new(world, killer, match.fencers[killer].position)
+        {%{match | winner: killer, ending: ending}, camera(match, world, :ease)}
+
+      nil ->
+        {match, camera(match, world, :ease)}
+    end
+  end
+
+  defp advance(%__MODULE__{advancing: nil} = match, world),
+    do: {match, camera(match, world, :ease)}
 
   defp advance(%__MODULE__{advancing: side} = match, world) do
     fencer = match.fencers[side]
 
     cond do
       fencer.action != :dead and in_goal?(match, world, fencer) ->
-        {%{match | winner: side, winner_timer: 0}, camera(match, world)}
+        ending = Ending.new(world, side, fencer.position)
+        {%{match | winner: side, ending: ending}, camera(match, world, :ease)}
 
       past_edge?(match, fencer) ->
         next_room(match, world, side)
 
       true ->
-        {match, camera(match, world)}
+        {match, camera(match, world, :ease)}
     end
   end
 
@@ -264,7 +395,7 @@ defmodule Nidhox.Match do
 
     if next >= 0 and next < length(match.rooms),
       do: enter(match, world, next, side),
-      else: {match, camera(match, world)}
+      else: {match, camera(match, world, :ease)}
   end
 
   defp in_goal?(match, world, %Fencer{position: {x, _y}}) do
@@ -290,7 +421,7 @@ defmodule Nidhox.Match do
 
   defp enter(match, world, next, side) do
     world = Rooms.enter(world, Enum.at(match.rooms, next))
-    terrain = Terrain.new(world)
+    terrain = %{Terrain.new(world) | gravity: Rules.gravity(match.rules)}
     point = if side == 1, do: "YellowPlayerRoomEntryPoint", else: "OrangePlayerRoomEntryPoint"
     fraction = if goal(side) == 1, do: 0.02, else: 0.98
     runner = %{match.fencers[side] | position: entry(world, terrain, point, fraction)}
@@ -304,7 +435,7 @@ defmodule Nidhox.Match do
         fencers: %{side => runner, other(side) => waiting}
     }
 
-    {match, camera(match, world)}
+    {match, camera(match, world, :snap)}
   end
 
   defp entry(world, terrain, name, fraction) do
@@ -320,8 +451,8 @@ defmodule Nidhox.Match do
     end
   end
 
-  defp camera(match, world) do
-    {_x, view_y, width, height} = view(world)
+  defp camera(match, world, mode) do
+    {current, view_y, width, height} = view(world)
     {room_width, _} = match.terrain.size
 
     focus =
@@ -339,9 +470,53 @@ defmodule Nidhox.Match do
           x + goal(side) * width * @lead
       end
 
-    left = clamp(round(focus - width / 2), 0, max(room_width - width, 0))
-    World.put_view(world, 0, {left, view_y, width, height})
+    target = clamp(focus - width / 2, 0, max(room_width - width, 0))
+    top = height_target(match, world, view_y, height)
+
+    World.put_view(
+      world,
+      0,
+      {eased(current, target, mode), eased(view_y, top, mode), width, height}
+    )
   end
+
+  defp eased(_current, target, :snap), do: target
+  defp eased(current, target, :ease) when abs(target - current) < @landed, do: target
+  defp eased(current, target, :ease), do: current + (target - current) * @camera_ease
+
+  defp height_target(match, world, view_y, height) do
+    {_room_width, room_height} = match.terrain.size
+    border = vertical_border(world, height)
+
+    wanted =
+      case focus_height(match) do
+        nil -> view_y
+        y when y - view_y < border -> y - border
+        y when view_y + height - y < border -> y + border - height
+        _y -> view_y
+      end
+
+    clamp(wanted, 0, max(room_height - height, 0))
+  end
+
+  defp focus_height(%__MODULE__{advancing: side} = match) when side != nil,
+    do: body_middle(match.fencers[side])
+
+  defp focus_height(%__MODULE__{fencers: fencers}) do
+    case for(
+           {_side, %Fencer{action: action} = fencer} <- fencers,
+           action != :dead,
+           do: body_middle(fencer)
+         ) do
+      [] -> nil
+      heights -> Enum.sum(heights) / length(heights)
+    end
+  end
+
+  defp body_middle(%Fencer{position: {_x, y}}), do: y - @body_middle
+
+  defp vertical_border(%World{views: [%{border: {_x, y}} | _]}, height), do: min(y, height / 2)
+  defp vertical_border(%World{}, _height), do: 0
 
   defp view(%World{views: [%{view: rectangle} | _]}), do: rectangle
   defp view(%World{}), do: {0, 0, @view_width, 200}

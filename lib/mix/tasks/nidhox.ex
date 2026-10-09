@@ -10,14 +10,18 @@ defmodule Mix.Tasks.Nidhox do
   `--data` defaults to `config :nidhox, :data` (which `NIDHOX_DATA` sets), then the
   usual install places `Nidhox.Assets.candidates/0` lists. `--area` is the area fought
   across (`Cemetery`, `Castle`, `Mines`, `Sky`, `Wilds`; default `Cemetery`); `--room`
-  picks the area of the room of that name. Each bout's result is kept in NidhOX's ledger
+  picks the area of the room of that name. `--name` is the player's name, by default
+  `fencer@<this machine's host name>`. `--port` is the port ONLINE VERSUS's host listens on
+  for the joining machine, for a host that must open it to the internet; any free port
+  without it. Each bout's result is kept in NidhOX's ledger
   (`Cauldron2D.Paths.data(:nidhox, "ledger.dets")`).
   """
 
   use Mix.Task
-  alias Nidhox.Match
+  alias Nidhox.{Match, Sounds}
+  alias Nidhox.Objects.Ambience
 
-  @switches [data: :string, area: :string, room: :string, name: :string]
+  @switches [data: :string, area: :string, room: :string, name: :string, port: :integer]
 
   @impl Mix.Task
   def run(argv) do
@@ -36,13 +40,18 @@ defmodule Mix.Tasks.Nidhox do
     end
   end
 
+  defp default_name do
+    {:ok, host} = :inet.gethostname()
+    "fencer@#{host}"
+  end
+
   defp play(opts) do
     area = Keyword.get(opts, :area) || Match.area(Keyword.get(opts, :room)) || "Cemetery"
 
     :ok =
       Cauldron2D.Worlds.register(Nidhox.Client.world_id(),
         game: Nidhox.Game,
-        game_opts: [area: area],
+        game_opts: [area: area, port: Keyword.get(opts, :port)],
         hz: 60,
         name: "NidhOX",
         children: fn %{world: world} ->
@@ -50,6 +59,7 @@ defmodule Mix.Tasks.Nidhox do
         end
       )
 
+    Task.start(fn -> Sounds.warm(Ambience.recordings()) end)
     Code.ensure_loaded!(Cauldron2D.Drafter.Surface)
     Drafter.Widget.Registry.register(Cauldron2D.Drafter.Surface)
 
@@ -57,7 +67,7 @@ defmodule Mix.Tasks.Nidhox do
       refresh_rate: "60fps",
       props: %{
         game: Nidhox.Client,
-        username: Keyword.get(opts, :name, "fencer")
+        username: Keyword.get_lazy(opts, :name, &default_name/0)
       }
     )
   end

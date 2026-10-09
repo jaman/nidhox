@@ -15,8 +15,8 @@ mix nidhox --data path/to/data.win
 ```
 
 `--data` defaults to `NIDHOX_DATA`, then the usual Steam installs under CrossOver and
-macOS. `--area` is where the bout is fought: `Cemetery` (the default), `Castle`,
-`Mines`, `Sky` or `Wilds`.
+macOS. `--area` is the area the level select starts on: `Cemetery` (the default),
+`Castle`, `Mines`, `Sky` or `Wilds`.
 
 ## Controls
 
@@ -28,25 +28,58 @@ Two players share the keyboard, or play with a controller each:
 | up, down | `W` `S` | `↑` `↓` | d-pad, left stick |
 | attack | `F` | `.` | `X` |
 | jump | `G` | `,` | `A` |
-| menu | `Esc` | | |
+| start, pause | `Enter` | | Start |
+| options | `Esc` | | |
 
 The first controller to send anything plays side 1, the second side 2.
 
 ## Modes
 
-NidhOX opens on its title. Press `Enter` (or attack) to reach the menu:
+NidhOX opens on the logos, then the title. Press `Enter` (or attack) to reach the
+menu:
 
-- **Arcade** — you against the computer through every area in turn: Cemetery,
+- **Single player** — you against the computer through every area in turn: Cemetery,
   Castle, Mines, Sky, Wilds. A loss ends the run.
-- **Exhibition** — you against the computer in the area you choose.
-- **Multiplayer** — two players at one keyboard, or a controller each, in the area you
-  choose.
-- **Credits**
+- **Multiplayer**
+  - **Offline versus**: two players at one keyboard, or a controller each, in the area
+    chosen on the level select (left and right pick it). Under the area: **Variants**
+    (no swords, divekick only, throws only, sudden death only, low gravity, turbo,
+    slow, boomerang swords), **Time limit** (none, 1, 2, 3 or 5 minutes; when it runs
+    out, the bout goes on in the area's sudden death room, where the first kill wins)
+    and **Begin**.
+  - **Tournament**: 3 to 8 players taking turns at the two sides, double elimination.
+    Set **Players**, the area, variants and time limit, then **Start tournament**.
+    Between matches the ladder shows every match so far and who fights next (yellow
+    against orange); the last player standing is the champion.
+  - **Online versus**: one machine hosts and another joins it; both play in the
+    host's game.
+    - **Host** shows this machine's address and a join code. Tell both to the player
+      joining. Hosting stops when you go back from the level select or to the menus
+      before it.
+    - **Join** lists the hosts on your local network; pick one and type its code.
+    - **Set IP** types a host's address (it starts with your own network's part),
+      then its code.
 
-On the menus, up and down move, `Enter` or attack chooses, and jump goes back. Each
-bout starts with the fencers held for a moment under "EN GARDE"; after it, the results
-show both sides' wins this session. Every bout's result is kept, per player, in
-`~/.local/share/nidhox/ledger.dets`.
+    Typing: up and down change the character under the cursor, left and right move
+    the cursor (right past the end adds a character), `Enter` or attack finishes,
+    jump goes back. The joining player plays orange.
+
+    The code admits the joining machine fully to the host's Erlang VM, so give it only
+    to the player you are playing with. On a local network this needs nothing more.
+    Across the internet, the host starts with a fixed port (`mix nidhox --port 9200`)
+    and opens it and port 4369 to the joining machine; the traffic is not encrypted.
+- **How to play** — the game's own lessons, one at a time, with an orange dummy.
+- **Options** — sound effects and music on or off, and **Controls** to remap
+  each player's keys; kept in your settings. `Esc` opens them during play as well.
+- **Credits** — from your copy's `credits.txt`.
+- **Quit to desktop**
+
+On the menus, up and down move, `Enter` or attack chooses, and jump goes back. `Enter`
+during a bout pauses it: unpause, change level (versus), or quit to the title. After
+a bout, the match's statistics (its time, and each side's kills and suicides), then
+**Continue**, **Watch replay** (the bout again; `Enter` skips it) or **Back to main
+menu**. Every
+bout's result is kept, per player, in `~/.local/share/nidhox/ledger.dets`.
 
 ## How it plays
 
@@ -61,7 +94,7 @@ orange the far left.
 - **Throw.** Hold up in high stance and attack to throw your sword. It kills whoever
   it reaches, unless they face it with their sword held high.
 - **Unarmed.** Without a sword, attack is a punch that knocks the opponent's sword
-  away. Stand over a sword on the ground to pick it up.
+  away. Duck over a sword on the ground to pick it up.
 - **Right of way.** Killing your opponent lets you run on towards your goal; the
   camera follows you, and your opponent comes back ahead of you. Only you can leave the
   screen, into the next room. Falling into a pit hands the right of way to your
@@ -69,5 +102,5 @@ orange the far left.
 - **Winning.** Reach the goal at your end of the area. The next bout starts in the
   middle.
 
-The rooms, their scenery and their ground come from your copy of the game. The fencers
-and swords are NidhOX's own.
+The rooms, their scenery and ground, the fencers, the menus and their lettering, the
+sounds and the music all come from your copy of the game.

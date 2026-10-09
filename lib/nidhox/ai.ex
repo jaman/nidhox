@@ -27,7 +27,7 @@ defmodule Nidhox.AI do
   - `:defensive` — plays cautiously, counters
   """
 
-  alias Nidhox.{Fencer, Match}
+  alias Nidhox.{Blade, Fencer, Match}
 
   # High-level AI states.
   # @states [:idle, :approach, :press, :defend, :attack, :counter, :recover, :release]
@@ -221,7 +221,7 @@ defmodule Nidhox.AI do
     {x2, _} = opponent.position
     dist = abs(x2 - x1)
 
-    dist <= Fencer.reach() + 5 and
+    dist <= Blade.reach() + 5 and
       fencer.action == :ready and
       fencer.armed and
       opposite_facing?(fencer, opponent)
@@ -233,7 +233,7 @@ defmodule Nidhox.AI do
     is_opponent_attacking?(opponent) and
       fencer.action == :ready and
       fencer.armed and
-      distance_to(fencer, opponent) <= Fencer.reach() + 12
+      distance_to(fencer, opponent) <= Blade.reach() + 12
   end
 
   defp opposite_facing?(fencer, opponent),

@@ -3,7 +3,11 @@ defmodule Nidhox.Terrain do
   What a fencer stands on and runs into in the current room: the shapes of every
   instance of `Block` and the objects descending from it (slopes, fallen and hanging
   blocks), and the one-way platforms of `PassThroughBlock`, which hold a body only while
-  it falls onto them from above.
+  it falls onto them from above. A conveyor (`Nidhox.Objects.Mines`) carries a body
+  standing on it (`belt/2`). `ledges` are the corners the room marks with `Ledge`, each
+  `{x, y, open}`, `open` the side, `1` right or `-1` left, where nothing solid is.
+  `gravity` is how much of their weight bodies fall with here, `1.0` unless the bout's
+  rules say otherwise.
 
   A body is `body/1`'s rectangle: 8 pixels wide and 26 tall, standing on its position.
   `move/3` moves it by a velocity a pixel at a time, stopping each axis at the first
@@ -14,11 +18,19 @@ defmodule Nidhox.Terrain do
   alias Cauldron2D.GameMaker.World
   alias Cauldron2D.Overlap
   alias Cauldron2D.Shape
+  alias Nidhox.Objects.Mines
 
   @enforce_keys [:solids, :platforms, :size]
-  defstruct [:solids, :platforms, :size]
+  defstruct [:solids, :platforms, :size, belts: [], ledges: [], gravity: 1.0]
 
-  @type t :: %__MODULE__{solids: [Shape.t()], platforms: [Shape.t()], size: {number(), number()}}
+  @type t :: %__MODULE__{
+          solids: [Shape.t()],
+          platforms: [Shape.t()],
+          size: {number(), number()},
+          belts: [{Shape.t(), number()}],
+          ledges: [{number(), number(), 1 | -1}],
+          gravity: number()
+        }
 
   @body_width 8
   @body_height 26
@@ -26,11 +38,15 @@ defmodule Nidhox.Terrain do
   @doc "The terrain of the room `world` is in."
   @spec new(World.t()) :: t()
   def new(%World{} = world) do
-    %__MODULE__{
+    terrain = %__MODULE__{
       solids: shapes(world, "Block"),
       platforms: shapes(world, "PassThroughBlock"),
+      belts: belts(world),
+      ledges: [],
       size: Enum.at(world.data.rooms, world.room).size
     }
+
+    %{terrain | ledges: ledges(world, terrain)}
   end
 
   @doc "The body standing at `{x, y}`."
@@ -52,6 +68,17 @@ defmodule Nidhox.Terrain do
   @spec solid?(t(), {number(), number()}) :: boolean()
   def solid?(%__MODULE__{solids: solids}, point),
     do: Enum.any?(solids, &Overlap.point?(&1, point))
+
+  @doc """
+  How fast the conveyor a body at `position` stands on carries it along x, in pixels a
+  step; `0` when it stands on none.
+  """
+  @spec belt(t(), {number(), number()}) :: number()
+  def belt(%__MODULE__{belts: belts}, {x, y}) do
+    Enum.find_value(belts, 0, fn {shape, speed} ->
+      if Overlap.point?(shape, {x, y + 1}), do: speed
+    end)
+  end
 
   @doc "Whether a body at `position` stands on something: solid ground or a platform."
   @spec grounded?(t(), {number(), number()}) :: boolean()
@@ -122,6 +149,34 @@ defmodule Nidhox.Terrain do
       {left, top, right, _bottom} = Shape.bounds(platform)
       x >= left and x <= right and from <= top and to > top
     end)
+  end
+
+  defp ledges(world, terrain) do
+    case World.object_index(world, "Ledge") do
+      nil ->
+        []
+
+      ledge ->
+        for id <- World.instances_of(world, ledge),
+            %{x: x, y: y} = World.fetch(world, id),
+            do: {x, y, if(solid?(terrain, {x - 2, y + 2}), do: 1, else: -1)}
+    end
+  end
+
+  defp belts(world) do
+    case World.object_index(world, "Conveyor") do
+      nil ->
+        []
+
+      conveyor ->
+        for id <- World.instances_of(world, conveyor),
+            instance = World.fetch(world, id),
+            way = Mines.belt_way(World.object(world, instance.object).name),
+            way != 0,
+            shape = Collide.shape(world, instance, {instance.x, instance.y}),
+            shape != nil,
+            do: {shape, way * Mines.belt_speed()}
+    end
   end
 
   defp shapes(world, name) do

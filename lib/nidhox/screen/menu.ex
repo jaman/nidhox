@@ -1,30 +1,33 @@
 defmodule Nidhox.Screen.Menu do
   @moduledoc """
-  A menu: a heading and a list of choices, one of them selected.
+  A list of choices in the copy's `fMenu` font, one of them selected and drawn brighter
+  than the rest.
 
-  Either side moves the selection with `:up` and `:down`, chooses with `:start` or
-  `:attack`, and goes back with `:jump`. `input/2` says which happened; `items/3` draws
-  the menu as GUI items, the selected choice marked.
+  A choice is `{label, option}`, or `{label, :disabled}` for one shown dimmed that the
+  selection passes over. Either side moves the selection with `:up` and `:down`,
+  chooses with `:start` or `:attack`, and goes back with `:jump`. `input/2` says which
+  happened and which side did it; `items/3` draws the menu.
   """
 
-  alias Nidhox.Screen.Text
+  alias Nidhox.Screen.Art
 
-  @enforce_keys [:heading, :choices]
-  defstruct [:heading, :choices, selected: 0]
+  @enforce_keys [:choices]
+  defstruct [:choices, selected: 0]
 
   @type choice :: {String.t(), term()}
-  @type t :: %__MODULE__{heading: String.t(), choices: [choice()], selected: non_neg_integer()}
+  @type t :: %__MODULE__{choices: [choice()], selected: non_neg_integer()}
 
-  @gold {245, 205, 70}
-  @white {235, 235, 235}
-  @dim {150, 150, 150}
-  @top 200
-  @spacing 56
+  @chosen {255, 255, 255}
+  @other {150, 150, 150}
+  @disabled {80, 80, 80}
+  @spacing 14
 
-  @doc "A menu headed `heading` offering `choices`, each `{label, option}`, the first selected."
-  @spec new(String.t(), [choice()], non_neg_integer()) :: t()
-  def new(heading, [_ | _] = choices, selected \\ 0),
-    do: %__MODULE__{heading: heading, choices: choices, selected: selected}
+  @doc "A menu of `choices`, each `{label, option}`, the first choosable one selected."
+  @spec new([choice()]) :: t()
+  def new([_ | _] = choices) do
+    first = Enum.find_index(choices, &choosable?/1) || 0
+    %__MODULE__{choices: choices, selected: first}
+  end
 
   @doc "The option of the selected choice."
   @spec selected(t()) :: term()
@@ -32,38 +35,56 @@ defmodule Nidhox.Screen.Menu do
     do: choices |> Enum.at(index) |> elem(1)
 
   @doc """
-  What the players did to the menu this step: `{:choose, option}`, `:back`, or
-  `{:stay, menu}` with the selection moved if they moved it.
+  What the players did to the menu this step: `{:choose, option, side}`,
+  `{:back, side}`, or `{:stay, menu}` with the selection moved if they moved it.
   """
-  @spec input(t(), %{1 => map(), 2 => map()}) :: {:choose, term()} | :back | {:stay, t()}
+  @spec input(t(), %{1 => map(), 2 => map()}) ::
+          {:choose, term(), 1 | 2} | {:back, 1 | 2} | {:stay, t()}
   def input(%__MODULE__{} = menu, players) do
-    pressed = players |> Map.values() |> Enum.reduce(MapSet.new(), &MapSet.union(&2, &1.pressed))
-    last = length(menu.choices) - 1
-
-    cond do
-      :start in pressed or :attack in pressed -> {:choose, selected(menu)}
-      :jump in pressed -> :back
-      :up in pressed -> {:stay, %{menu | selected: max(menu.selected - 1, 0)}}
-      :down in pressed -> {:stay, %{menu | selected: min(menu.selected + 1, last)}}
-      true -> {:stay, menu}
+    case Enum.find_value([1, 2], &pressed(menu, &1, players[&1].pressed)) do
+      nil -> {:stay, menu}
+      outcome -> outcome
     end
   end
 
-  @doc "The menu's GUI items for a window `{width, height}`."
-  @spec items(t(), {number(), number()}) :: [map()]
-  def items(%__MODULE__{} = menu, window) do
-    heading = Text.centred(menu.heading, @gold, 5, 80, window)
+  @doc "The menu's GUI items, its lines centred on `x` from `top` down, in view pixels."
+  @spec items(t(), {number(), number()}, {number(), number()}) :: [map()]
+  def items(%__MODULE__{} = menu, {x, top}, window) do
+    menu.choices
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {{label, option}, index} ->
+      colour = colour(option, index == menu.selected)
 
-    choices =
-      menu.choices
-      |> Enum.with_index()
-      |> Enum.map(fn {{label, _option}, index} ->
-        {words, colour} =
-          if index == menu.selected, do: {"> #{label} <", @white}, else: {label, @dim}
-
-        Text.centred(words, colour, 3, @top + index * @spacing, window)
-      end)
-
-    [Text.shade(window, {0, 0, 0}, 0.45), heading | choices]
+      Art.text("fMenu", label, {x, top + index * @spacing}, window,
+        halign: :center,
+        colour: colour
+      )
+    end)
   end
+
+  defp pressed(menu, side, pressed) do
+    cond do
+      :start in pressed or :attack in pressed -> {:choose, selected(menu), side}
+      :jump in pressed -> {:back, side}
+      :up in pressed -> {:stay, move(menu, -1)}
+      :down in pressed -> {:stay, move(menu, 1)}
+      true -> nil
+    end
+  end
+
+  defp move(%__MODULE__{choices: choices, selected: selected} = menu, step) do
+    found =
+      Stream.iterate(selected + step, &(&1 + step))
+      |> Stream.take_while(&(&1 >= 0 and &1 < length(choices)))
+      |> Enum.find(&choosable?(Enum.at(choices, &1)))
+
+    %{menu | selected: found || selected}
+  end
+
+  defp choosable?({_label, :disabled}), do: false
+  defp choosable?({_label, _option}), do: true
+
+  defp colour(:disabled, _selected?), do: @disabled
+  defp colour(_option, true), do: @chosen
+  defp colour(_option, false), do: @other
 end

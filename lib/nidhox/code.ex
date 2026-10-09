@@ -29,7 +29,25 @@ defmodule Nidhox.Code do
 
   @doc "The modules whose `handlers/0` make up the game's code."
   @spec objects() :: [module()]
-  def objects, do: [Nidhox.Objects.Scenery]
+  def objects,
+    do: [
+      Nidhox.Objects.Scenery,
+      Nidhox.Objects.Animals,
+      Nidhox.Objects.Ambience,
+      Nidhox.Objects.Doors,
+      Nidhox.Objects.Chandelier,
+      Nidhox.Objects.Background,
+      Nidhox.Objects.Wind,
+      Nidhox.Objects.Torches,
+      Nidhox.Objects.Clouds,
+      Nidhox.Objects.Waterfall,
+      Nidhox.Objects.Mines,
+      Nidhox.Objects.Wilds,
+      Nidhox.Objects.Grass,
+      Nidhox.Objects.Water,
+      Nidhox.Objects.Rocks,
+      Nidhox.Objects.Stains
+    ]
 
   @impl true
   def handler(name), do: Map.get(handlers(), name)
