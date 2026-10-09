@@ -7,8 +7,8 @@ defmodule Nidhox.Game do
 
   Options: `:area` (`"Cemetery"`, `"Castle"`, `"Mines"`, `"Sky"`, `"Wilds"`; default
   `"Cemetery"`), the area the level select starts on; `:port`, the port ONLINE VERSUS's
-  host listens on for the joining machine (default any free port). `Nidhox.Assets.load/1` must have
-  run first.
+  host listens on for the joining machine (default any free port); `:seed`, the game's
+  random number seed (default the clock). `Nidhox.Assets.load/1` must have run first.
 
   The first two players to join take sides `1` and `2`. A player joining as a client's
   local seat (join prop `:seat_of`) belongs to that client: what the game asks of a
@@ -20,12 +20,12 @@ defmodule Nidhox.Game do
 
   A view is the frame — `items` (room pixels), `gui` (the room's own, window pixels),
   `overlay` (the screen's, window pixels, over `gui`), `surfaces` (the rasters
-  `{:surface, id}` pictures name), `progress` (`Nidhox.Match.progress/1`
+  `{:surface, id}` pictures name), `progress` (`Nidhox.Bout.progress/1`
   of the bout, `0.0` with none), `background`,
   `view`, `window`, `screen`, `area` — with the viewer's `side` and `ask`, what the game
   asks of the viewer's client (`Nidhox.Flow.ask/3`), or `nil`.
 
-  A bout's sounds are sent as events (`Nidhox.Noises`). Each finished bout sends a
+  A bout's sounds are sent as events from its objects. Each finished bout sends a
   `{:result, row}` event for every player who fought it, with the player's id and name,
   `won?`, the area and the mode.
   """
@@ -35,10 +35,11 @@ defmodule Nidhox.Game do
   alias Cauldron2D.GameMaker.Data
   alias Cauldron2D.GameMaker.Draw
   alias Cauldron2D.GameMaker.World
-  alias Nidhox.{Assets, Flow, Match, Online, Screen}
-  alias Nidhox.Objects.{Ambience, Background}
+  alias Nidhox.{Assets, Bout, Flow, Online, Screen}
+  alias Nidhox.Objects.{Ambience, System}
 
   @sides [1, 2]
+  @bouts [:bout, :paused, :replay]
 
   @impl true
   def init(opts) do
@@ -48,17 +49,17 @@ defmodule Nidhox.Game do
       world:
         World.new(data, Nidhox.Code,
           room: Data.index(data, :rooms, "rLogos"),
-          pictures: &Map.get(Assets.get().pictures, &1)
+          pictures: &Map.get(Assets.get().pictures, &1),
+          seed: Keyword.get_lazy(opts, :seed, fn -> :os.system_time(:millisecond) end)
         )
-        |> Background.create(),
+        |> System.create(),
       screen: nil,
       menu: nil,
       levels: nil,
       mode: nil,
       area: Keyword.get(opts, :area) || "Cemetery",
       arcade: 0,
-      match: nil,
-      brain: nil,
+      winner: nil,
       stats: nil,
       recording: nil,
       tutorial: nil,
@@ -147,8 +148,7 @@ defmodule Nidhox.Game do
   @impl true
   def drain_events(state) do
     {outbox, world} = World.take_outbox(state.world)
-    bout = if state.match && state.screen == :bout, do: state.match.events, else: []
-    {outbox ++ bout ++ Enum.reverse(state.events), %{state | world: world, events: []}}
+    {outbox ++ Enum.reverse(state.events), %{state | world: world, events: []}}
   end
 
   defp ask(state, id) do
@@ -225,7 +225,7 @@ defmodule Nidhox.Game do
           screen: state.screen,
           area: state.area,
           surfaces: world.surfaces,
-          progress: if(state.match, do: Match.progress(state.match), else: 0.0)
+          progress: if(state.screen in @bouts, do: Bout.progress(world), else: 0.0)
         }
     }
   end

@@ -2,114 +2,75 @@ defmodule Nidhox.Objects.Grass do
   @moduledoc """
   Grass, as the game's code places and moves it.
 
-    * `GrassArea` lays a `Grass` every `@spacing` pixels along its width, at its foot;
+    * `GrassArea` lays a `Grass` every 16 pixels along its width, at its foot;
       `GrassAreaDark` lays them 2 pixels higher and dark
     * a `Grass` starts 2 pixels lower than placed, `checkTimer` its x over its sprite's
       width, rounded, modulo 7
 
-  `update/3` is the grass's user event 2, which the title menu runs every step and a
-  bout runs every bout step. `frame` is the world's step count and `cameraCenterX` the
-  middle of the first view. A grass more than `@reach` pixels across from the camera's
-  centre is left as it is. For the others:
+  Its user event 2 runs every match frame (`Nidhox.Bout.Frame`) and every step of the
+  main menu (`update_all/1`). `frame` below is `System.frame`. A grass more than 200
+  pixels across from the camera's centre (`cameraCenterX`) is left as it is. For the
+  others:
 
-    * on steps where `(checkTimer + frame) mod 3` is 0, what goes through it touches it:
-        * a fencer within `@man_height` above or below and `|x + 8 − its x| < 12`: moving
-          faster than 1 a step or attacking sets `touchTimer` to 20; downed (floored or
-          dead) lays it flat with `touchTimer` 30; crawling, sliding or falling lays it
-          flat. A grass already flat with `touchTimer` 30 or more is not touched
-        * a flying sword within the grass's height and `|x + 8 − its x| < width / 2 + 10`
-          sets `touchTimer` to 20
-        * a cat within the grass's height, `|x + 8 − its x| < 8`, moving faster than 0.5
-          a step sets `touchTimer` to 10
-      flying swords and cats do not touch a flat grass whose `touchTimer` is 20 or more
-    * standing (`sGrassFlatten`): flat, it falls `@fall` frames a step; touched
-      (`touchTimer > 0`), it turns to `sGrassOccupied` at frame 0; else it rises
-      `@rise` frames a step; held to its frames
-    * occupied (`sGrassOccupied`): flat, it turns back to `sGrassFlatten` at frame 1;
-      untouched, back at frame 0; else it shakes on `@shake` frames a step, wrapping
-      past its last frame
-    * it shows that frame, tinted `@light`, or `@dark` when dark; `touchTimer` counts
-      down, and at 0 or below the grass is no longer flat
+    * on frames where `(checkTimer + frame) mod 3` is 0, what goes through it touches it;
+      `x` and `y` are the grass's and `width`, `height` its scaled sprite's:
+        * a fencer — unless the grass is flat with `touchTimer` 30 or more — less than
+          its own sprite's height from `y` and `|x + 8 − its x| < 12`: moving faster
+          than 1 a step or attacking (`isAttacking`) sets `touchTimer` 20; collapsing,
+          stabbed or knocked down lays it flat with `touchTimer` 30; sliding (58),
+          rolling (59), lying (61) or falling lays it flat
+        * a thrown sword — unless flat with `touchTimer` 20 or more — less than `height`
+          from `y` and `|x + 8 − its x| < width / 2 + 10` sets `touchTimer` 20
+        * a cat — the same — within `height`, `|x + 8 − its x| < 8`, moving faster than
+          0.5 a step sets `touchTimer` 10
+        * a held sword, shown and moved this step — unless flat with `touchTimer` 10 or
+          more — within `height` and `|its x + 9 × its fencer's facing − x + 8| <
+          width / 2 + 5` sets `touchTimer` 10
+    * standing (`sGrassFlatten`): flat, it falls 0.3 frames a step; touched, it turns to
+      `sGrassOccupied` at frame 0; else it rises 0.15 a step; held to its frames
+    * occupied (`sGrassOccupied`): flat, back to `sGrassFlatten` at frame 1; untouched,
+      back at frame 0; else it shakes on 0.6 frames a step, wrapping past its last frame
+    * it shows that frame, tinted `{183, 148, 28}`, or `{54, 54, 54}` when dark;
+      `touchTimer` counts down, and at 0 or below the grass is no longer flat
     * it sways: `image_xscale = |sin((frame + x) / 50)| × 0.2 + 1`, and `image_yscale =
       startYScale × (|sin((frame + x × 100) / 200)| × 0.1 + 0.9)`, or for dark grass
       `× (… × 0.2 + 1)`
   """
 
   alias Cauldron2D.GameMaker.{Instance, World}
-  alias Nidhox.{Fencer, Parallax}
+  alias Nidhox.Bout.Camera
+  alias Nidhox.Gml
+  alias Nidhox.Man.Query
+  alias Nidhox.Objects.System
 
   @spacing 16
   @dark {54, 54, 54}
   @light {183, 148, 28}
   @reach 200
-  @man_height 32
   @fall 0.3
   @rise 0.15
   @shake 0.6
-  @attacking [:thrust, :throw, :punch, :punch2, :uppercut, :sweep, :divekick, :heart]
-  @downed [:floored, :dead]
-  @low [:duck, :slide]
+  @lying [58, 59, 61]
+  @flatten "sGrassFlatten"
+  @occupied "sGrassOccupied"
 
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
   def handlers do
     [
-      {"gml_Object_GrassArea_Create_0", &lay(&1, &2, &3, 0, false)},
-      {"gml_Object_GrassAreaDark_Create_0", &lay(&1, &2, &3, 2, true)},
-      {"gml_Object_Grass_Create_0", &start/3}
+      {"gml_Object_GrassArea_Create_0", &lay(&1, &2, &3, 0, 0)},
+      {"gml_Object_GrassAreaDark_Create_0", &lay(&1, &2, &3, 2, 1)},
+      {"gml_Object_Grass_Create_0", &start/3},
+      {"gml_Object_Grass_Other_12", &update/3}
     ]
   end
 
-  @doc """
-  `world` after the grass's user event 2, with `fencers` and the bout's `swords` going
-  through it (`Nidhox.Duel.sword/0`; the flying ones touch it).
-  """
-  @spec update(World.t(), [Fencer.t()], [map()]) :: World.t()
-  def update(%World{} = world, fencers, swords) do
-    case World.object_index(world, "Grass") do
-      nil ->
-        world
+  @doc "The world after every grass's user event 2 (`with (Grass) event_user(2)`)."
+  @spec update_all(World.t()) :: World.t()
+  def update_all(%World{} = world),
+    do: Enum.reduce(Gml.all(world, "Grass"), world, &World.perform(&2, &1, :other, 12))
 
-      grass ->
-        scene = scene(world, fencers, swords)
-
-        world
-        |> World.instances_of(grass)
-        |> Enum.reduce(world, &World.update(&2, &1, fn blade -> step(blade, scene) end))
-    end
-  end
-
-  defp scene(world, fencers, swords) do
-    %{
-      world: world,
-      frame: world.steps,
-      centre: Parallax.camera_center_x(world),
-      fencers: fencers,
-      swords: for(%{flying: true, position: position} <- swords, do: position),
-      cats: cats(world),
-      flatten: sprite(world, "sGrassFlatten"),
-      occupied: sprite(world, "sGrassOccupied")
-    }
-  end
-
-  defp cats(world) do
-    case World.object_index(world, "Cat") do
-      nil ->
-        []
-
-      cat ->
-        for id <- World.instances_of(world, cat),
-            %Instance{x: x, y: y, hspeed: hspeed} = World.fetch(world, id),
-            do: %{position: {x, y}, hspd: hspeed}
-    end
-  end
-
-  defp sprite(world, name) do
-    index = Enum.find_index(world.data.sprites, &(&1.name == name))
-    %{index: index, frames: length(Enum.at(world.data.sprites, index).frames)}
-  end
-
-  defp lay(world, self, _other, raise_by, dark?) do
+  defp lay(world, self, _other, raise_by, dark) do
     %Instance{x: x, y: y, image_xscale: xscale, image_yscale: yscale, sprite_index: sprite} =
       World.fetch(world, self)
 
@@ -117,10 +78,8 @@ defmodule Nidhox.Objects.Grass do
     object = World.object_index(world, "Grass")
 
     Enum.reduce(0..(trunc(width * xscale / @spacing) - 1)//1, world, fn i, world ->
-      {world, blade} =
-        World.create(world, object, {x + i * @spacing, y + height * yscale - raise_by})
-
-      World.update(world, blade, &%{&1 | vars: Map.put(&1.vars, :dark, dark?)})
+      {world, blade} = World.create(world, object, {x + i * @spacing, y + height * yscale - raise_by})
+      Gml.put(world, blade, %{dark: dark})
     end)
   end
 
@@ -134,9 +93,9 @@ defmodule Nidhox.Objects.Grass do
           vars:
             Map.merge(blade.vars, %{
               touchTimer: 0,
-              flattened: false,
+              flattened: 0,
               frame: 0.0,
-              dark: Map.get(blade.vars, :dark, false),
+              dark: Map.get(blade.vars, :dark, 0),
               startYScale: blade.image_yscale,
               checkTimer: rem(round(blade.x / (width * blade.image_xscale)), 7)
             })
@@ -144,127 +103,183 @@ defmodule Nidhox.Objects.Grass do
     end)
   end
 
-  defp step(%Instance{x: x} = blade, %{centre: centre})
-       when abs(x - centre) > @reach,
-       do: blade
+  defp update(world, self, _other) do
+    %Instance{x: x} = World.fetch(world, self)
 
-  defp step(%Instance{} = blade, scene) do
-    blade
-    |> touched(scene)
-    |> posed(scene)
-    |> tinted()
-    |> counted_down()
-    |> swayed(scene.frame)
-  end
+    if abs(x - Camera.center_x(world)) > @reach do
+      world
+    else
+      frame = System.get(world, :frame)
 
-  defp touched(%Instance{vars: %{checkTimer: check}} = blade, %{frame: frame} = scene)
-       when rem(check + frame, 3) == 0 do
-    {width, height} = size(blade, scene.world)
-
-    blade
-    |> by_fencers(scene.fencers)
-    |> by_swords(scene.swords, width, height)
-    |> by_cats(scene.cats, height)
-  end
-
-  defp touched(blade, _scene), do: blade
-
-  defp by_fencers(blade, fencers), do: Enum.reduce(fencers, blade, &by_fencer(&2, &1))
-
-  defp by_fencer(%Instance{vars: %{flattened: true, touchTimer: timer}} = blade, _fencer)
-       when timer >= 30,
-       do: blade
-
-  defp by_fencer(%Instance{x: x, y: y} = blade, %Fencer{position: {fx, fy}} = fencer) do
-    if abs(y - fy) < @man_height and abs(x + 8 - fx) < 12,
-      do: trod(blade, fencer),
-      else: blade
-  end
-
-  defp trod(blade, %Fencer{action: action, velocity: {hspd, vspd}}) do
-    blade
-    |> touch_if(abs(hspd) > 1 or action in @attacking, 20)
-    |> flatten_if(action in @downed, 30)
-    |> flatten_if(action in @low or vspd > 0, nil)
-  end
-
-  defp by_swords(blade, swords, width, height) do
-    Enum.reduce(swords, blade, fn {sx, sy}, %Instance{x: x, y: y} = blade ->
-      reached = abs(sy - y) < height and abs(x + 8 - sx) < width / 2 + 10
-      if open?(blade, 20), do: touch_if(blade, reached, 20), else: blade
-    end)
-  end
-
-  defp by_cats(blade, cats, height) do
-    Enum.reduce(cats, blade, fn %{position: {cx, cy}, hspd: hspd}, %Instance{x: x, y: y} = blade ->
-      reached = abs(cy - y) < height and abs(x + 8 - cx) < 8 and abs(hspd) > 0.5
-      if open?(blade, 20), do: touch_if(blade, reached, 10), else: blade
-    end)
-  end
-
-  defp open?(%Instance{vars: %{flattened: flat, touchTimer: timer}}, limit),
-    do: not flat or timer < limit
-
-  defp touch_if(blade, false, _timer), do: blade
-  defp touch_if(blade, true, timer), do: put_vars(blade, %{touchTimer: timer})
-
-  defp flatten_if(blade, false, _timer), do: blade
-  defp flatten_if(blade, true, nil), do: put_vars(blade, %{flattened: true})
-  defp flatten_if(blade, true, timer), do: put_vars(blade, %{flattened: true, touchTimer: timer})
-
-  defp posed(%Instance{sprite_index: index} = blade, %{flatten: %{index: index}} = scene) do
-    %{vars: %{flattened: flat, touchTimer: timer, frame: frame}} = blade
-
-    {blade, frame} =
-      cond do
-        flat -> {blade, frame + @fall}
-        timer > 0 -> {%{blade | sprite_index: scene.occupied.index}, 0.0}
-        true -> {blade, frame - @rise}
-      end
-
-    shown(blade, frame |> max(0.0) |> min(scene.flatten.frames - 1.0))
-  end
-
-  defp posed(%Instance{sprite_index: index} = blade, %{occupied: %{index: index}} = scene) do
-    %{vars: %{flattened: flat, touchTimer: timer, frame: frame}} = blade
-    last = scene.occupied.frames - 1.0
-
-    cond do
-      flat -> shown(%{blade | sprite_index: scene.flatten.index}, 1.0)
-      timer <= 0 -> shown(%{blade | sprite_index: scene.flatten.index}, 0.0)
-      frame + @shake > last -> shown(blade, max(frame + @shake - last, 0.0))
-      true -> shown(blade, max(frame + @shake, 0.0))
+      world
+      |> touched(self, frame)
+      |> World.update(self, &(&1 |> posed(world) |> tinted() |> counted_down() |> swayed(frame)))
     end
   end
 
-  defp posed(blade, _scene), do: shown(blade, blade.vars.frame)
+  defp touched(world, self, frame) do
+    if Gml.eq?(:math.fmod(Gml.var(world, self, :checkTimer) + frame, 3), 0) do
+      world
+      |> by_each("Man", self, &by_man/3)
+      |> by_each("FlyingWeapon", self, &by_thrown/3)
+      |> by_each("Cat", self, &by_cat/3)
+      |> by_each("HeldWeapon", self, &by_held/3)
+    else
+      world
+    end
+  end
+
+  defp by_each(world, name, self, touch),
+    do: Enum.reduce(Gml.all(world, name), world, &touch.(&2, &1, self))
+
+  defp by_man(world, man, self) do
+    %Instance{x: x, y: y} = blade = World.fetch(world, self)
+    %Instance{x: man_x, y: man_y, vars: vars} = body = World.fetch(world, man)
+
+    cond do
+      flat_at_least?(blade, 30) -> world
+      not Gml.lt?(abs(y - man_y) - height(world, body), 0) -> world
+      not Gml.lt?(abs(x + 8 - man_x) - 12, 0) -> world
+      true -> trodden(world, man, self, vars)
+    end
+  end
+
+  defp trodden(world, man, self, vars) do
+    world =
+      if Gml.gt?(abs(Map.get(vars, :hspd, 0)), 1) or Query.attacking?(world, man),
+        do: Gml.put(world, self, %{touchTimer: 20}),
+        else: world
+
+    world =
+      if Query.collapsing?(world, man) or Query.stabbed?(world, man) or Query.knocked_down?(world, man),
+        do: Gml.put(world, self, %{flattened: 1, touchTimer: 30}),
+        else: world
+
+    if Map.get(vars, :state) in @lying or Map.get(vars, :vspd, 0) > 0,
+      do: Gml.put(world, self, %{flattened: 1}),
+      else: world
+  end
+
+  defp by_thrown(world, sword, self) do
+    %Instance{x: x, y: y} = blade = World.fetch(world, self)
+    %Instance{x: sword_x, y: sword_y} = World.fetch(world, sword)
+
+    if not flat_at_least?(blade, 20) and Gml.lt?(abs(sword_y - y) - height(world, blade), 0) and
+         Gml.lt?(abs(x + 8 - sword_x) - (width(world, blade) / 2 + 10), 0),
+       do: Gml.put(world, self, %{touchTimer: 20}),
+       else: world
+  end
+
+  defp by_cat(world, cat, self) do
+    %Instance{x: x, y: y} = blade = World.fetch(world, self)
+    %Instance{x: cat_x, y: cat_y, vars: vars} = World.fetch(world, cat)
+
+    if not flat_at_least?(blade, 20) and Gml.lt?(abs(cat_y - y) - height(world, blade), 0) and
+         Gml.lt?(abs(x + 8 - cat_x) - 8, 0) and Gml.gt?(abs(Map.get(vars, :hspd, 0)), 0.5),
+       do: Gml.put(world, self, %{touchTimer: 10}),
+       else: world
+  end
+
+  defp by_held(world, sword, self) do
+    %Instance{x: x, y: y} = blade = World.fetch(world, self)
+    held = World.fetch(world, sword)
+
+    if not flat_at_least?(blade, 10) and Map.get(held.vars, :type) == 2 and held.visible and moved?(held) and
+         Gml.lt?(abs(held.y - y) - height(world, blade), 0) and
+         Gml.lt?(abs(held.x + facing(world, held) * 9 - x + 8) - (width(world, blade) / 2 + 5), 0),
+       do: Gml.put(world, self, %{touchTimer: 10}),
+       else: world
+  end
+
+  defp moved?(%Instance{x: x, y: y, xprevious: px, yprevious: py}),
+    do: not Gml.eq?(x, px) or not Gml.eq?(y, py)
+
+  defp facing(world, %Instance{vars: vars}), do: Gml.var(world, Map.get(vars, :mother, -4), :facingXScale, 1)
+
+  defp flat_at_least?(%Instance{vars: vars}, timer),
+    do: Gml.truthy?(Map.get(vars, :flattened, 0)) and Map.get(vars, :touchTimer, 0) >= timer
+
+  defp height(world, %Instance{sprite_index: sprite, image_yscale: yscale}),
+    do: world |> size(sprite) |> elem(1) |> Kernel.*(yscale)
+
+  defp width(world, %Instance{sprite_index: sprite, image_xscale: xscale}),
+    do: world |> size(sprite) |> elem(0) |> Kernel.*(xscale)
+
+  defp size(world, sprite) do
+    case World.sprite(world, sprite) do
+      nil -> {0, 0}
+      definition -> definition.size
+    end
+  end
+
+  defp posed(%Instance{sprite_index: sprite} = blade, world) do
+    flatten = sprite_index(world, @flatten)
+    occupied = sprite_index(world, @occupied)
+
+    cond do
+      sprite == flatten -> standing(blade, world, occupied)
+      sprite == occupied -> occupied(blade, world, flatten)
+      true -> shown(blade, blade.vars.frame)
+    end
+  end
+
+  defp standing(%Instance{vars: vars} = blade, world, occupied) do
+    {blade, frame} =
+      cond do
+        Gml.truthy?(vars.flattened) -> {blade, vars.frame + @fall}
+        vars.touchTimer > 0 -> {%{blade | sprite_index: occupied}, 0.0}
+        true -> {blade, vars.frame - @rise}
+      end
+
+    shown(blade, Gml.clamp(frame, 0, frames(world, blade.sprite_index) - 1))
+  end
+
+  defp occupied(%Instance{vars: vars} = blade, world, flatten) do
+    cond do
+      Gml.truthy?(vars.flattened) ->
+        shown(%{blade | sprite_index: flatten}, 1.0)
+
+      vars.touchTimer <= 0 ->
+        shown(%{blade | sprite_index: flatten}, 0.0)
+
+      true ->
+        last = frames(world, blade.sprite_index) - 1
+        frame = vars.frame + @shake
+        frame = if frame > last, do: frame - last, else: frame
+        shown(blade, max(frame, 0))
+    end
+  end
+
+  defp sprite_index(world, name), do: Enum.find_index(world.data.sprites, &(&1.name == name))
+
+  defp frames(world, sprite) do
+    case World.sprite(world, sprite) do
+      nil -> 1
+      definition -> length(definition.frames)
+    end
+  end
 
   defp shown(blade, frame),
-    do: %{put_vars(blade, %{frame: frame}) | image_speed: 0.0, image_index: frame}
+    do: %{put_vars(blade, %{frame: frame}) | image_speed: 0.0, image_index: frame / 1}
 
-  defp tinted(%Instance{vars: %{dark: true}} = blade), do: %{blade | image_blend: @dark}
-  defp tinted(blade), do: %{blade | image_blend: @light}
+  defp tinted(%Instance{vars: %{dark: dark}} = blade),
+    do: %{blade | image_blend: if(Gml.truthy?(dark), do: @dark, else: @light)}
 
   defp counted_down(%Instance{vars: %{touchTimer: timer}} = blade) when timer - 1 <= 0,
-    do: put_vars(blade, %{touchTimer: timer - 1, flattened: false})
+    do: put_vars(blade, %{touchTimer: timer - 1, flattened: 0})
 
   defp counted_down(%Instance{vars: %{touchTimer: timer}} = blade),
     do: put_vars(blade, %{touchTimer: timer - 1})
 
   defp swayed(%Instance{x: x, vars: %{dark: dark, startYScale: start}} = blade, frame) do
     breathe = abs(:math.sin((frame + x * 100) / 200))
-    height = if dark, do: breathe * 0.2 + 1, else: breathe * 0.1 + 0.9
+    height = if Gml.truthy?(dark), do: breathe * 0.2 + 1, else: breathe * 0.1 + 0.9
 
     %{
       blade
       | image_xscale: abs(:math.sin((frame + x) / 50)) * 0.2 + 1,
         image_yscale: start * height
     }
-  end
-
-  defp size(%Instance{sprite_index: index, image_xscale: xscale, image_yscale: yscale}, world) do
-    {width, height} = World.sprite(world, index).size
-    {width * xscale, height * yscale}
   end
 
   defp put_vars(%Instance{vars: vars} = blade, changes),

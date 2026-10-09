@@ -5,18 +5,18 @@ defmodule Nidhox.Objects.Wind do
 
     * create: a canvas and a copy, each `@width` × `@height`, the canvas tiled with
       `bWindSurface`
-    * step: the canvas is copied, then `@passes` times a random patch of the copy, each
-      side `random_range(30, 60)`, is drawn back onto the canvas nudged by
-      `random_range(1, 3)` and `random_range(−2, 1)` when its `type` is `"right"`, else by
-      `random_range(−3, 3)` and `random_range(−2, 2)`; the instance stands at
+    * step: the canvas is copied, then `@passes` times (`@low_passes` at `System.detail`
+      `@low_detail`) a patch of the copy is drawn back onto the canvas: its middle at
+      `random(width)`, `random(height)`, nudged by `random_range(1, 3)` and
+      `random_range(−2, 1)` when its `type` is `"right"`, else by `random_range(−3, 3)`
+      and `random_range(−2, 2)`, each side `random_range(30, 60)`; the instance stands at
       `room_width / 2 − (room_width / 2 − cameraCenterX) × 0.8 − @width / 2`, at the
       camera's top
     * draw: the canvas added at the instance's place, blend and alpha
 
   The title's menu (`MainMenu`) makes one as it starts, at alpha `@title_alpha`.
 
-  The random draws come from the step, the instance and the pass, not GameMaker's
-  generator.
+  The random draws come from the world's generator in that order.
 
   The castle's fire clouds (`oFireClouds`) are drawn as `bWindSurface` tiled across the
   view, added in `@fire` at `@fire_alpha`, carried leftward at `@fire_drift` pixels a
@@ -24,12 +24,16 @@ defmodule Nidhox.Objects.Wind do
   """
 
   alias Cauldron2D.GameMaker.{Draw, Instance, Surfaces, World}
-  alias Nidhox.{Assets, Parallax}
+  alias Nidhox.{Assets, Gml}
+  alias Nidhox.Bout.Camera
+  alias Nidhox.Objects.System
 
   @texture "bWindSurface"
   @width 640
   @height 200
-  @passes 5
+  @passes 10
+  @low_passes 5
+  @low_detail 9001
   @follow 0.8
   @fire {255, 120, 50}
   @fire_alpha 0.12
@@ -90,36 +94,39 @@ defmodule Nidhox.Objects.Wind do
   defp churned(world, self, %{canvas: canvas, copy: copy, type: type}) do
     world = Surfaces.draw(world, copy, [Surfaces.item(world, canvas, {0, 0})])
 
-    patches =
-      for pass <- 1..@passes,
-          patch = patch(world, self, copy, type, pass),
-          patch != nil,
-          do: patch
+    passes = if System.get(world, :detail) == @low_detail, do: @low_passes, else: @passes
 
-    world = Surfaces.draw(world, canvas, patches)
+    {patches, world} =
+      Enum.map_reduce(1..passes, world, fn _pass, world -> patch(world, copy, type) end)
+
+    world = Surfaces.draw(world, canvas, Enum.reject(patches, &is_nil/1))
     room_middle = Enum.at(world.data.rooms, world.room).size |> elem(0) |> Kernel./(2)
-    x = room_middle - (room_middle - Parallax.camera_center_x(world)) * @follow - @width / 2
+    x = room_middle - (room_middle - Camera.center_x(world)) * @follow - @width / 2
     World.update(world, self, &%{&1 | x: x, y: camera_top(world)})
   end
 
-  defp patch(world, self, copy, type, pass) do
-    random = fn key, low, high ->
-      low + :erlang.phash2({world.steps, self, pass, key}, 1_000_000) / 1_000_000 * (high - low)
-    end
-
-    {dx, dy} =
-      if type == "right",
-        do: {random.(:dx, 1, 3), random.(:dy, -2, 1)},
-        else: {random.(:dx, -3, 3), random.(:dy, -2, 2)}
-
-    centre_x = random.(:x, 0, @width)
-    centre_y = random.(:y, 0, @height)
-    width = random.(:width, 30, 60)
-    height = random.(:height, 30, 60)
+  defp patch(world, copy, type) do
+    {centre_x, world} = Gml.random(world, @width)
+    {centre_y, world} = Gml.random(world, @height)
+    {{dx, dy}, world} = nudge(world, type)
+    {width, world} = Gml.random_range(world, 30, 60)
+    {height, world} = Gml.random_range(world, 30, 60)
     left = centre_x - width / 2
     top = centre_y - height / 2
 
-    Surfaces.part_item(world, copy, {left, top, width, height}, {left + dx, top + dy})
+    {Surfaces.part_item(world, copy, {left, top, width, height}, {left + dx, top + dy}), world}
+  end
+
+  defp nudge(world, "right") do
+    {dx, world} = Gml.random_range(world, 1, 3)
+    {dy, world} = Gml.random_range(world, -2, 1)
+    {{dx, dy}, world}
+  end
+
+  defp nudge(world, _type) do
+    {dx, world} = Gml.random_range(world, -3, 3)
+    {dy, world} = Gml.random_range(world, -2, 2)
+    {{dx, dy}, world}
   end
 
   defp draw(world, self, _other) do

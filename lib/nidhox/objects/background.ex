@@ -1,7 +1,7 @@
 defmodule Nidhox.Objects.Background do
   @moduledoc """
-  The moving paper-like backdrop of every screen (`BackgroundObject`), made once when
-  the game starts and kept across rooms (`create/1`).
+  The moving paper-like backdrop of every screen (`BackgroundObject`), made by `System`
+  when the game starts and kept across rooms.
 
   It keeps `@squares` surfaces, each 320 × 200 and first painted with background 357
   (`bLevelSelect`) at its corner, and a final surface the same size:
@@ -16,13 +16,14 @@ defmodule Nidhox.Objects.Background do
       `@square_alpha`, and the final surface is drawn at the view's top-left corner at
       alpha `@final_alpha`
 
-  The random draws come from the world's step, the square and the copy, so a world
-  stepped the same way draws the same backdrop.
+  The random draws come from the world's generator in the game's order: for each copy,
+  `prob(10)`, then `choose(add, add, subtract)` when it is not drawn over, then its x,
+  y, x scale, y scale and angle; the timer is `choose(1, 2, 3)`.
   """
 
   alias Cauldron2D.GameMaker.{Draw, Surfaces, World}
+  alias Nidhox.Gml
 
-  @object "BackgroundObject"
   @squares 3
   @copies 10
   @width 320
@@ -42,22 +43,10 @@ defmodule Nidhox.Objects.Background do
     ]
   end
 
-  @doc "`world` with the backdrop made, as the game's start makes it."
-  @spec create(World.t()) :: World.t()
-  def create(%World{} = world) do
-    case World.object_index(world, @object) do
-      nil -> world
-      object -> world |> World.create(object, {0, 0}) |> elem(0)
-    end
+  defp start(world, self, _other) do
+    {timer, world} = Gml.choose(world, [1, 2, 3])
+    put_vars(world, self, %{squares: List.duplicate(nil, @squares), final: nil, timer: timer})
   end
-
-  defp start(world, self, _other),
-    do:
-      put_vars(world, self, %{
-        squares: List.duplicate(nil, @squares),
-        final: nil,
-        timer: choice(world, self, :timer)
-      })
 
   defp begin_step(world, self, _other) do
     vars = World.fetch(world, self).vars
@@ -106,51 +95,63 @@ defmodule Nidhox.Objects.Background do
     )
   end
 
-  defp reseed(world, self, %{timer: timer} = vars) when timer <= 0 do
+  defp reseed(world, _self, %{timer: timer} = vars) when timer <= 0 do
+    {timer, world} = Gml.choose(world, [1, 2, 3])
+
     world =
       Enum.reduce(0..(@squares - 1), world, fn index, world ->
         source = Enum.at(vars.squares, rem(index + 1, @squares))
-        copies = for copy <- 1..@copies, do: copy(world, source, index, copy)
+
+        {copies, world} =
+          Enum.map_reduce(1..@copies, world, fn _copy, world -> copy(world, source) end)
+
         Surfaces.draw(world, Enum.at(vars.squares, index), copies)
       end)
 
-    {world, %{vars | timer: choice(world, self, :timer)}}
+    {world, %{vars | timer: timer}}
   end
 
   defp reseed(world, _self, vars), do: {world, vars}
 
-  defp copy(world, source, index, copy) do
-    random = &random(world, {index, copy, &1}, &2)
+  defp copy(world, source) do
+    {mode, world} = mode(world)
+    {x, world} = Gml.random(world, @width)
+    {y, world} = Gml.random(world, @height)
+    {xscale, world} = Gml.random(world, 1.3)
+    {yscale, world} = Gml.random(world, 1.3)
+    {angle, world} = Gml.random(world, 360)
 
-    Surfaces.item(world, source, {random.(:x, @width), random.(:y, @height)},
-      scale: {random.(:xscale, 1.3), random.(:yscale, 1.3)},
-      angle: random.(:angle, 360),
-      mode: mode(random.(:normal, 100), random.(:choice, 3)),
-      blend: @white
-    )
+    item =
+      Surfaces.item(world, source, {x, y},
+        scale: {xscale, yscale},
+        angle: angle,
+        mode: mode,
+        blend: @white
+      )
+
+    {item, world}
   end
 
-  defp mode(roll, _choice) when roll < 10, do: :over
-  defp mode(_roll, choice) when choice < 2, do: :add
-  defp mode(_roll, _choice), do: :subtract
+  defp mode(world) do
+    case Gml.prob(world, 10) do
+      {true, world} -> {:over, world}
+      {false, world} -> Gml.choose(world, [:add, :add, :subtract])
+    end
+  end
 
   defp compose(world, %{final: final, squares: squares}) do
     world = Surfaces.clear(world, final, {0, 0, 0}, 0)
 
     layers =
       for square <- squares,
-          do: Surfaces.item(world, square, {0, 0}, alpha: @square_alpha, mode: :add, blend: @white)
+          do:
+            Surfaces.item(world, square, {0, 0}, alpha: @square_alpha, mode: :add, blend: @white)
 
     Surfaces.draw(world, final, layers)
   end
 
   defp view_corner(%World{views: [%{view: {x, y, _width, _height}} | _]}), do: {x, y}
   defp view_corner(_world), do: {0, 0}
-
-  defp choice(world, self, key), do: 1 + :erlang.phash2({world.steps, self, key}, 3)
-
-  defp random(world, key, limit),
-    do: :erlang.phash2({world.steps, key}, 1_000_000) / 1_000_000 * limit
 
   defp put_vars(world, self, vars),
     do: World.update(world, self, &%{&1 | vars: Map.merge(&1.vars, vars)})

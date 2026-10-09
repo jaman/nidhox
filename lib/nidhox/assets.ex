@@ -56,10 +56,7 @@ defmodule Nidhox.Assets do
   def load(path) do
     with {:ok, data} <- Data.read(path),
          {:ok, pages} <- Pictures.new(data) do
-      pictures =
-        Pictures.table(pages, data)
-        |> Map.merge(Nidhox.Sprites.table(pages, data))
-
+      pictures = Pictures.table(pages, data)
       assets = %__MODULE__{path: path, data: data, pictures: pictures, pages: pages}
       :persistent_term.put(@key, assets)
       {:ok, assets}

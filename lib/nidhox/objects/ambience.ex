@@ -37,19 +37,6 @@ defmodule Nidhox.Objects.Ambience do
   @edge 160
   @creaks ["sfxChandelier1", "sfxChandelier2", "sfxChandelier3"]
 
-  @doc "Every recording the ambience sounds."
-  @spec recordings() :: [String.t()]
-  def recordings,
-    do: [
-      "sfxWind",
-      "sfxEdgeOfCenter",
-      "sfxFireBackground",
-      "sfxDrone",
-      "sfxWaterfall",
-      "sndWaterfallEdge",
-      "sfxChainSqueak1" | @creaks
-    ]
-
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
   def handlers do

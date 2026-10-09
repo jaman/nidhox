@@ -2,10 +2,7 @@ defmodule Nidhox.Screen.Results do
   @moduledoc """
   The match's statistics after a bout, over `rMatchStats`, in `fMenu`: who won, how long
   the bout took, and each side's kills and suicides (falls out of the room), and the
-  results' menu under them (`menu/0`).
-
-  A bout's `t:stats/0` start with `new/0` and are kept up by `count/3` with every step's
-  `Nidhox.Match` events.
+  results' menu under them (`menu/0`). The statistics are `Nidhox.Bout.stats/1`'s.
   """
 
   @type stats :: %{
@@ -26,20 +23,6 @@ defmodule Nidhox.Screen.Results do
   @label 160
   @menu_top {160, 130}
   @colours %{1 => {255, 214, 60}, 2 => {255, 140, 40}}
-
-  @doc "Statistics for a bout not yet begun."
-  @spec new() :: stats()
-  def new, do: %{steps: 0, kills: %{1 => 0, 2 => 0}, suicides: %{1 => 0, 2 => 0}}
-
-  @doc "`stats` after one more step of the bout, in which `events` happened."
-  @spec count(stats(), [tuple()]) :: stats()
-  def count(stats, events) do
-    Enum.reduce(events, %{stats | steps: stats.steps + 1}, fn
-      {:killed, killer, _victim}, stats -> update_in(stats.kills[killer], &(&1 + 1))
-      {:fell, side}, stats -> update_in(stats.suicides[side], &(&1 + 1))
-      _event, stats -> stats
-    end)
-  end
 
   @doc "The results' menu: CONTINUE, WATCH REPLAY, BACK TO MAIN MENU."
   @spec menu() :: Menu.t()

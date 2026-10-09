@@ -56,8 +56,9 @@ defmodule Nidhox.Music do
 
   @doc """
   The cue for a frame on `screen` in `area` with the bout `progress` from its centre
-  (`Nidhox.Match.progress/1`, `0.0`–`1.0`): the area's `:bout` section while the bout is
-  being fought, paused or about to begin, its `:title` section otherwise.
+  (`Nidhox.Bout.progress/1`, `0.0`–`1.0`): the area's `:bout` section while the bout is
+  being fought, paused or about to begin, its `:title` section otherwise. The tutorial
+  has none: its `Tutorial` plays its own music.
 
   In the bout, the stems play in the table's order: the first alone in the centre, one
   more joining with each step towards an end room, every one of them in the end rooms.
@@ -66,6 +67,8 @@ defmodule Nidhox.Music do
   """
   @spec cue(String.t(), atom(), number()) :: Cauldron2D.Audio.Music.cue() | nil
   def cue(area, screen, progress \\ 0.0)
+
+  def cue(_area, :tutorial, _progress), do: nil
 
   def cue(area, screen, progress) when is_map_key(@areas, area) do
     if screen in [:en_garde, :bout, :paused],

@@ -1,220 +1,437 @@
 defmodule Nidhox.Objects.Animals do
   @moduledoc """
-  The squirrels, cats and birds of the rooms (`Squirrel`, `Cat` and `Bird`, all
-  `GrassDisturbingAnimal`s), in their own sprites from the data file.
+  The squirrels, cats and birds of the rooms (`Squirrel`, `Cat`, `Bird`, all
+  `GrassDisturbingAnimal`s and so `PhysicsObject`s), moving under the game's physics
+  (`Nidhox.Man.Physics.begin_step/2` and `end_step/2`).
 
-  A squirrel or a cat sits (`sprSquirrelStand`, `sprCatSit`) and now and then walks a
-  short way about where it was placed (`sprSquirrelWalk`, `sprCatWalk`), each at its
-  kind's pace (`@ground`). A bird perches (`sprBirdStand`) and now and then pecks.
-  Either is startled — its user event 0 — when a fencer comes within `@startle` pixels:
-  the squirrel runs off (`sprSquirrelRun`), the cat bounds off (`sprCatPounce`), the
-  bird flies off (`sprBirdFly`), away from
-  the nearest fencer, and is destroyed once it leaves the room; one placed outside the
-  room stays.
+  Squirrels and cats wander:
 
-  Fencers are read from the global `:fencers`, a list of `{x, y}` positions; with none
-  set, nothing startles them. Pauses and directions are drawn from the instance id and
-  the step count, so the same world steps the same way on every machine.
+    * create: a `PhysicsObject`; a place to go across the room (`targetX`, at random),
+      no wait (`waitTimer`), standing still (`imageSpeed` 0); a squirrel tinted
+      `hsv(15, 40, 200)`, a cat `hsv(random 255, random 18, 40–140)`
+    * end step: within 64 of its place it picks another, 200 pixels inside the room's
+      ends. On the ground, waiting it counts down and slows (×0.97); else it makes for
+      its place at 0.1 a step, now and then hops (`vspd` −0.2 to −2.25 for a squirrel,
+      −0.8 to −9 for a cat, while moving faster than 0.125) and now and then waits 60 to
+      120 frames. In the air it falls at 0.12. It faces its way, slows (×0.99 both
+      ways) and keeps to 1 across and 2.5 down. On the ground moving it walks — a
+      squirrel running past 0.3 — at `|hspd| × 0.25` (a cat `× 1.5`), still it stands
+      at 0.4; in the air its jump frame follows `vspd`
+    * user event 0 (into a wall): a new place, stopped (a cat also back where it was)
+
+  Birds fly between perches (`RespawnPoint`s):
+
+    * create: a `PhysicsObject` on the ground, not flying, `stamina` 240, its perch
+      itself, its alarm in 1 to 600 frames, `idealAltitude` 48; drifting at −1 to 1 each
+      way; its wings flapping (`sndFlap`) round and round where it is
+      (`Nidhox.Objects.Ear.attach/3`)
+    * alarm 0, every 120 to 600 frames: a new perch — the nearest `RespawnPoint` to a
+      random place in the room's top half, flown to `idealAltitude` 12 to 150 above it
+    * end step: its frame from `vspd`. Flying it sinks at 0.03; more than 48 from where
+      it means to be, below that height it climbs (−0.1, 60 in 100) leaning forward, and
+      it steers towards the perch (0.025, 60 in 100), gliding forward (0.01) while
+      sinking. Not flying it falls at 0.04. On the ground it stands, slowed (×0.2), and
+      takes off now and then (2 in 100, `vspd` −2); in the air it flies (sprite 10)
+      moving across faster than 0.25 and faster than down, else hovers (8). It slows
+      (×0.998 across, ×0.98 down), keeps to 1 each way and faces its way
+    * user event 0 (into a wall): it turns back; user event 1 (into a ceiling) rising, it
+      thinks of a new perch; through a doorway or a window it goes back and turns back
+      at half speed
+
+  Leaving the room each wraps round it by its built-in speed (`action_wrap`), which
+  these animals do not use, so they go on past the edge.
   """
 
-  alias Cauldron2D.GameMaker.Data
-  alias Cauldron2D.GameMaker.Instance
-  alias Cauldron2D.GameMaker.World
+  alias Cauldron2D.GameMaker.{Instance, World}
+  alias Nidhox.Gml
+  alias Nidhox.Man.Physics
+  alias Nidhox.Objects.Ear
 
-  @startle 56
-  @ground %{
-    "Squirrel" => %{
-      sit: {"sprSquirrelStand", 0.12},
-      walk: {"sprSquirrelWalk", 0.2},
-      run: {"sprSquirrelRun", 0.4}
-    },
-    "Cat" => %{sit: {"sprCatSit", 1.0}, walk: {"sprCatWalk", 1.0}, run: {"sprCatPounce", 1.0}}
+  @walkers %{
+    "Squirrel" => %{hop: {2, 0.2, 2.25}, wait: 0.5, walk: 23, run: 24, stand: 25, jump: 26, pace: 0.25},
+    "Cat" => %{hop: {0.5, 0.8, 9}, wait: 2, walk: 360, run: 360, stand: 373, jump: 366, pace: 1.5}
   }
-  @wander 24
-  @walk_pace 0.35
-  @run_pace 2.5
-  @sit_steps 150..420
-  @walk_steps 30..80
-  @peck_steps 10
-  @perch_steps 90..300
-  @flap_speed 0.3
-  @fly_pace {1.6, -1.4}
+  @near 64
+  @inside 200
+  @accel 0.1
+  @gravity 0.12
+  @most_across 1
+  @most_down 2.5
+  @flap 10
+  @fly 10
+  @hover 8
+  @stand 9
 
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
   def handlers do
     [
-      {"gml_Object_Squirrel_Create_0", &squirrel_sits/3},
-      {"gml_Object_Squirrel_Step_1", &squirrel_step/3},
-      {"gml_Object_Squirrel_Other_10", &squirrel_runs/3},
-      {"gml_Object_Squirrel_Other_0", &gone/3},
-      {"gml_Object_Cat_Create_0", &squirrel_sits/3},
-      {"gml_Object_Cat_Step_1", &squirrel_step/3},
-      {"gml_Object_Cat_Other_10", &squirrel_runs/3},
-      {"gml_Object_Cat_Other_0", &gone/3},
-      {"gml_Object_Bird_Create_0", &bird_perches/3},
-      {"gml_Object_Bird_Step_1", &bird_step/3},
-      {"gml_Object_Bird_Other_10", &bird_flies/3},
-      {"gml_Object_Bird_Other_0", &gone/3}
+      {"gml_Object_GrassDisturbingAnimal_Create_0", &inherit/3},
+      {"gml_Object_Squirrel_Create_0", &squirrel/3},
+      {"gml_Object_Squirrel_Step_1", &begin_step/3},
+      {"gml_Object_Squirrel_Step_2", &wander/3},
+      {"gml_Object_Squirrel_Other_10", &bump/3},
+      {"gml_Object_Squirrel_Other_0", &wrap(&1, &2, &3, :both)},
+      {"gml_Object_Cat_Create_0", &cat/3},
+      {"gml_Object_Cat_Step_1", &begin_step/3},
+      {"gml_Object_Cat_Step_2", &wander/3},
+      {"gml_Object_Cat_Other_10", &cat_bump/3},
+      {"gml_Object_Cat_Other_0", &wrap(&1, &2, &3, :both)},
+      {"gml_Object_Bird_Create_0", &bird/3},
+      {"gml_Object_Bird_Alarm_0", &new_perch/3},
+      {"gml_Object_Bird_Step_1", &begin_step/3},
+      {"gml_Object_Bird_Step_2", &fly/3},
+      {"gml_Object_Bird_Other_10", &turn_back/3},
+      {"gml_Object_Bird_Other_11", &ceiling/3},
+      {"gml_Object_Bird_Collision_Doorway", &bounce/3},
+      {"gml_Object_Bird_Collision_Window", &bounce/3},
+      {"gml_Object_Bird_Other_0", &wrap(&1, &2, &3, :across)}
     ]
   end
 
-  @doc "The world with the global `:fencers` set to `positions`, for the animals to see."
-  @spec watch(World.t(), [{number(), number()}]) :: World.t()
-  def watch(%World{} = world, positions), do: World.put_global(world, :fencers, positions)
+  defp inherit(world, self, _other), do: World.inherited(world, self, "GrassDisturbingAnimal", :create, 0)
 
-  defp squirrel_sits(world, self, _other),
-    do: world |> ground(self, :sit) |> still(self, :sitting, @sit_steps)
+  defp squirrel(world, self, _other) do
+    world = World.inherited(world, self, "Squirrel", :create, 0)
+    {target, world} = Gml.random(world, room_width(world))
 
-  defp squirrel_step(world, self, _other) do
-    case World.fetch(world, self) do
-      %Instance{vars: %{mode: :running}} -> world
-      instance -> squirrel_idles(world, instance)
+    world
+    |> Gml.put(self, %{targetX: target, waitTimer: 0, imageSpeed: 0})
+    |> World.update(self, &%{&1 | image_blend: hsv(15, 40, 200)})
+  end
+
+  defp cat(world, self, _other) do
+    world = World.inherited(world, self, "Cat", :create, 0)
+    {target, world} = Gml.random(world, room_width(world))
+    world = Gml.put(world, self, %{targetX: target, waitTimer: 0})
+    {hue, world} = Gml.random(world, 255)
+    {saturation, world} = Gml.random(world, 18)
+    {value, world} = Gml.random_range(world, 40, 140)
+
+    world
+    |> World.update(self, &%{&1 | image_blend: hsv(hue, saturation, value)})
+    |> Gml.put(self, %{imageSpeed: 0})
+  end
+
+  defp begin_step(world, self, _other), do: Physics.begin_step(world, self)
+
+  defp wander(world, self, _other) do
+    kind = Map.fetch!(@walkers, object_name(world, self))
+
+    world
+    |> World.update(self, &%{&1 | image_speed: Gml.var(world, self, :imageSpeed)})
+    |> new_place_when_near(self)
+    |> walk(self, kind)
+    |> settle(self, kind)
+    |> Physics.end_step(self)
+  end
+
+  defp new_place_when_near(world, self) do
+    %Instance{x: x} = World.fetch(world, self)
+
+    if Gml.lt?(abs(x - Gml.var(world, self, :targetX)), @near) do
+      {target, world} = Gml.random_range(world, @inside, room_width(world) - @inside)
+      Gml.put(world, self, %{targetX: target})
+    else
+      world
     end
   end
 
-  defp squirrel_idles(world, %Instance{id: id} = instance) do
-    cond do
-      startled?(world, instance) -> World.perform(world, id, :other, 10)
-      instance.vars.timer > 0 -> tick(world, id)
-      instance.vars.mode == :sitting -> squirrel_walks(world, instance)
-      true -> squirrel_sits(world, id, nil)
+  defp walk(world, self, kind) do
+    if Gml.truthy?(Gml.var(world, self, :onGround)),
+      do: on_ground(world, self, kind),
+      else: Gml.put(world, self, %{vspd: Gml.var(world, self, :vspd) + @gravity})
+  end
+
+  defp on_ground(world, self, kind) do
+    wait = Gml.var(world, self, :waitTimer)
+
+    if Gml.truthy?(wait),
+      do: Gml.put(world, self, %{waitTimer: wait - 1, hspd: Gml.var(world, self, :hspd) * 0.97}),
+      else: world |> make_for_place(self) |> hop(self, kind) |> pause(self, kind)
+  end
+
+  defp make_for_place(world, self) do
+    %Instance{x: x} = World.fetch(world, self)
+    target = Gml.var(world, self, :targetX)
+    hspd = Gml.var(world, self, :hspd)
+    hspd = if Gml.lt?(target, x), do: hspd - @accel, else: hspd
+    hspd = if Gml.gt?(target, x), do: hspd + @accel, else: hspd
+    Gml.put(world, self, %{hspd: hspd})
+  end
+
+  defp hop(world, self, %{hop: {chance, low, high}}) do
+    if Gml.gt?(abs(Gml.var(world, self, :hspd)), 0.125) do
+      case Gml.prob(world, chance) do
+        {true, world} ->
+          {height, world} = Gml.random_range(world, low, high)
+          Gml.put(world, self, %{vspd: -height})
+
+        {false, world} ->
+          world
+      end
+    else
+      world
     end
   end
 
-  defp squirrel_walks(world, %Instance{id: id} = instance) do
-    heading = homeward(world, instance)
+  defp pause(world, self, %{wait: chance}) do
+    case Gml.prob(world, chance) do
+      {true, world} ->
+        {wait, world} = Gml.random_range(world, 60, 120)
+        Gml.put(world, self, %{waitTimer: wait})
 
-    world
-    |> ground(id, :walk)
-    |> World.update(
-      id,
-      &moving(&1, :walking, heading, {@walk_pace, 0.0}, draw(world, id, @walk_steps))
-    )
-  end
-
-  defp squirrel_runs(world, self, _other) do
-    instance = World.fetch(world, self)
-
-    world
-    |> ground(self, :run)
-    |> World.update(self, &moving(&1, :running, away(world, instance), {@run_pace, 0.0}, 0))
-  end
-
-  defp ground(world, id, gait) do
-    kind = World.object(world, World.fetch(world, id).object).name
-    {sprite, speed} = @ground |> Map.fetch!(kind) |> Map.fetch!(gait)
-    pose(world, id, sprite, speed)
-  end
-
-  defp bird_perches(world, self, _other) do
-    world
-    |> pose(self, "sprBirdStand", 0.0)
-    |> World.update(self, &%{&1 | image_index: 0.0})
-    |> still(self, :perched, @perch_steps)
-  end
-
-  defp bird_step(world, self, _other) do
-    case World.fetch(world, self) do
-      %Instance{vars: %{mode: :flying}} -> world
-      instance -> bird_waits(world, instance)
-    end
-  end
-
-  defp bird_waits(world, %Instance{id: id} = instance) do
-    cond do
-      startled?(world, instance) -> World.perform(world, id, :other, 10)
-      instance.vars.timer > 0 -> tick(world, id)
-      instance.vars.mode == :perched -> bird_pecks(world, id)
-      true -> bird_perches(world, id, nil)
-    end
-  end
-
-  defp bird_pecks(world, id),
-    do:
-      World.update(
-        world,
-        id,
-        &%{&1 | image_index: 1.0, vars: %{&1.vars | mode: :pecking, timer: @peck_steps}}
-      )
-
-  defp bird_flies(world, self, _other) do
-    instance = World.fetch(world, self)
-
-    world
-    |> pose(self, "sprBirdFly", @flap_speed)
-    |> World.update(self, &moving(&1, :flying, away(world, instance), @fly_pace, 0))
-  end
-
-  defp gone(world, self, _other) do
-    case World.fetch(world, self) do
-      %Instance{vars: %{mode: mode}} when mode in [:running, :flying] ->
-        World.destroy(world, self)
-
-      _placed ->
+      {false, world} ->
         world
     end
   end
 
-  defp pose(world, id, sprite, speed) do
-    case Data.index(world.data, :sprites, sprite) do
+  defp settle(world, self, kind) do
+    world
+    |> face(self)
+    |> slow(self, 0.99, 0.99, @most_across, @most_down)
+    |> pose(self, kind)
+  end
+
+  defp pose(world, self, kind) do
+    hspd = Gml.var(world, self, :hspd)
+
+    cond do
+      not Gml.truthy?(Gml.var(world, self, :onGround)) ->
+        jump_frame(world, self, kind.jump)
+
+      Gml.gt?(abs(hspd), 0) ->
+        sprite = if Gml.gt?(abs(hspd) - @most_across * 0.3, 0), do: kind.run, else: kind.walk
+        world |> sprite(self, sprite) |> Gml.put(self, %{imageSpeed: abs(hspd) * kind.pace})
+
+      true ->
+        world |> sprite(self, kind.stand) |> Gml.put(self, %{imageSpeed: 0.4})
+    end
+  end
+
+  defp jump_frame(world, self, sprite) do
+    world = sprite(world, self, sprite)
+    frames = frames(world, self)
+    frame = frames * 0.5 + Gml.var(world, self, :vspd) / @most_down * frames * 0.5
+    World.update(world, self, &%{&1 | image_index: frame})
+  end
+
+  defp bump(world, self, _other) do
+    {target, world} = Gml.random(world, room_width(world))
+    Gml.put(world, self, %{targetX: target, hspd: 0})
+  end
+
+  defp cat_bump(world, self, other) do
+    world = bump(world, self, other)
+    World.update(world, self, &%{&1 | x: &1.xprevious})
+  end
+
+  defp bird(world, self, _other) do
+    world = World.inherited(world, self, "Bird", :create, 0)
+    {alarm, world} = Gml.random_range(world, 1, 600)
+
+    world =
+      world
+      |> Gml.put(self, %{flying: 0, stamina: 240, perch: self, frameNum: 0, idealAltitude: 48})
+      |> World.update(self, &Instance.put_alarm(&1, 0, alarm))
+
+    {_perch, world} = find_perch(world, self)
+    {hspd, world} = Gml.random_range(world, -1, 1)
+    {vspd, world} = Gml.random_range(world, -1, 1)
+    world = Gml.put(world, self, %{hspd: hspd, vspd: vspd})
+    {_sound, world} = Ear.attach(world, self, @flap)
+    world
+  end
+
+  defp new_perch(world, self, _other) do
+    {alarm, world} = Gml.random_range(world, 120, 600)
+    world = World.update(world, self, &Instance.put_alarm(&1, 0, alarm))
+    {perch, world} = find_perch(world, self)
+    Gml.put(world, self, %{perch: perch})
+  end
+
+  defp find_perch(world, self) do
+    {x, world} = Gml.random_range(world, 0, room_width(world))
+    {y, world} = Gml.random_range(world, 0, room_height(world) * 0.5)
+    perch = Gml.nearest(world, {x, y}, "RespawnPoint")
+    {altitude, world} = Gml.random_range(world, 12, 150)
+    world = Gml.put(world, self, %{idealAltitude: altitude})
+    {perch || self, world}
+  end
+
+  defp fly(world, self, _other) do
+    world
+    |> flap_frame(self)
+    |> airborne(self)
+    |> land_or_fly(self)
+    |> slow(self, 0.998, 0.98, 1, 1)
+    |> face(self)
+    |> Physics.end_step(self)
+  end
+
+  defp flap_frame(world, self) do
+    frames = frames(world, self)
+    World.update(world, self, &%{&1 | image_index: frames / 2 + Gml.var(world, self, :vspd) * frames * 2, image_speed: 0})
+  end
+
+  defp airborne(world, self) do
+    cond do
+      Gml.truthy?(Gml.var(world, self, :flying)) ->
+        world |> Gml.put(self, %{vspd: Gml.var(world, self, :vspd) + 0.03}) |> head_for_perch(self)
+
+      Gml.truthy?(Gml.var(world, self, :onGround)) ->
+        world
+
+      true ->
+        Gml.put(world, self, %{vspd: Gml.var(world, self, :vspd) + 0.04})
+    end
+  end
+
+  defp head_for_perch(world, self) do
+    %Instance{x: x, y: y} = World.fetch(world, self)
+
+    case World.fetch(world, Gml.var(world, self, :perch, self)) do
+      %Instance{x: px, y: py} ->
+        target_y = py - Gml.var(world, self, :idealAltitude)
+
+        if Gml.gt?(distance({x, y}, {px, target_y}), 48),
+          do: world |> climb(self, y, target_y) |> steer(self, x, px) |> glide(self),
+          else: world
+
       nil ->
         world
-
-      index ->
-        World.update(world, id, &posed(&1, index, speed))
     end
   end
 
-  defp posed(%Instance{sprite_index: index} = instance, index, speed),
-    do: %{instance | image_speed: speed}
+  defp climb(world, self, y, target_y) do
+    if Gml.gt?(y, target_y - 8) do
+      case Gml.prob(world, 60) do
+        {true, world} ->
+          lean = 0.02 * World.fetch(world, self).image_xscale
+          Gml.put(world, self, %{vspd: Gml.var(world, self, :vspd) - 0.1, hspd: Gml.var(world, self, :hspd) + lean})
 
-  defp posed(%Instance{} = instance, index, speed),
-    do: %{instance | sprite_index: index, image_speed: speed, image_index: 0.0}
-
-  defp still(world, id, mode, steps) do
-    World.update(world, id, fn instance ->
-      instance
-      |> Instance.put_motion(%{hspeed: 0.0, vspeed: 0.0})
-      |> Map.put(:vars, Map.merge(instance.vars, %{mode: mode, timer: draw(world, id, steps)}))
-    end)
+        {false, world} ->
+          world
+      end
+    else
+      world
+    end
   end
 
-  defp moving(instance, mode, heading, {pace_x, pace_y}, timer) do
-    %{
-      Instance.put_motion(instance, %{hspeed: heading * pace_x, vspeed: pace_y})
-      | image_xscale: heading * abs(instance.image_xscale),
-        vars: Map.merge(instance.vars, %{mode: mode, timer: timer})
-    }
+  defp steer(world, self, x, px) do
+    world = if Gml.lt?(px, x), do: nudge(world, self, -0.025), else: world
+    if Gml.gt?(px, x), do: nudge(world, self, 0.025), else: world
   end
 
-  defp tick(world, id),
-    do: World.update(world, id, &%{&1 | vars: %{&1.vars | timer: &1.vars.timer - 1}})
+  defp nudge(world, self, amount) do
+    case Gml.prob(world, 60) do
+      {true, world} -> Gml.put(world, self, %{hspd: Gml.var(world, self, :hspd) + amount})
+      {false, world} -> world
+    end
+  end
 
-  defp draw(world, id, first..last//_),
-    do: first + :erlang.phash2({id, world.steps}, last - first + 1)
+  defp glide(world, self) do
+    if Gml.gt?(Gml.var(world, self, :vspd), 0),
+      do: Gml.put(world, self, %{hspd: Gml.var(world, self, :hspd) + 0.01 * World.fetch(world, self).image_xscale}),
+      else: world
+  end
 
-  defp homeward(world, %Instance{x: x, xstart: home} = instance) do
+  defp land_or_fly(world, self) do
+    if Gml.truthy?(Gml.var(world, self, :onGround)) do
+      world = world |> Gml.put(self, %{flying: 0, hspd: Gml.var(world, self, :hspd) * 0.2}) |> sprite(self, @stand)
+
+      case Gml.prob(world, 2) do
+        {true, world} -> Gml.put(world, self, %{flying: 1, vspd: -2})
+        {false, world} -> world
+      end
+    else
+      hspd = abs(Gml.var(world, self, :hspd))
+      vspd = abs(Gml.var(world, self, :vspd))
+      sprite(world, self, if(Gml.gt?(hspd, 0.25) and Gml.lt?(vspd, hspd), do: @fly, else: @hover))
+    end
+  end
+
+  defp turn_back(world, self, _other) do
+    world = Gml.put(world, self, %{hspd: -Gml.var(world, self, :hspd)})
+    {_perch, world} = find_perch(world, self)
+    world
+  end
+
+  defp ceiling(world, self, _other) do
+    if Gml.lt?(Gml.var(world, self, :vspd), 0) do
+      {_perch, world} = find_perch(world, self)
+      world
+    else
+      world
+    end
+  end
+
+  defp bounce(world, self, _other) do
+    world
+    |> World.update(self, &%{&1 | x: &1.xprevious})
+    |> Gml.put(self, %{hspd: Gml.var(world, self, :hspd) * -0.5})
+  end
+
+  defp wrap(world, self, _other, way) do
+    %Instance{x: x, y: y, hspeed: hspeed, vspeed: vspeed} = instance = World.fetch(world, self)
+    {width, height} = sprite_size(world, instance)
+    room_width = room_width(world)
+    room_height = room_height(world)
+
+    x =
+      cond do
+        hspeed < 0 and x < 0 -> x + room_width + width
+        hspeed > 0 and x >= room_width -> x - (room_width + width)
+        true -> x
+      end
+
+    y =
+      cond do
+        way != :both -> y
+        vspeed < 0 and y < 0 -> y + room_height + height
+        vspeed > 0 and y >= room_height -> y - (room_height + height)
+        true -> y
+      end
+
+    World.update(world, self, &%{&1 | x: x, y: y})
+  end
+
+  defp face(world, self) do
+    hspd = Gml.var(world, self, :hspd)
+
     cond do
-      x - home > @wander -> -1
-      home - x > @wander -> 1
-      :erlang.phash2({instance.id, world.steps, :heading}, 2) == 0 -> -1
-      true -> 1
+      Gml.gt?(hspd, 0) -> World.update(world, self, &%{&1 | image_xscale: 1})
+      Gml.lt?(hspd, 0) -> World.update(world, self, &%{&1 | image_xscale: -1})
+      true -> world
     end
   end
 
-  defp startled?(world, %Instance{x: x, y: y}),
-    do:
-      Enum.any?(fencers(world), fn {fx, fy} ->
-        abs(fx - x) < @startle and abs(fy - y) < @startle
-      end)
+  defp slow(world, self, across, down, most_across, most_down) do
+    hspd = Gml.clamp(Gml.var(world, self, :hspd) * across, -most_across, most_across)
+    vspd = Gml.clamp(Gml.var(world, self, :vspd) * down, -most_down, most_down)
+    Gml.put(world, self, %{hspd: hspd, vspd: vspd})
+  end
 
-  defp away(world, %Instance{x: x}) do
-    case Enum.min_by(fencers(world), fn {fx, _} -> abs(fx - x) end, fn -> nil end) do
-      {fx, _} when fx > x -> -1
-      _ -> 1
+  defp sprite(world, self, sprite), do: World.update(world, self, &%{&1 | sprite_index: sprite})
+
+  defp frames(world, self) do
+    case World.sprite(world, World.fetch(world, self).sprite_index) do
+      nil -> 1
+      definition -> length(definition.frames)
     end
   end
 
-  defp fencers(world), do: World.global(world, :fencers, [])
+  defp sprite_size(world, %Instance{sprite_index: sprite, image_xscale: xscale, image_yscale: yscale}) do
+    case World.sprite(world, sprite) do
+      nil -> {0, 0}
+      %{size: {width, height}} -> {width * xscale, height * yscale}
+      _other -> {0, 0}
+    end
+  end
+
+  defp hsv(hue, saturation, value), do: Cauldron2D.GameMaker.Colour.hsv(hue, saturation, value)
+  defp distance({x1, y1}, {x2, y2}), do: :math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1))
+  defp object_name(world, self), do: World.object(world, World.fetch(world, self).object).name
+  defp room_width(world), do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(0)
+  defp room_height(world), do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(1)
 end

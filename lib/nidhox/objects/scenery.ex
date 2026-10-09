@@ -13,7 +13,7 @@ defmodule Nidhox.Objects.Scenery do
   """
 
   alias Cauldron2D.GameMaker.{Colour, World}
-  alias Nidhox.Parallax
+  alias Nidhox.Bout.Camera
 
   @moon_follow 0.83
   @moon_alpha 0.9
@@ -41,7 +41,7 @@ defmodule Nidhox.Objects.Scenery do
       )
 
   defp moon_follow(world, self, _other) do
-    centre = Parallax.camera_center_x(world)
+    centre = Camera.center_x(world)
     World.update(world, self, &%{&1 | x: &1.xstart + @moon_follow * (centre - &1.xstart)})
   end
 

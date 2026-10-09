@@ -18,8 +18,7 @@ defmodule Mix.Tasks.Nidhox do
   """
 
   use Mix.Task
-  alias Nidhox.{Match, Sounds}
-  alias Nidhox.Objects.Ambience
+  alias Nidhox.Sounds
 
   @switches [data: :string, area: :string, room: :string, name: :string, port: :integer]
 
@@ -46,7 +45,7 @@ defmodule Mix.Tasks.Nidhox do
   end
 
   defp play(opts) do
-    area = Keyword.get(opts, :area) || Match.area(Keyword.get(opts, :room)) || "Cemetery"
+    area = Keyword.get(opts, :area) || Nidhox.Bout.area(Keyword.get(opts, :room)) || "Cemetery"
 
     :ok =
       Cauldron2D.Worlds.register(Nidhox.Client.world_id(),
@@ -59,7 +58,7 @@ defmodule Mix.Tasks.Nidhox do
         end
       )
 
-    Task.start(fn -> Sounds.warm(Ambience.recordings()) end)
+    Task.start(&Sounds.warm/0)
     Code.ensure_loaded!(Cauldron2D.Drafter.Surface)
     Drafter.Widget.Registry.register(Cauldron2D.Drafter.Surface)
 

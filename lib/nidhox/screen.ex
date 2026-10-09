@@ -1,16 +1,13 @@
 defmodule Nidhox.Screen do
   @moduledoc """
-  What each screen of `Nidhox.Flow` draws over its room: the fencers and swords of a
-  bout as room items (`Nidhox.Look`), and the screen's own pictures and text as GUI
-  items for a window `{width, height}`.
+  What each screen of `Nidhox.Flow` draws over its room, as GUI items for a window
+  `{width, height}`: the screen's own pictures and text. A bout draws itself through
+  its objects; over it only the pause menu and the replay's skip line are added.
   """
 
-  alias Nidhox.{Look, Tutorial}
   alias Nidhox.Screen.{Art, Credits, Ladder, Levels, Logos, Online, Pause, Results, Title}
 
   @skip {160, 186}
-  @lesson {160, 18}
-  @lesson_wrap 280
 
   @doc "The room items and the GUI items of `state`'s screen."
   @spec layer(map(), {number(), number()}) :: {[map()], [map()]}
@@ -38,29 +35,13 @@ defmodule Nidhox.Screen do
   def layer(%{screen: :champion} = state, window),
     do: {[], Ladder.champion(state.tournament.bracket.champion, window)}
 
-  def layer(%{screen: :en_garde} = state, _window), do: {Look.items(state.match), []}
+  def layer(%{screen: screen}, _window) when screen in [:bout, :tutorial], do: {[], []}
 
-  def layer(%{screen: :bout} = state, window),
-    do: {Look.items(state.match), Look.banner(state.match, window)}
-
-  def layer(%{screen: :paused} = state, window),
-    do: {Look.items(state.match), Pause.items(state.menu, window)}
+  def layer(%{screen: :paused} = state, window), do: {[], Pause.items(state.menu, window)}
 
   def layer(%{screen: :results} = state, window),
-    do: {[], Results.items(state.match.winner, state.stats, state.menu, window)}
+    do: {[], Results.items(state.winner, state.stats, state.menu, window)}
 
-  def layer(%{screen: :tutorial} = state, window) do
-    line =
-      case Tutorial.line(state.tutorial) do
-        nil -> []
-        words -> Art.text("fMenu", words, @lesson, window, halign: :center, wrap: @lesson_wrap)
-      end
-
-    {Look.items(state.match), Look.banner(state.match, window) ++ line}
-  end
-
-  def layer(%{screen: :replay} = state, window) do
-    skip = Art.text("fMenu", "SKIP THIS", @skip, window, halign: :center)
-    {Look.items(state.match), Look.banner(state.match, window) ++ skip}
-  end
+  def layer(%{screen: :replay}, window),
+    do: {[], Art.text("fMenu", "SKIP THIS", @skip, window, halign: :center)}
 end

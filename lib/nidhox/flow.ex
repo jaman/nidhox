@@ -29,15 +29,13 @@ defmodule Nidhox.Flow do
       starts the match
     * `:champion` — the tournament's champion over `rShowChampion`, for
       `@champion_steps` steps or until a press, then the main menu
-    * `:tutorial` — HOW TO PLAY (`Nidhox.Tutorial`) in `rTutorial`, the orange fencer a
-      dummy; it ends at the main menu once every lesson is passed
+    * `:tutorial` — HOW TO PLAY: `rTutorial` with the game's own `Tutorial` (`System.flow`
+      656686433); it ends at the main menu once the tutorial is gone
     * `:credits` — `Nidhox.Screen.Credits` over `rCredits`, until they have risen away or
       a press
-    * `:en_garde` — the fencers placed and still for `@en_garde_steps` steps; the start
-      sound as it ends
-    * `:bout` — the bout (`Nidhox.Match`) until it is finished, under the rules chosen on
-      the level select (`Nidhox.Rules`): as many bout steps a game step as its variant
-      says, and into sudden death when its time runs out; `:start` pauses it
+    * `:bout` — the match (`Nidhox.Bout`), run by the game's own objects from its
+      faceoff on under the rules chosen on the level select (`Nidhox.Rules`), until its
+      `Match` is gone; `:start` pauses it
     * `:paused` — `Nidhox.Screen.Pause`; `:jump` or UNPAUSE GAME goes back to the bout
     * `:results` — `Nidhox.Screen.Results` over `rMatchStats`: CONTINUE goes on to the
       next area of a single player run after a win, else to the main menu; WATCH REPLAY;
@@ -46,8 +44,8 @@ defmodule Nidhox.Flow do
       recorded input (the computer's as it chose them), then back to the results;
       `:start` (SKIP THIS) ends it early
 
-  SINGLE PLAYER is a run through `@arcade` against the computer (`Nidhox.AI`) on side
-  2, ended by a loss or the last win. OFFLINE VERSUS is the two sides against each other
+  SINGLE PLAYER is a run through `@arcade` against the computer (the match's `Brain`) on
+  side 2, ended by a loss or the last win. OFFLINE VERSUS is the two sides against each other
   in the area chosen. ONLINE VERSUS is the same with side 2 a player joined from
   another machine: the host's world is the one both play in, and CONTINUE after a bout
   goes back to the level select. TOURNAMENT is a double elimination tournament (`Nidhox.Tournament`)
@@ -62,14 +60,15 @@ defmodule Nidhox.Flow do
   alias Cauldron2D.GameMaker.Rooms
   alias Cauldron2D.GameMaker.Step
   alias Cauldron2D.GameMaker.World
-  alias Nidhox.{AI, Assets, Blood, Match, Noises, Parallax, Rules, Sounds, Tournament, Tutorial}
-  alias Nidhox.Objects.{Animals, Doors, Grass, Stains}
+  alias Nidhox.{Assets, Bout, Rules, Tournament}
+  alias Nidhox.Gml
+  alias Nidhox.Objects.Grass
   alias Nidhox.Screen.{Credits, Entry, Levels, Logos, Menu, Pause, Results, Title}
 
   @no_keys %{held: MapSet.new(), pressed: MapSet.new(), released: MapSet.new()}
   @areas ["Cemetery", "Castle", "Mines", "Sky", "Wilds"]
   @arcade @areas
-  @en_garde_steps 90
+  @tutorial_flow 656_686_433
   @ask_steps 30
   @sway_period 500
   @sway_margin 160
@@ -109,7 +108,7 @@ defmodule Nidhox.Flow do
     state = state |> scenery(players) |> sway()
 
     case Menu.input(state.menu, players) do
-      {:choose, :single, _side} -> en_garde(%{state | mode: :arcade, arcade: 0}, hd(@arcade))
+      {:choose, :single, _side} -> begin(%{state | mode: :arcade, arcade: 0}, hd(@arcade))
       {:choose, :multi, _side} -> multi_menu(state)
       {:choose, :options, side} -> ask(state, side, :menu)
       {:choose, :tutorial, _side} -> tutorial(state)
@@ -208,7 +207,7 @@ defmodule Nidhox.Flow do
     state = scenery(state, players)
 
     if Title.continue?(players),
-      do: en_garde(state, state.area, state.tournament.rules),
+      do: begin(state, state.area, state.tournament.rules),
       else: state
   end
 
@@ -228,20 +227,6 @@ defmodule Nidhox.Flow do
       else: state
   end
 
-  def step(%{screen: :en_garde} = state, players) do
-    state = scenery(state, players)
-
-    if state.timer >= @en_garde_steps,
-      do: %{
-        state
-        | screen: :bout,
-          timer: 0,
-          recording: %{world: state.world, match: state.match, inputs: [], kept: []},
-          events: [Sounds.event(:start, state.steps) | state.events]
-      },
-      else: state
-  end
-
   def step(%{screen: :bout} = state, players) do
     if Enum.any?(Map.values(players), &(:start in &1.pressed)),
       do: %{state | screen: :paused, menu: Pause.menu(state.mode)},
@@ -249,14 +234,15 @@ defmodule Nidhox.Flow do
   end
 
   def step(%{screen: :tutorial} = state, players) do
-    if Enum.any?(Map.values(players), &(:start in &1.pressed)) do
-      %{state | screen: :paused, menu: Pause.menu(:tutorial)}
-    else
-      {tutorial, match} = Tutorial.opening(state.tutorial, state.match)
-      players = Map.put(players, 2, Tutorial.opponent(tutorial))
-      state = advance(%{state | match: match}, players)
-      tutorial = Tutorial.step(tutorial, match, state.match)
-      if Tutorial.done?(tutorial), do: main_menu(state), else: %{state | tutorial: tutorial}
+    cond do
+      Enum.any?(Map.values(players), &(:start in &1.pressed)) ->
+        %{state | screen: :paused, menu: Pause.menu(:tutorial)}
+
+      Gml.exists?(state.world, "Tutorial") ->
+        advance(state, players)
+
+      true ->
+        main_menu(state)
     end
   end
 
@@ -313,7 +299,7 @@ defmodule Nidhox.Flow do
   defp title(state),
     do:
       enter(
-        offline(%{state | screen: :title, menu: nil, match: nil, brain: nil, timer: 0}),
+        offline(%{state | screen: :title, menu: nil, timer: 0}),
         :title
       )
 
@@ -329,7 +315,7 @@ defmodule Nidhox.Flow do
       ])
 
     enter(
-      offline(%{state | screen: :title, menu: menu, match: nil, brain: nil, timer: 0}),
+      offline(%{state | screen: :title, menu: menu, timer: 0}),
       :title
     )
   end
@@ -344,7 +330,7 @@ defmodule Nidhox.Flow do
       ])
 
     enter(
-      offline(%{state | screen: :multi, menu: menu, match: nil, brain: nil, timer: 0}),
+      offline(%{state | screen: :multi, menu: menu, timer: 0}),
       :multi
     )
   end
@@ -354,7 +340,7 @@ defmodule Nidhox.Flow do
 
     state =
       enter(
-        %{state | screen: :levels, menu: nil, levels: levels, match: nil, brain: nil, timer: 0},
+        %{state | screen: :levels, menu: nil, levels: levels, timer: 0},
         :levels
       )
 
@@ -440,26 +426,26 @@ defmodule Nidhox.Flow do
     )
   end
 
-  defp chosen(%{levels: levels} = state, area), do: en_garde(state, area, Levels.rules(levels))
+  defp chosen(%{levels: levels} = state, area), do: begin(state, area, Levels.rules(levels))
 
   defp ladder(state),
     do:
       enter(
-        %{state | screen: :ladder, menu: nil, match: nil, brain: nil, timer: 0},
+        %{state | screen: :ladder, menu: nil, timer: 0},
         :ladder
       )
 
-  defp decided(%{tournament: %{bracket: bracket} = tournament, match: match} = state) do
-    bracket = Tournament.won(bracket, elem(Tournament.next(bracket), match.winner - 1))
+  defp decided(%{tournament: %{bracket: bracket} = tournament, winner: winner} = state) do
+    bracket = Tournament.won(bracket, elem(Tournament.next(bracket), winner - 1))
 
     state = %{
       state
       | tournament: %{tournament | bracket: bracket},
-        events: result_events(state, match.winner) ++ state.events
+        events: result_events(state, winner) ++ state.events
     }
 
     if bracket.champion,
-      do: enter(%{state | screen: :champion, match: nil, timer: 0}, :champion),
+      do: enter(%{state | screen: :champion, timer: 0}, :champion),
       else: ladder(state)
   end
 
@@ -474,97 +460,50 @@ defmodule Nidhox.Flow do
   end
 
   defp tutorial(state) do
-    state =
-      enter(
-        %{state | screen: :tutorial, menu: nil, mode: :tutorial, brain: nil, timer: 0},
-        :tutorial
-      )
+    world =
+      case Gml.first(state.world, "System") do
+        nil -> state.world
+        system -> Gml.put(state.world, system, %{flow: @tutorial_flow})
+      end
 
-    room = state.world.room
-    {match, world} = Match.in_room(state.world, "Tutorial", room)
-
-    %{
-      state
-      | match: match,
-        world: world,
-        stats: Results.new(),
-        tutorial: Tutorial.new(finish_line(world))
-    }
-  end
-
-  defp finish_line(world) do
-    with object when object != nil <- World.object_index(world, "TutorialFinishLine"),
-         [id | _] <- World.instances_of(world, object) do
-      World.fetch(world, id).x
-    else
-      _none -> world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(0)
-    end
+    world = Rooms.enter(world, Data.index(world.data, :rooms, @rooms.tutorial))
+    %{state | screen: :tutorial, menu: nil, mode: :tutorial, world: world, timer: 0}
   end
 
   defp resumed(%{mode: :tutorial}), do: :tutorial
   defp resumed(_state), do: :bout
 
-  defp en_garde(state, area, rules \\ %Rules{}) do
-    {match, world} = Match.new(state.world, area, rules)
-    brain = if state.mode == :arcade, do: AI.new(2, 1, AI.pick_personality())
+  defp begin(state, area, rules \\ %Rules{}) do
+    world = Bout.start(state.world, area, rules, state.mode)
 
     %{
       state
-      | screen: :en_garde,
+      | screen: :bout,
         menu: nil,
         area: area,
         world: world,
-        match: match,
-        brain: brain,
-        stats: Results.new(),
-        timer: 0
+        winner: nil,
+        stats: nil,
+        timer: 0,
+        recording: %{world: world, inputs: [], kept: []}
     }
   end
 
   defp bout(state, players) do
-    {players, state} = computer(state, players)
-    times = Rules.steps(state.match.rules, state.steps)
-    state = Enum.reduce(List.duplicate(players, times), state, &(&2 |> record(&1) |> advance(&1)))
+    state = state |> record(players) |> advance(players)
 
     cond do
-      Match.finished?(state.match) and state.mode == :tournament -> decided(state)
-      Match.finished?(state.match) -> results(state)
-      Match.overtime?(state.match) -> overtime(state)
-      true -> state
+      Bout.running?(state.world) -> state
+      state.mode == :tournament -> decided(finished(state))
+      true -> results(finished(state))
     end
   end
 
-  defp overtime(state) do
-    {match, world} = Match.sudden_death(state.match, state.world)
+  defp finished(state),
+    do: %{state | winner: Bout.winner(state.world), stats: Bout.stats(state.world)}
 
-    %{
-      state
-      | match: match,
-        world: world,
-        events: [Sounds.event(:start, state.steps) | state.events]
-    }
-  end
-
-  defp advance(state, players) do
-    world =
-      state.world
-      |> Animals.watch(Match.positions(state.match))
-      |> Step.run(Map.put(@no_keys, :players, players))
-      |> Doors.swing(Match.bodies(state.match))
-      |> Grass.update(Map.values(state.match.fencers), state.match.swords)
-
-    {match, world} = Match.step(state.match, world, players)
-    world = world |> Blood.spill(match) |> Stains.soak()
-    noises = Noises.step(state.match, match)
-
-    %{
-      state
-      | world: Parallax.apply(world),
-        match: match,
-        stats: Results.count(state.stats, match.events),
-        events: Enum.reverse(noises) ++ state.events
-    }
-  end
+  defp advance(state, players),
+    do: %{state | world: Step.run(state.world, Map.put(@no_keys, :players, players))}
 
   defp record(%{recording: %{inputs: inputs} = recording} = state, players),
     do: %{state | recording: %{recording | inputs: [players | inputs]}}
@@ -575,20 +514,18 @@ defmodule Nidhox.Flow do
 
   defp continue_offline(state) do
     if next_arcade?(state),
-      do: en_garde(%{state | arcade: state.arcade + 1}, Enum.at(@arcade, state.arcade + 1)),
+      do: begin(%{state | arcade: state.arcade + 1}, Enum.at(@arcade, state.arcade + 1)),
       else: main_menu(state)
   end
 
   defp replay(%{recording: recording} = state) do
-    kept = Map.take(state, [:world, :match, :stats, :menu])
+    kept = Map.take(state, [:world, :winner, :stats, :menu])
 
     %{
       state
       | screen: :replay,
         kept: kept,
         world: recording.world,
-        match: recording.match,
-        stats: Results.new(),
         recording: %{recording | inputs: Enum.reverse(recording.inputs), kept: recording.inputs},
         timer: 0
     }
@@ -605,33 +542,26 @@ defmodule Nidhox.Flow do
     })
   end
 
-  defp computer(%{brain: nil} = state, players), do: {players, state}
-
-  defp computer(%{brain: brain, match: match} = state, players) do
-    {brain, input} = AI.step(brain, match.fencers[2], match.fencers[1], players[2], match)
-    {Map.put(players, 2, input), %{state | brain: brain}}
-  end
-
-  defp results(%{match: match} = state) do
+  defp results(%{winner: winner} = state) do
     state = %{
       state
       | screen: :results,
         menu: Results.menu(),
         timer: 0,
-        events: result_events(state, match.winner) ++ state.events
+        events: result_events(state, winner) ++ state.events
     }
 
     enter(state, :results)
   end
 
   defp result_events(state, winner) do
-    for {id, %{side: side}} <- state.players, side == 1 or (side == 2 and state.brain == nil) do
+    for {id, %{side: side}} <- state.players, side == 1 or (side == 2 and state.mode != :arcade) do
       {:result,
        %{id: id, name: to_string(id), won?: side == winner, area: state.area, mode: state.mode}}
     end
   end
 
-  defp next_arcade?(%{mode: :arcade, match: %Match{winner: 1}, arcade: index}),
+  defp next_arcade?(%{mode: :arcade, winner: 1, arcade: index}),
     do: index + 1 < length(@arcade)
 
   defp next_arcade?(_state), do: false
@@ -648,7 +578,7 @@ defmodule Nidhox.Flow do
   defp sway(state), do: state
 
   defp scenery(state, players) do
-    world = state.world |> Step.run(Map.put(@no_keys, :players, players)) |> Grass.update([], [])
+    world = state.world |> Step.run(Map.put(@no_keys, :players, players)) |> Grass.update_all()
     %{state | world: world}
   end
 end
