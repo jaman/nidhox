@@ -132,6 +132,42 @@ defmodule Nidhox.Screen.Art do
       depth: 1
     }
 
+  @doc """
+  The rectangle from `{left, top}` to `{right, bottom}` in view pixels, both corners
+  inside it, in `colour`, as `draw_rectangle` draws it: filled, or with `outline` `true`
+  its edges one pixel wide.
+  """
+  @spec rectangle(
+          {number(), number(), number(), number()},
+          {byte(), byte(), byte()},
+          {number(), number()},
+          boolean()
+        ) ::
+          [map()]
+  def rectangle({left, top, right, bottom}, colour, window, false) do
+    zoom = zoom(window)
+
+    [
+      %{
+        picture: :pixel,
+        position: {left * zoom, top * zoom},
+        scale: {(right - left + 1) * zoom, (bottom - top + 1) * zoom},
+        blend: colour,
+        depth: 0
+      }
+    ]
+  end
+
+  def rectangle({left, top, right, bottom}, colour, window, true) do
+    [
+      {left, top, right, top},
+      {left, bottom, right, bottom},
+      {left, top, left, bottom},
+      {right, top, right, bottom}
+    ]
+    |> Enum.flat_map(&rectangle(&1, colour, window, false))
+  end
+
   @doc "The view's width in pixels: 320."
   @spec view_width() :: pos_integer()
   def view_width, do: @view_width

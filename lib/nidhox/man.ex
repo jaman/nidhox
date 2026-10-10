@@ -39,7 +39,8 @@ defmodule Nidhox.Man do
   alias Nidhox.Bout.Variants
   alias Nidhox.Gml
   alias Nidhox.Man.{Behave, Enter, Friction, Physics, Push, Query, State, Weapon}
-  alias Nidhox.Objects.System
+  alias Nidhox.Brain.Personality
+  alias Nidhox.Objects.{Challenge, System}
 
   @noone -4
   @low_mask 270
@@ -114,7 +115,16 @@ defmodule Nidhox.Man do
   defp player(world, self, _other, index) do
     weapon_object = if index == 1, do: "YellowHeldWeapon", else: "OrangeHeldWeapon"
     slot = if index == 1, do: :yellowInstance, else: :orangeInstance
-    world = World.inherited(world, self, World.object(world, World.fetch(world, self).object).name, :create, 0)
+
+    world =
+      World.inherited(
+        world,
+        self,
+        World.object(world, World.fetch(world, self).object).name,
+        :create,
+        0
+      )
+
     world = Gml.put(world, self, %{playerIndex: index})
     world = if index == 2, do: Gml.put(world, self, %{facingXScale: -1}), else: world
     world = with_match(world, &Gml.put(&1, &2, %{slot => self}))
@@ -163,7 +173,8 @@ defmodule Nidhox.Man do
     end
   end
 
-  defp while_here(world, self, fun), do: if(World.fetch(world, self), do: fun.(world, self), else: world)
+  defp while_here(world, self, fun),
+    do: if(World.fetch(world, self), do: fun.(world, self), else: world)
 
   defp mask(world, self) do
     crouching =
@@ -295,7 +306,9 @@ defmodule Nidhox.Man do
     if World.object(world, World.fetch(world, smoosher).object).name == "Smoosher" do
       left = bbox_side(world, :left)
       right = bbox_side(world, :right)
-      not Physics.block_at?(world, {x + left, y + 2}) and not Physics.block_at?(world, {x + right, y + 2})
+
+      not Physics.block_at?(world, {x + left, y + 2}) and
+        not Physics.block_at?(world, {x + right, y + 2})
     else
       not Physics.block_at?(world, {x, y + 2})
     end
@@ -333,7 +346,8 @@ defmodule Nidhox.Man do
     if State.get(world, self, :state) != 23 and System.get(world, :level) == 22 do
       %Instance{x: x, y: y} = World.fetch(world, self)
 
-      case at_point(world, {x - 2, y + 1}, "NewCloudBlock") || at_point(world, {x + 2, y + 1}, "NewCloudBlock") do
+      case at_point(world, {x - 2, y + 1}, "NewCloudBlock") ||
+             at_point(world, {x + 2, y + 1}, "NewCloudBlock") do
         nil -> world
         cloud -> Gml.put(world, cloud, %{touched: 1})
       end
@@ -389,7 +403,11 @@ defmodule Nidhox.Man do
       %Instance{x: x} = World.fetch(world, self)
       depth = Gml.clamp(abs(State.get(world, self, :swordX) - x) - 4, 0, 16)
 
-      Draw.sprite(world, @overlay, Gml.round(depth), {State.get(world, self, :swordX), State.get(world, self, :swordY)},
+      Draw.sprite(
+        world,
+        @overlay,
+        Gml.round(depth),
+        {State.get(world, self, :swordX), State.get(world, self, :swordY)},
         scale: {State.get(world, self, :swordXScale), 1},
         angle: 0,
         blend: {255, 255, 255},
@@ -401,14 +419,37 @@ defmodule Nidhox.Man do
   end
 
   defp finish(world, self, _other) do
-    [State.get(world, self, :flesh), State.get(world, self, :weapon)]
-    |> Enum.reduce(world, fn id, world -> if World.fetch(world, id), do: World.destroy(world, id), else: world end)
+    player = State.get(world, self, :playerIndex)
+
+    world
+    |> then(&if(exists?(&1, "ChallengeMode"), do: Challenge.reset_points(&1, player), else: &1))
+    |> then(&if(exists?(&1, "Tutorial"), do: &1, else: repick(&1, player)))
+    |> remains(self)
+  end
+
+  defp repick(world, player) do
+    world
+    |> Gml.all("Brain")
+    |> Enum.filter(&(Gml.var(world, &1, :playerIndex) == player))
+    |> Enum.reduce(world, &Personality.pick(&2, &1))
+  end
+
+  defp remains(world, self) do
+    [State.get(world, self, :weapon), State.get(world, self, :flesh)]
+    |> Enum.reduce(world, fn id, world ->
+      if World.fetch(world, id), do: World.destroy(world, id), else: world
+    end)
   end
 
   defp forget(world, self, _other, slot) do
     world
     |> with_match(&Gml.put(&1, &2, %{slot => @noone}))
-    |> World.inherited(self, World.object(world, World.fetch(world, self).object).name, :destroy, 0)
+    |> World.inherited(
+      self,
+      World.object(world, World.fetch(world, self).object).name,
+      :destroy,
+      0
+    )
   end
 
   defp with_match(world, fun) do

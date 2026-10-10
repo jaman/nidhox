@@ -18,6 +18,11 @@ defmodule Nidhox.Game do
   to a watching seat. Where the computer plays side 2, the input of a player on side 2
   is not used. ONLINE VERSUS's hosting and joining are `Nidhox.Online`'s.
 
+  The game's prefs that change what it does — `System.flashing` and
+  `System.persistent_blood` — follow the options (`:flashing`, `:persistent_blood`,
+  each `true` or `false`) sent with the input of the first player to join, and when
+  that player leaves, of one of those still there.
+
   A view is the frame — `items` (room pixels), `gui` (the room's own, window pixels),
   `overlay` (the screen's, window pixels, over `gui`), `surfaces` (the rasters
   `{:surface, id}` pictures name), `music` (each playing music layer's level,
@@ -27,11 +32,14 @@ defmodule Nidhox.Game do
 
   A bout's sounds are sent as events from its objects. Each finished bout sends a
   `{:result, row}` event for every player who fought it, with the player's id and name,
-  `won?`, the area and the mode.
+  `won?`, the area and the mode. While the game is paused, and not hosting ONLINE
+  VERSUS, it is silent (`mute` and `unMute`): a `Cauldron2D.Audio.muted/1` event as the
+  pause begins and another as it ends.
   """
 
   @behaviour Cauldron2D.Game
 
+  alias Cauldron2D.Audio
   alias Cauldron2D.GameMaker.Data
   alias Cauldron2D.GameMaker.Draw
   alias Cauldron2D.GameMaker.World
@@ -76,7 +84,8 @@ defmodule Nidhox.Game do
       held: Map.new(@sides, &{&1, MapSet.new()}),
       previous: Map.new(@sides, &{&1, MapSet.new()}),
       events: [],
-      frame: nil
+      frame: nil,
+      prefs_from: nil
     }
     |> Flow.logos()
     |> present()
@@ -92,11 +101,23 @@ defmodule Nidhox.Game do
         {side, _owner} -> put_in(state.players[id], %{side: side, owner: owner})
       end
 
-    {:ok, Map.update!(state, :players, &Map.put_new(&1, id, %{side: nil, owner: owner}))}
+    state = Map.update!(state, :players, &Map.put_new(&1, id, %{side: nil, owner: owner}))
+    {:ok, %{state | prefs_from: state.prefs_from || id}}
   end
 
   @impl true
   def leave(state, id) do
+    state
+    |> without_player(id)
+    |> prefs_passed_on(id)
+  end
+
+  defp prefs_passed_on(%{prefs_from: id} = state, id),
+    do: %{state | prefs_from: state.players |> Map.keys() |> List.first()}
+
+  defp prefs_passed_on(state, _id), do: state
+
+  defp without_player(state, id) do
     case Map.pop(state.players, id) do
       {nil, _players} ->
         state
@@ -114,12 +135,30 @@ defmodule Nidhox.Game do
   end
 
   @impl true
-  def handle_input(state, id, %{held: held}) do
+  def handle_input(state, id, %{held: held} = input) do
+    state
+    |> held_by(id, held)
+    |> preferred(id, Map.get(input, :options, %{}))
+  end
+
+  defp held_by(state, id, held) do
     case Map.fetch(state.players, id) do
       {:ok, %{side: side}} when side != nil -> put_in(state.held[side], held)
       _watching -> state
     end
   end
+
+  defp preferred(%{prefs_from: id} = state, id, options) do
+    prefs =
+      for {option, variable} <- [flashing: :flashing, persistent_blood: :persistent_blood],
+          is_boolean(Map.get(options, option)),
+          into: %{},
+          do: {variable, if(Map.fetch!(options, option), do: 1, else: 0)}
+
+    %{state | world: System.put(state.world, prefs)}
+  end
+
+  defp preferred(state, _id, _options), do: state
 
   @impl true
   def step(state, _dt) do
@@ -130,7 +169,17 @@ defmodule Nidhox.Game do
     |> Online.pending()
     |> Flow.step(players)
     |> Online.perform()
+    |> muted_since(paused?(state))
     |> present()
+  end
+
+  defp paused?(state), do: state.screen == :paused and not Online.hosting?(state)
+
+  defp muted_since(state, was?) do
+    case paused?(state) do
+      ^was? -> state
+      now? -> %{state | events: [Audio.muted(now?) | state.events]}
+    end
   end
 
   @impl true

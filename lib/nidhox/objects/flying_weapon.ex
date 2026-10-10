@@ -23,11 +23,11 @@ defmodule Nidhox.Objects.FlyingWeapon do
   alias Nidhox.Bout.{Sound, Variants}
   alias Nidhox.Gml
   alias Nidhox.Man.{Physics, Weapon}
-  alias Nidhox.Objects.{DroppedWeapon, System}
-  alias Nidhox.Tutorial.Lessons
+  alias Nidhox.Objects.{Challenge, DroppedWeapon, System}
 
   @whoosh [56, 57]
   @clang 58
+  @dodge 8
 
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
@@ -62,14 +62,24 @@ defmodule Nidhox.Objects.FlyingWeapon do
 
   defp coloured(world, self, _other, player) do
     world
-    |> World.inherited(self, World.object(world, World.fetch(world, self).object).name, :create, 0)
+    |> World.inherited(
+      self,
+      World.object(world, World.fetch(world, self).object).name,
+      :create,
+      0
+    )
     |> Gml.put(self, %{playerIndex: player})
   end
 
   defp listed(world, self) do
     case match(world) do
-      nil -> world
-      match -> Gml.put(world, match, %{flyingWeapons: Gml.var(world, match, :flyingWeapons, []) ++ [self]})
+      nil ->
+        world
+
+      match ->
+        Gml.put(world, match, %{
+          flyingWeapons: Gml.var(world, match, :flyingWeapons, []) ++ [self]
+        })
     end
   end
 
@@ -131,7 +141,12 @@ defmodule Nidhox.Objects.FlyingWeapon do
     timer = Gml.var(world, self, :reverseTimer) - 1
 
     if Gml.eq?(timer, 0),
-      do: Gml.put(world, self, %{reverseTimer: 0, reverse: 1, startHSpd: Gml.var(world, self, :hspd)}),
+      do:
+        Gml.put(world, self, %{
+          reverseTimer: 0,
+          reverse: 1,
+          startHSpd: Gml.var(world, self, :hspd)
+        }),
       else: Gml.put(world, self, %{reverseTimer: timer})
   end
 
@@ -152,20 +167,50 @@ defmodule Nidhox.Objects.FlyingWeapon do
     |> Sound.play(@clang, {World.fetch(world, self).x, y})
     |> Weapon.spawn_dropped({x, y}, -hspd * 0.25, -1, xscale)
     |> elem(0)
-    |> missed_learner(self)
+    |> dodged(self)
     |> World.destroy(self)
   end
 
-  defp missed_learner(world, self) do
-    if Gml.var(world, self, :playerIndex) != 1, do: Lessons.block(world, 1), else: world
+  defp dodged(world, self) do
+    %Instance{x: x, y: y} = World.fetch(world, self)
+    thrower = Gml.var(world, self, :playerIndex)
+
+    world
+    |> challenger_dodged(thrower, {x, y})
+    |> learner_dodged(thrower, {x, y})
+  end
+
+  defp challenger_dodged(world, thrower, at) do
+    case Gml.first(world, "ChallengeMode") do
+      nil ->
+        world
+
+      challenge ->
+        challenger = Gml.var(world, challenge, :playerIndex)
+
+        if thrower != challenger,
+          do: Challenge.move_completed(world, challenger, @dodge, at),
+          else: world
+    end
+  end
+
+  defp learner_dodged(world, thrower, at) do
+    if Gml.exists?(world, "Tutorial") and thrower != 1,
+      do: Challenge.move_completed(world, 1, @dodge, at),
+      else: world
   end
 
   defp gone(world, self, _other), do: World.destroy(world, self)
 
   defp finish(world, self, _other) do
     case match(world) do
-      nil -> world
-      match -> Gml.put(world, match, %{flyingWeapons: List.delete(Gml.var(world, match, :flyingWeapons, []), self)})
+      nil ->
+        world
+
+      match ->
+        Gml.put(world, match, %{
+          flyingWeapons: List.delete(Gml.var(world, match, :flyingWeapons, []), self)
+        })
     end
   end
 

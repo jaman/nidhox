@@ -22,7 +22,7 @@ defmodule Nidhox.Objects.Tutorial do
       stopped and every fencer kept 8 pixels inside the screen; the match's spawn timer
       stays at 100 and its clock at 36000. Outside the running and last lessons, every
       60 frames a missing partner comes in at its room entry point, unarmed — armed for
-      disarming and for throwing at the learner. The music follows `System.musicVol`
+      disarming and for throwing at the learner. The music follows `System.musicVol`, on the client's music level
     * user event 0: the tutorial over — `System.flow` 1 and the match gone
     * destroy: the music let go
 
@@ -90,7 +90,7 @@ defmodule Nidhox.Objects.Tutorial do
 
     world
     |> Gml.put(brain, %{playerIndex: @partner, personality: @standing})
-    |> World.emit(Audio.keyed({:tutorial, self}, {:recording, @music}, {:level, System.get(world, :musicVol, 1), 0.0}, loop: true))
+    |> World.emit(Audio.keyed({:tutorial, self}, {:recording, @music}, {:level, System.get(world, :musicVol, 1), 0.0}, loop: true, music: true))
     |> Gml.put(self, %{sound: {:tutorial, self}})
   end
 

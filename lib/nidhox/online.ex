@@ -55,6 +55,10 @@ defmodule Nidhox.Online do
   def new(port \\ nil),
     do: %{host: nil, owner: nil, listener: nil, found: [], joining: nil, status: nil, port: port}
 
+  @doc "Whether this machine hosts ONLINE VERSUS, a player of its bouts playing from another."
+  @spec hosting?(%{online: t()}) :: boolean()
+  def hosting?(%{online: %{host: host}}), do: host != nil
+
   @doc "The name a host's node and a joining node's take: `<name>@<address>`."
   @spec name() :: String.t()
   def name, do: @name

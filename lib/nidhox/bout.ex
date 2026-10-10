@@ -45,6 +45,22 @@ defmodule Nidhox.Bout do
   end
 
   @doc """
+  The world in challenge mode (`Nidhox.Objects.Challenge`): `System`'s settings at their
+  defaults (`Nidhox.Rules`), its flow the versus one (4), so the room's match makes no
+  computer player of its own, and `rChallengeMode` entered.
+  """
+  @spec start_challenge(World.t()) :: World.t()
+  def start_challenge(%World{} = world) do
+    world =
+      case Gml.first(world, "System") do
+        nil -> world
+        system -> Gml.put(world, system, Map.put(Rules.system(%Rules{}), :flow, @flows.versus))
+      end
+
+    Rooms.enter(world, Data.index(world.data, :rooms, "rChallengeMode"))
+  end
+
+  @doc """
   The world ready for a single player run (`Nidhox.Objects.Arcade.start/1`): `System`'s
   settings at their defaults (`Nidhox.Rules`), its flow the single player's (2), and the
   run begun.

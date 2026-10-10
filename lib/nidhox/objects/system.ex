@@ -21,15 +21,22 @@ defmodule Nidhox.Objects.System do
   (`Particles`) and the fencers' outlines (`PlayerOutlines`).
 
   Each begin step `metaFrame` counts and the match's frames run (`Nidhox.Bout.Frame.system_step/2`).
+  Each room start sets `aperture` to 1 and the lighting (`setLightingLightDarkAlpha(140,
+  0.15)`: `lightAmount` 140, `darkAmount` 0.15, `darknessAlpha` 0); each end step takes
+  0.1 from `aperture`; and its GUI draw, while `aperture` is above 0, covers the
+  320 × 200 GUI in black at alpha `aperture`, the screen coming up out of black over
+  the first ten steps of every room.
 
   `create/1` makes it; `get/2` reads one of its variables.
   """
 
-  alias Cauldron2D.GameMaker.World
+  alias Cauldron2D.GameMaker.{Draw, World}
   alias Nidhox.Bout.Frame
   alias Nidhox.Gml
 
   @object "System"
+  @gui_width 320
+  @gui_height 200
   @made ["Ear", "BackgroundObject", "Particles", "PlayerOutlines"]
 
   @start %{
@@ -71,7 +78,13 @@ defmodule Nidhox.Objects.System do
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
   def handlers,
-    do: [{"gml_Object_System_Create_0", &start/3}, {"gml_Object_System_Step_1", &begin_step/3}]
+    do: [
+      {"gml_Object_System_Create_0", &start/3},
+      {"gml_Object_System_Step_1", &begin_step/3},
+      {"gml_Object_System_Other_4", &room_start/3},
+      {"gml_Object_System_Step_2", &end_step/3},
+      {"gml_Object_System_Draw_64", &draw_gui/3}
+    ]
 
   @doc "`world` with the `System` object made, as the game makes it when it starts."
   @spec create(World.t()) :: World.t()
@@ -91,6 +104,15 @@ defmodule Nidhox.Objects.System do
     end
   end
 
+  @doc "`world` with `System`'s variables in `vars` set; unchanged when there is no `System`."
+  @spec put(World.t(), map()) :: World.t()
+  def put(%World{} = world, vars) do
+    case instance(world) do
+      nil -> world
+      id -> Gml.put(world, id, vars)
+    end
+  end
+
   defp instance(world) do
     with object when is_integer(object) <- World.object_index(world, @object),
          [id | _] <- World.instances_of(world, object) do
@@ -98,6 +120,30 @@ defmodule Nidhox.Objects.System do
     else
       _none -> nil
     end
+  end
+
+  defp room_start(world, self, _other),
+    do: Gml.put(world, self, %{aperture: 1, lightAmount: 140, darkAmount: 0.15, darknessAlpha: 0})
+
+  defp end_step(world, self, _other),
+    do: Gml.put(world, self, %{aperture: Gml.var(world, self, :aperture) - 0.1})
+
+  defp draw_gui(world, self, _other) do
+    aperture = Gml.var(world, self, :aperture)
+    if Gml.gt?(aperture, 0), do: Draw.item(world, blackout(world, aperture)), else: world
+  end
+
+  defp blackout(%World{data: %{general: %{window: {width, _height}}}}, aperture) do
+    zoom = width / @gui_width
+
+    %{
+      picture: :pixel,
+      position: {0, 0},
+      scale: {@gui_width * zoom, @gui_height * zoom},
+      blend: {0, 0, 0},
+      alpha: aperture,
+      depth: 0
+    }
   end
 
   defp begin_step(world, self, _other) do

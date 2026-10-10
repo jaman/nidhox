@@ -12,6 +12,9 @@ defmodule Nidhox.Application do
        held: :idle,
        metrics: [wins: {:count, :won?}, bouts: &length/1]}
 
-    Supervisor.start_link([ledger], strategy: :one_for_one, name: Nidhox.Supervisor)
+    Supervisor.start_link([ledger, Nidhox.TileLayerCache],
+      strategy: :one_for_one,
+      name: Nidhox.Supervisor
+    )
   end
 end

@@ -22,9 +22,10 @@ defmodule Nidhox.Man.Enter do
   alias Nidhox.Bout.Overlap
   alias Nidhox.Gml
   alias Nidhox.Man.{Query, State, Weapon}
-  alias Nidhox.Objects.{BloodDrop, MatchStats, Particles, System}
+  alias Nidhox.Objects.{BloodDrop, Challenge, MatchStats, Particles, System}
 
   @noone -4
+  @snap 1
   @rings [80, 81, 82]
   @screams 95..108
   @thuds [83, 84]
@@ -377,8 +378,14 @@ defmodule Nidhox.Man.Enter do
   defp enter(world, self, 68, _previous),
     do: world |> State.put(self, %{hspd: 0, vspd: 0}) |> kill_for_opponent(self)
 
-  defp enter(world, self, 69, _previous),
-    do: world |> State.put(self, %{hspd: 0, vspd: 0}) |> sound(self, 120)
+  defp enter(world, self, 69, _previous) do
+    %Instance{x: x, y: y} = World.fetch(world, self)
+
+    world
+    |> State.put(self, %{hspd: 0, vspd: 0})
+    |> sound(self, 120)
+    |> Challenge.move_completed(State.get(world, self, :playerIndex), @snap, {x, y - 32})
+  end
 
   defp enter(world, self, 72, _previous), do: Query.face_opponent(world, self)
 

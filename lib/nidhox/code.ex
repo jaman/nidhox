@@ -54,6 +54,7 @@ defmodule Nidhox.Code do
       Nidhox.Objects.FireClouds,
       Nidhox.Objects.PlayerOutlines,
       Nidhox.Objects.Arcade,
+      Nidhox.Objects.Challenge,
       Nidhox.Objects.InstanceCodes,
       Nidhox.Objects.Wilds,
       Nidhox.Objects.Grass,

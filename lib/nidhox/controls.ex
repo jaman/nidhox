@@ -6,11 +6,11 @@ defmodule Nidhox.Controls do
   | --- | --- | --- | --- |
   | `:left`, `:right` | `A` `D` | `←` `→` | d-pad, left stick |
   | `:up`, `:down` | `W` `S` | `↑` `↓` | d-pad, left stick |
-  | `:attack` | `F` | `.` | `X` |
-  | `:jump` | `G` | `,` | `A` |
-  | `:start` | `Enter` | | `Start` |
+  | `:attack` | `F` | `M` | `X` |
+  | `:jump` | `G` | `N` | `A` |
+  | `:start` | `Enter` | `Enter` | `Start` |
 
-  Side 1 is the terminal's own player and side 2 a second seat at the same keyboard
+  These are the game's own defaults (`InputForPlayer1`, `InputForPlayer2`). Side 1 is the terminal's own player and side 2 a second seat at the same keyboard
   (`seat_keys/1`); either's keys can be remapped in OPTIONS (`Nidhox.Options`);
   the first controller to report plays side 1 and the second side 2. On the title and
   the menus, `:start` and `:attack` choose and `:jump` goes back.
@@ -36,7 +36,15 @@ defmodule Nidhox.Controls do
     }
 
   def keys(2),
-    do: %{left: [:left], right: [:right], up: [:up], down: [:down], attack: [:.], jump: [:","]}
+    do: %{
+      left: [:left],
+      right: [:right],
+      up: [:up],
+      down: [:down],
+      attack: [:m],
+      jump: [:n],
+      start: [:enter]
+    }
 
   @doc """
   The keys side 2's seat plays with, from a client's props: the keymap saved in the

@@ -4,6 +4,18 @@
 
 ### Added
 
+- CHALLENGE on the main menu: the game's challenge mode (`Nidhox.Objects.Challenge`),
+  every move scored as the game's `challengeMode_move_completed` scores it, its
+  popups, its score and best score, and a computer opponent growing harder.
+- The game's VARIANTS menu on the level select (`Nidhox.Rules`): its time limits (none,
+  3:00 to 9:30) and thirteen switches, any number on at once.
+- OPTIONS as the game's list: CONTROLS, flashing, persistent blood, and MUSIC and SFX
+  sliders; the effects level scales the music as the game's master gain does.
+- The game's own pause (`PauseController`), the screen's fade up out of black at every
+  room start (`System.aperture`), and silence while paused (`mute`).
+- `Nidhox.TileLayerCache`: a room's tile layers drawn once each and kept while the room
+  is shown.
+
 - `mix nidhox`: the game in the terminal from the player's own data file
   (`Nidhox.Assets`), its rooms running on `Cauldron2D.GameMaker` (`Nidhox.Game`) and
   drawn at the pane's size (`Nidhox.Client`); `--area`, `--name` (default
@@ -69,7 +81,14 @@
 - `PARITY.md`, the list of what still differs from Nidhogg, and `tools/yyc`, which reads
   the player's own `Nidhogg.exe` and `data.win` (`mix run tools/gaps.exs`).
 
+### Changed
+
+- Side 2 plays the game's default keys: `M` attacks, `N` jumps, `Enter` starts.
+
 ### Fixed
+
+- A fencer's death has its computer player choose its next personality, as the game's
+  `Man` destroy event does.
 
 - Blocks are no longer drawn as white rectangles; the castle's walls no longer show a
   stone fill the original does not have; the sky no longer shows cloud banks the

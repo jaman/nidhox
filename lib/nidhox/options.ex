@@ -4,15 +4,25 @@ defmodule Nidhox.Options do
   (`Cauldron2D.Client.Game`'s `open_menu/1` and `menu_event/3`), opened by OPTIONS on
   the main menu or the client's menu key, and drawn in the copy's `fMenu` over the game.
 
-  Its first page has SFX and MUSIC, each ON or OFF, CONTROLS and BACK. CONTROLS asks
+  Its first page is the game's options list: CONTROLS, "flashing" and "persistent
+  blood", each ON or OFF, MUSIC and SFX, each a slider, and BACK. CONTROLS asks
   which player — PLAYER 1, the client's own keys, or PLAYER 2, the keys of the second
   seat at the same keyboard (the game option `:player_2`, `Nidhox.Controls.seat_keys/1`)
   — then opens "REMAP INPUT FOR PLAYER": every action with its keys; choosing one waits
   for the next key and makes it that action's only key.
 
-  `:up` and `:down` move, `:enter` chooses, `:left` and `:right` turn SFX and MUSIC on
-  and off, and `:escape` goes back a page and closes the menu from the first. OFF sets
-  the client's level to `0.0`; ON sets it to `@sfx_on` or `@music_on`.
+  `:up` and `:down` move, `:enter` chooses, and `:escape` goes back a page and closes
+  the menu from the first. Choosing "flashing" or "persistent blood" turns it on or off:
+  the game options `:flashing` and `:persistent_blood`, which `Nidhox.Game` gives the
+  game's `System`. `:left` and `:right` move MUSIC or SFX down or up by 0.1, within
+  0 to 1: the client's music and effects levels, the effects level scaling the music as
+  well (`Nidhox.Client.audio/0`'s `master: :sfx`). Each change of SFX screams, one of
+  `sfxScream1` to `sfxScream14` at random. A slider is drawn as `drawSlider` draws it:
+  32 pixels wide and 4 high at x 164, outlined, filled for the level, its name beside
+  it.
+
+  Settings and options are kept by the client (`Cauldron2D.Drafter.Client.Settings`),
+  under the player's configuration directory.
   """
 
   alias Cauldron2D.Input
@@ -30,14 +40,15 @@ defmodule Nidhox.Options do
           rebinding: atom() | nil
         }
 
-  @sfx_on 0.85
-  @music_on 0.35
+  @step 0.1
+  @screams 1..14
+  @slider {164, 32, 4}
   @top 72
   @spacing 13
   @heading {160, 30}
   @chosen {255, 255, 255}
   @other {150, 150, 150}
-  @controls_row 2
+  @controls_row 0
 
   @doc "The menu as it opens, on its first page, showing `settings`."
   @spec open(map()) :: t()
@@ -67,13 +78,9 @@ defmodule Nidhox.Options do
       menu
       |> rows()
       |> Enum.with_index()
-      |> Enum.flat_map(fn {{_row, label}, index} ->
+      |> Enum.flat_map(fn {{row, label}, index} ->
         colour = if index == menu.selected, do: @chosen, else: @other
-
-        Art.text("fMenu", label, {160, @top + index * @spacing}, window,
-          halign: :center,
-          colour: colour
-        )
+        line(menu, row, label, @top + index * @spacing, colour, window)
       end)
 
     [Art.shade(window, {0, 0, 0}, 0.75) | heading(menu, window) ++ lines]
@@ -88,20 +95,27 @@ defmodule Nidhox.Options do
   defp key(menu, :escape, settings), do: back(menu, settings)
   defp key(menu, :enter, settings), do: choose(menu, chosen(menu), settings)
 
-  defp key(menu, side, settings) when side in [:left, :right] do
-    case chosen(menu) do
-      row when row in [:sfx, :music] -> choose(menu, row, settings)
-      _row -> reply(menu, settings)
-    end
-  end
-
+  defp key(menu, :left, settings), do: slide(menu, chosen(menu), -@step, settings)
+  defp key(menu, :right, settings), do: slide(menu, chosen(menu), @step, settings)
   defp key(menu, _key, settings), do: reply(menu, settings)
 
-  defp choose(menu, :sfx, settings),
-    do: reply(menu, %{settings | sfx: toggle(settings.sfx, @sfx_on)})
+  defp slide(menu, :music, step, settings),
+    do: reply(menu, %{settings | music: level(settings.music + step)})
 
-  defp choose(menu, :music, settings),
-    do: reply(menu, %{settings | music: toggle(settings.music, @music_on)})
+  defp slide(menu, :sfx, step, settings) do
+    menu
+    |> reply(%{settings | sfx: level(settings.sfx + step)})
+    |> Map.put(:sounds, [{:recording, "sfxScream#{Enum.random(@screams)}"}])
+  end
+
+  defp slide(menu, _row, _step, settings), do: reply(menu, settings)
+
+  defp level(value), do: value |> max(0.0) |> min(1.0)
+
+  defp choose(menu, option, settings) when option in [:flashing, :persistent_blood] do
+    options = Map.update(settings.options, option, false, &(not &1))
+    reply(menu, %{settings | options: options})
+  end
 
   defp choose(menu, :controls, settings),
     do: reply(%{menu | page: :players, selected: 0}, settings)
@@ -122,9 +136,6 @@ defmodule Nidhox.Options do
 
   defp reply(menu, settings), do: %{menu: %{menu | settings: settings}, settings: settings}
 
-  defp toggle(level, _on) when level > 0, do: 0.0
-  defp toggle(_level, on), do: on
-
   defp keymap(settings, 1), do: settings.bindings
   defp keymap(settings, 2), do: Controls.seat_keys(%{settings: settings})
 
@@ -140,9 +151,12 @@ defmodule Nidhox.Options do
 
   defp rows(%__MODULE__{page: :options, settings: settings}) do
     [
-      {:sfx, "SFX" <> switch(settings.sfx)},
-      {:music, "MUSIC" <> switch(settings.music)},
       {:controls, "CONTROLS"},
+      {:flashing, "flashing" <> switch(Map.get(settings.options, :flashing, true))},
+      {:persistent_blood,
+       "persistent blood" <> switch(Map.get(settings.options, :persistent_blood, true))},
+      {:music, "MUSIC"},
+      {:sfx, "SFX"},
       {:back, "BACK"}
     ]
   end
@@ -162,8 +176,26 @@ defmodule Nidhox.Options do
     actions ++ [{:back, "BACK"}]
   end
 
-  defp switch(level) when level > 0, do: " ON"
-  defp switch(_level), do: " OFF"
+  defp switch(true), do: " ON"
+  defp switch(false), do: " OFF"
+
+  defp line(menu, row, label, y, colour, window) when row in [:music, :sfx] do
+    {x, _width, _height} = @slider
+
+    Art.text("fMenu", label, {x - 6, y}, window, halign: :right, colour: colour) ++
+      slider(Map.fetch!(menu.settings, row), y, colour, window)
+  end
+
+  defp line(_menu, _row, label, y, colour, window),
+    do: Art.text("fMenu", label, {160, y}, window, halign: :center, colour: colour)
+
+  defp slider(value, y, colour, window) do
+    {x, width, height} = @slider
+    top = y + 4
+
+    Art.rectangle({x, top, x + width, top + height}, colour, window, true) ++
+      Art.rectangle({x, top, x + width * value, top + height}, colour, window, false)
+  end
 
   defp keys([]), do: "NONE"
   defp keys(keys), do: Enum.map_join(keys, " ", &key_name/1)

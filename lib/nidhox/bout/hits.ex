@@ -35,16 +35,28 @@ defmodule Nidhox.Bout.Hits do
       feet (40, hit)
     * crane kick (8): a defender the kick reaches is knocked upwards (41, hit), drawn to
       14 pixels at once unless it already was
+
+  A blow that lands is the attacker's completed move
+  (`Nidhox.Objects.Challenge.move_completed/4`, 32 above the defender): running a
+  defender through while fencing GUARD, lunging LUNGE, the dive kick KICK, the sweep
+  SWEEP and either punch PUNCH.
   """
 
   alias Cauldron2D.GameMaker.{Instance, World}
   alias Nidhox.Bout.Overlap
   alias Nidhox.Gml
+  alias Nidhox.Objects.Challenge
   alias Nidhox.Man.{Push, Query, State}
 
   @noone -4
   @stab_offset %{1 => 1.0, 3 => 0.3333333333333333, 2 => -1.0}
   @spurt_sprite 280
+  @lunge 0
+  @kick 2
+  @punch 3
+  @sweep 4
+  @guard 5
+  @popup_rise 32
 
   @doc "The world after the attack of the fencer whose body is `flesh` (`check_HeldWeapon_to_FleshCollisionMask`)."
   @spec weapon_to_flesh(World.t(), non_neg_integer(), non_neg_integer()) :: World.t()
@@ -87,7 +99,11 @@ defmodule Nidhox.Bout.Hits do
       world = Push.tween_dist(world, attacker, defender, 14, 0.2)
 
       if Gml.round(Gml.var(world, attacker, :frame)) == 5,
-        do: world |> Push.tween_dist(attacker, defender, 14, 1) |> hit(defender, 76),
+        do:
+          world
+          |> Push.tween_dist(attacker, defender, 14, 1)
+          |> scored(attacker, defender, @sweep)
+          |> hit(defender, 76),
         else: world
     else
       world
@@ -95,7 +111,8 @@ defmodule Nidhox.Bout.Hits do
   end
 
   defp attack(world, attacker, defender, 35) do
-    if fresh?(world, defender) and Overlap.ground_pound?(world, flesh(world, attacker), flesh(world, defender)) do
+    if fresh?(world, defender) and
+         Overlap.ground_pound?(world, flesh(world, attacker), flesh(world, defender)) do
       world = Push.tween_dist(world, attacker, defender, 4, 0.7)
       next = if Query.knocked_down?(world, defender), do: 68, else: 41
 
@@ -112,6 +129,7 @@ defmodule Nidhox.Bout.Hits do
     if fresh?(world, defender) and not Query.knocked_down?(world, defender) and
          Overlap.divekick?(world, flesh(world, attacker), flesh(world, defender)) do
       world
+      |> scored(attacker, defender, @kick)
       |> Push.tween_dist(attacker, defender, 14, 1)
       |> hit(defender, 41)
       |> State.go(attacker, 15)
@@ -125,8 +143,9 @@ defmodule Nidhox.Bout.Hits do
 
     with true <- World.fetch(world, weapon) != nil,
          true <- Overlap.held?(world, weapon, flesh(world, defender)),
-         true <- Overlap.impact(world, weapon, flesh(world, defender)) - 1 >= -1.0e-5 or
-                   Query.stabbed?(world, defender) do
+         true <-
+           Overlap.impact(world, weapon, flesh(world, defender)) - 1 >= -1.0e-5 or
+             Query.stabbed?(world, defender) do
       world
       |> State.put(defender, %{swordCollision: 1})
       |> lift_tip(attacker, defender, weapon)
@@ -141,8 +160,9 @@ defmodule Nidhox.Bout.Hits do
 
     with true <- World.fetch(world, weapon) != nil,
          true <- Overlap.held?(world, weapon, flesh(world, defender)),
-         true <- Overlap.impact(world, weapon, flesh(world, defender)) - 1 >= -1.0e-5 or
-                   Query.stabbed?(world, defender) do
+         true <-
+           Overlap.impact(world, weapon, flesh(world, defender)) - 1 >= -1.0e-5 or
+             Query.stabbed?(world, defender) do
       world
       |> State.put(defender, %{swordCollision: 1})
       |> run_through(attacker, defender, weapon, :lunge)
@@ -153,11 +173,11 @@ defmodule Nidhox.Bout.Hits do
 
   defp attack(world, attacker, defender, state) when state in [49, 55] do
     knock_frame = if state == 49, do: 3, else: 5
-    punched(world, attacker, defender, 14, knock_frame, &face_or_trip/2)
+    punched(world, attacker, defender, {14, knock_frame, @punch}, &face_or_trip/2)
   end
 
   defp attack(world, attacker, defender, 45),
-    do: punched(world, attacker, defender, 17, 3, &hit(&1, &2, 40))
+    do: punched(world, attacker, defender, {17, 3, nil}, &hit(&1, &2, 40))
 
   defp attack(world, attacker, defender, 8) do
     if fresh?(world, defender) and Overlap.punch?(world, attacker, flesh(world, defender)) do
@@ -174,20 +194,27 @@ defmodule Nidhox.Bout.Hits do
 
   defp attack(world, _attacker, _defender, _state), do: world
 
-  defp punched(world, attacker, defender, reach, knock_frame, knock) do
+  defp punched(world, attacker, defender, {reach, knock_frame, move}, knock) do
     if fresh?(world, defender) and kick_or_punch?(world, attacker, defender, reach) do
       world = Push.tween_dist(world, attacker, defender, reach, 0.2)
 
       if Gml.round(Gml.var(world, attacker, :frame)) == knock_frame,
-        do: world |> Push.tween_dist(attacker, defender, reach, 1) |> knock.(defender),
+        do:
+          world
+          |> Push.tween_dist(attacker, defender, reach, 1)
+          |> scored(attacker, defender, move)
+          |> knock.(defender),
         else: world
     else
       world
     end
   end
 
-  defp kick_or_punch?(world, attacker, defender, 17), do: Overlap.kick?(world, attacker, flesh(world, defender))
-  defp kick_or_punch?(world, attacker, defender, _reach), do: Overlap.punch?(world, attacker, flesh(world, defender))
+  defp kick_or_punch?(world, attacker, defender, 17),
+    do: Overlap.kick?(world, attacker, flesh(world, defender))
+
+  defp kick_or_punch?(world, attacker, defender, _reach),
+    do: Overlap.punch?(world, attacker, flesh(world, defender))
 
   defp face_or_trip(world, defender) do
     if Gml.var(world, defender, :state) == 38,
@@ -212,12 +239,14 @@ defmodule Nidhox.Bout.Hits do
 
       how == :impale ->
         world
+        |> scored(attacker, defender, @guard)
         |> spurt(attacker, defender, weapon, true)
         |> Push.tween_min_dist(attacker, defender, 18, 1)
         |> impaled(attacker, defender)
 
       true ->
         world
+        |> scored(attacker, defender, @lunge)
         |> Push.tween_min_dist(attacker, defender, 18, 1)
         |> spurt(attacker, defender, weapon, false)
         |> lunged(attacker, defender)
@@ -259,6 +288,19 @@ defmodule Nidhox.Bout.Hits do
       Query.ducking?(world, defender) -> State.go(world, defender, 63)
       true -> State.go(world, defender, 65)
     end
+  end
+
+  defp scored(world, _attacker, _defender, nil), do: world
+
+  defp scored(world, attacker, defender, move) do
+    %Instance{x: x, y: y} = World.fetch(world, defender)
+
+    Challenge.move_completed(
+      world,
+      Gml.var(world, attacker, :playerIndex),
+      move,
+      {x, y - @popup_rise}
+    )
   end
 
   defp fresh?(world, defender),

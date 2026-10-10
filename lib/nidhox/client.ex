@@ -8,7 +8,8 @@ defmodule Nidhox.Client do
   that fits the pane, centred between black bars, with what the game draws on its GUI
   over it in window pixels, and the game's options (`Nidhox.Options`) over that while
   they are open. Keys and controller buttons are `Nidhox.Controls`'. A draw item's
-  picture `{:part, key, {left, top, width, height}}` shows that part of picture `key`.
+  picture `{:part, key, {left, top, width, height}}` shows that part of picture `key`, and
+  a tile layer's picture is drawn once a room and kept (`Nidhox.TileLayerCache`).
 
   The world is this machine's NidhOX world, or with the mount prop `source:
   {:node, node}` the NidhOX world of that connected node (ONLINE VERSUS's joining,
@@ -19,7 +20,8 @@ defmodule Nidhox.Client do
 
   @atlas :nidhox
   alias Cauldron2D.DrawList
-  alias Nidhox.{Assets, Controls, Music, Options}
+  alias Cauldron2D.GameMaker.TileLayers
+  alias Nidhox.{Assets, Controls, Music, Options, TileLayerCache}
 
   @impl true
   def title, do: %{name: "NidhOX", tagline: "Nidhogg Open-source eXperience"}
@@ -46,7 +48,7 @@ defmodule Nidhox.Client do
   def local_seats(props), do: [Controls.seat_keys(props)]
 
   @impl true
-  def options, do: %{player_2: Controls.keys(2)}
+  def options, do: %{player_2: Controls.keys(2), flashing: true, persistent_blood: true}
 
   @impl true
   def padmap(_props), do: Controls.pad()
@@ -184,6 +186,13 @@ defmodule Nidhox.Client do
       raster -> FrenchCurve.Raster.crop(raster, {left, top}, {width, height})
     end
   end
+
+  defp lookup(pictures, _surfaces, {:tile_layer, _room, _layer, _blend} = key) do
+    TileLayerCache.fetch(key, fn ->
+      TileLayers.raster(Assets.get().data, key, &Map.get(pictures, &1))
+    end)
+  end
+
   defp lookup(pictures, surfaces, {:part, key, {left, top, width, height}}) do
     case lookup(pictures, surfaces, key) do
       nil -> nil
@@ -213,5 +222,5 @@ defmodule Nidhox.Client do
   def listener(_frame), do: nil
 
   @impl true
-  def audio, do: [earshot: 20, voices: 24]
+  def audio, do: [earshot: 20, voices: 24, master: :sfx]
 end

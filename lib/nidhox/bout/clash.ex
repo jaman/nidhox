@@ -33,14 +33,17 @@ defmodule Nidhox.Bout.Clash do
   alias Nidhox.Bout.{Overlap, Sound}
   alias Nidhox.Gml
   alias Nidhox.Man.{Query, State, Weapon}
-  alias Nidhox.Objects.{Effects, System}
-  alias Nidhox.Tutorial.Lessons
+  alias Nidhox.Objects.{Challenge, Effects, System}
 
   @noone -4
   @clang 78
   @clashes [75, 76, 77]
   @struck 83
   @unlisted 100_000_000
+  @parry 6
+  @throw 7
+  @dodge 8
+  @popup_rise 32
 
   @doc "`{clashed, world}` after the fencers' swords meet (`check_HeldWeapon_to_HeldWeapon`)."
   @spec weapon_to_weapon(World.t(), non_neg_integer()) :: {boolean(), World.t()}
@@ -52,7 +55,11 @@ defmodule Nidhox.Bout.Clash do
 
     if shown_sword?(world, yellow_sword) and shown_sword?(world, orange_sword) and
          Overlap.held?(world, yellow_sword, orange_sword) do
-      {true, world |> disarm(match) |> push_apart(yellow, orange) |> jump_tips(yellow_sword, orange_sword)}
+      {true,
+       world
+       |> disarm(match)
+       |> push_apart(yellow, orange)
+       |> jump_tips(yellow_sword, orange_sword)}
     else
       {false, world}
     end
@@ -104,7 +111,16 @@ defmodule Nidhox.Bout.Clash do
         if World.fetch(world, thrown) != nil and Gml.var(world, thrown, :playerIndex) != player and
              Overlap.flying?(world, thrown, flesh) do
           %Instance{x: x, y: y} = World.fetch(world, thrown)
-          {true, world |> Sound.play(@struck, {x, y}) |> World.destroy(thrown)}
+
+          {true,
+           world
+           |> Challenge.move_completed(
+             Gml.var(world, thrown, :playerIndex),
+             @throw,
+             {x, y - @popup_rise}
+           )
+           |> Sound.play(@struck, {x, y})
+           |> World.destroy(thrown)}
         else
           {struck, world}
         end
@@ -161,7 +177,8 @@ defmodule Nidhox.Bout.Clash do
 
   @doc "Whether fencer `man` may be shoved by the other (`isPushable`)."
   @spec pushable?(World.t(), non_neg_integer()) :: boolean()
-  def pushable?(%World{} = world, man), do: World.fetch(world, man) != nil and Gml.var(world, man, :state) in [29, 78]
+  def pushable?(%World{} = world, man),
+    do: World.fetch(world, man) != nil and Gml.var(world, man, :state) in [29, 78]
 
   defp weapon(world, man), do: Gml.var(world, man, :weapon, @noone)
 
@@ -214,6 +231,11 @@ defmodule Nidhox.Bout.Clash do
       world =
         world
         |> Sound.play(@clang, {vx, vy})
+        |> Challenge.move_completed(
+          Gml.var(world, disarmer, :playerIndex),
+          @parry,
+          {dx, dy - @popup_rise}
+        )
         |> clash_at({dx, dy})
         |> Effects.flash()
 
@@ -221,7 +243,11 @@ defmodule Nidhox.Bout.Clash do
 
       world =
         if dropped,
-          do: Gml.put(world, dropped, %{hspd: Gml.var(world, disarmer, :facingXScale, 1) * -2, vspd: -4}),
+          do:
+            Gml.put(world, dropped, %{
+              hspd: Gml.var(world, disarmer, :facingXScale, 1) * -2,
+              vspd: -4
+            }),
           else: world
 
       State.go(world, victim, 13)
@@ -232,10 +258,11 @@ defmodule Nidhox.Bout.Clash do
 
   defp knock_down(world, weapon, thrown) do
     %Instance{x: x, y: y, image_xscale: xscale} = World.fetch(world, thrown)
-    %Instance{y: weapon_y} = World.fetch(world, weapon)
+    %Instance{x: weapon_x, y: weapon_y} = World.fetch(world, weapon)
+    blocker = Gml.var(world, Gml.var(world, weapon, :mother, @noone), :playerIndex)
 
     world
-    |> Lessons.block(Gml.var(world, Gml.var(world, weapon, :mother, @noone), :playerIndex))
+    |> Challenge.move_completed(blocker, @dodge, {weapon_x, weapon_y - @popup_rise})
     |> Gml.put(weapon, %{tipY: weapon_y + 5})
     |> Effects.flash()
     |> clash_at({x, y})
@@ -251,7 +278,8 @@ defmodule Nidhox.Bout.Clash do
     second = Enum.at(list, index - 1)
 
     cond do
-      first == nil or second == nil or World.fetch(world, first) == nil or World.fetch(world, second) == nil ->
+      first == nil or second == nil or World.fetch(world, first) == nil or
+          World.fetch(world, second) == nil ->
         world
 
       Overlap.flying?(world, first, second) ->
@@ -264,10 +292,16 @@ defmodule Nidhox.Bout.Clash do
 
   defp both_fall(world, first, second) do
     %Instance{x: x, y: y} = World.fetch(world, first)
-    later = if Gml.var(world, first, :counter) < Gml.var(world, second, :counter), do: first, else: second
+
+    later =
+      if Gml.var(world, first, :counter) < Gml.var(world, second, :counter),
+        do: first,
+        else: second
+
+    %Instance{x: second_x, y: second_y} = World.fetch(world, second)
 
     world
-    |> Lessons.block(Gml.var(world, later, :playerIndex))
+    |> Challenge.move_completed(Gml.var(world, later, :playerIndex), @dodge, {second_x, second_y})
     |> fall_from(first)
     |> fall_from(second)
     |> clash_at({x, y})
@@ -277,7 +311,10 @@ defmodule Nidhox.Bout.Clash do
 
   defp fall_from(world, thrown) do
     %Instance{x: x, y: y, image_xscale: xscale} = World.fetch(world, thrown)
-    {world, _dropped} = Weapon.spawn_dropped(world, {x, y}, -Gml.var(world, thrown, :hspd) * 0.25, -3, xscale)
+
+    {world, _dropped} =
+      Weapon.spawn_dropped(world, {x, y}, -Gml.var(world, thrown, :hspd) * 0.25, -3, xscale)
+
     world
   end
 

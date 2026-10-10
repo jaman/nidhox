@@ -32,12 +32,14 @@ defmodule Nidhox.Flow do
       `@champion_steps` steps or until a press, then the main menu
     * `:tutorial` — HOW TO PLAY: `rTutorial` with the game's own `Tutorial` (`System.flow`
       656686433); it ends at the main menu once the tutorial is gone
+    * `:challenge` — CHALLENGE: `rChallengeMode` with the game's own `ChallengeMode`
+      (`Nidhox.Objects.Challenge`), until QUIT TO TITLE SCREEN from its pause
     * `:credits` — `Nidhox.Screen.Credits` over `rCredits`, until they have risen away or
       a press
     * `:bout` — the match (`Nidhox.Bout`), run by the game's own objects from its
       faceoff on under the rules chosen on the level select (`Nidhox.Rules`), until its
       `Match` is gone; `:start` pauses it
-    * `:paused` — `Nidhox.Screen.Pause`; `:jump` or UNPAUSE GAME goes back to the bout
+    * `:paused` — `Nidhox.Screen.Pause`; UNPAUSE GAME goes back to the bout
     * `:results` — `Nidhox.Screen.Results` over `rMatchStats`: CONTINUE goes to the main
       menu; WATCH REPLAY; BACK TO MAIN MENU. In a single player run only CONTINUE, and
       the run's own step moves on at a press
@@ -65,7 +67,7 @@ defmodule Nidhox.Flow do
   alias Cauldron2D.GameMaker.Rooms
   alias Cauldron2D.GameMaker.Step
   alias Cauldron2D.GameMaker.World
-  alias Nidhox.{Assets, Bout, Tournament}
+  alias Nidhox.{Assets, Bout, Online, Tournament}
   alias Nidhox.Gml
   alias Nidhox.Objects.Grass
   alias Nidhox.Screen.{Credits, Entry, Levels, Logos, Menu, Pause, Results, Title}
@@ -116,6 +118,7 @@ defmodule Nidhox.Flow do
       {:choose, :multi, _side} -> multi_menu(state)
       {:choose, :options, side} -> ask(state, side, :menu)
       {:choose, :tutorial, _side} -> tutorial(state)
+      {:choose, :challenge, _side} -> challenge(state)
       {:choose, :credits, _side} -> credits(state)
       {:choose, :quit, side} -> ask(state, side, :quit)
       {:back, _side} -> %{state | menu: nil, timer: 0}
@@ -233,14 +236,20 @@ defmodule Nidhox.Flow do
 
   def step(%{screen: :bout} = state, players) do
     if Enum.any?(Map.values(players), &(:start in &1.pressed)),
-      do: %{state | screen: :paused, menu: Pause.menu(state.mode)},
+      do: %{state | screen: :paused, menu: Pause.menu(state.mode, Online.hosting?(state))},
       else: bout(state, players)
+  end
+
+  def step(%{screen: :challenge} = state, players) do
+    if Enum.any?(Map.values(players), &(:start in &1.pressed)),
+      do: %{state | screen: :paused, menu: Pause.menu(:challenge, false)},
+      else: advance(state, players)
   end
 
   def step(%{screen: :tutorial} = state, players) do
     cond do
       Enum.any?(Map.values(players), &(:start in &1.pressed)) ->
-        %{state | screen: :paused, menu: Pause.menu(:tutorial)}
+        %{state | screen: :paused, menu: Pause.menu(:tutorial, false)}
 
       Gml.exists?(state.world, "Tutorial") ->
         advance(state, players)
@@ -251,11 +260,10 @@ defmodule Nidhox.Flow do
   end
 
   def step(%{screen: :paused} = state, players) do
-    case Menu.input(state.menu, players) do
-      {:choose, :unpause, _side} -> %{state | screen: resumed(state), menu: nil}
-      {:choose, :change_level, _side} -> levels(state)
-      {:choose, :title, _side} -> title(state)
-      {:back, _side} -> %{state | screen: resumed(state), menu: nil}
+    case Pause.input(state.menu, players) do
+      {:choose, :unpause} -> %{state | screen: resumed(state), menu: nil}
+      {:choose, :change_level} -> levels(state)
+      {:choose, :title} -> title(state)
       {:stay, menu} -> %{state | menu: menu}
     end
   end
@@ -274,9 +282,14 @@ defmodule Nidhox.Flow do
     state = scenery(state, players)
 
     cond do
-      in_room?(state.world, "rArcadeProgress") -> %{state | screen: :arcade, menu: nil, timer: 0}
-      in_room?(state.world, "rBeatGameStats") -> %{state | screen: :arcade_complete, menu: nil, timer: 0}
-      true -> state
+      in_room?(state.world, "rArcadeProgress") ->
+        %{state | screen: :arcade, menu: nil, timer: 0}
+
+      in_room?(state.world, "rBeatGameStats") ->
+        %{state | screen: :arcade_complete, menu: nil, timer: 0}
+
+      true ->
+        state
     end
   end
 
@@ -333,6 +346,7 @@ defmodule Nidhox.Flow do
     menu =
       Menu.new([
         {"SINGLE PLAYER", :single},
+        {"CHALLENGE", :challenge},
         {"MULTIPLAYER", :multi},
         {"OPTIONS", :options},
         {"HOW TO PLAY", :tutorial},
@@ -471,7 +485,16 @@ defmodule Nidhox.Flow do
     }
 
     if bracket.champion,
-      do: enter(%{state | screen: :champion, timer: 0, world: World.put_global(state.world, :champion, bracket.champion)}, :champion),
+      do:
+        enter(
+          %{
+            state
+            | screen: :champion,
+              timer: 0,
+              world: World.put_global(state.world, :champion, bracket.champion)
+          },
+          :champion
+        ),
       else: ladder(state)
   end
 
@@ -496,6 +519,16 @@ defmodule Nidhox.Flow do
     %{state | screen: :tutorial, menu: nil, mode: :tutorial, world: world, timer: 0}
   end
 
+  defp challenge(state),
+    do: %{
+      state
+      | screen: :challenge,
+        menu: nil,
+        mode: :challenge,
+        world: Bout.start_challenge(state.world),
+        timer: 0
+    }
+
   defp arcade(state) do
     world = Bout.start_arcade(state.world)
     %{state | screen: :arcade, menu: nil, mode: :arcade, world: world, timer: 0}
@@ -516,11 +549,14 @@ defmodule Nidhox.Flow do
     }
   end
 
-  defp in_room?(%World{room: room} = world, name), do: room == Data.index(world.data, :rooms, name)
+  defp in_room?(%World{room: room} = world, name),
+    do: room == Data.index(world.data, :rooms, name)
 
-  defp kill_all(world, name), do: world |> Gml.all(name) |> Enum.reduce(world, &World.destroy(&2, &1))
+  defp kill_all(world, name),
+    do: world |> Gml.all(name) |> Enum.reduce(world, &World.destroy(&2, &1))
 
   defp resumed(%{mode: :tutorial}), do: :tutorial
+  defp resumed(%{mode: :challenge}), do: :challenge
   defp resumed(_state), do: :bout
 
   defp begin(state, area, rules) do
@@ -604,7 +640,8 @@ defmodule Nidhox.Flow do
   defp results_menu(_mode), do: Results.menu()
 
   defp result_events(state, winner) do
-    for {id, %{side: side}} <- state.players, side == 1 or (side == 2 and state.mode != :arcade) do
+    for {id, %{side: side}} <- state.players,
+        side == 1 or (side == 2 and state.mode != :arcade) do
       {:result,
        %{id: id, name: to_string(id), won?: side == winner, area: state.area, mode: state.mode}}
     end

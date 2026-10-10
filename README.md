@@ -26,9 +26,9 @@ Two players share the keyboard, or play with a controller each:
 | --- | --- | --- | --- |
 | move | `A` `D` | `←` `→` | d-pad, left stick |
 | up, down | `W` `S` | `↑` `↓` | d-pad, left stick |
-| attack | `F` | `.` | `X` |
-| jump | `G` | `,` | `A` |
-| start, pause | `Enter` | | Start |
+| attack | `F` | `M` | `X` |
+| jump | `G` | `N` | `A` |
+| start, pause | `Enter` | `Enter` | Start |
 | options | `Esc` | | |
 
 The first controller to send anything plays side 1, the second side 2.
@@ -42,15 +42,22 @@ menu:
   and Castle, each against a different opponent and harder as you go. The map shows
   your run and its time; press attack or start to fight the next bout. Lose and you
   fight that opponent again; win the last and the game is complete, with your time.
+- **Challenge** — you against a computer opponent that gets harder each time you kill
+  it. Every move that lands scores its worth: lunge, snap, kick, punch, sweep, guard,
+  parry, throw and dodge. A move's worth halves each time you use it and climbs back
+  while you use others, so vary them. Dying ends the run; your best score is shown
+  along the bottom. `Enter` pauses.
 - **Multiplayer**
   - **Offline versus**: two players at one keyboard, or a controller each, in the area
     chosen on the level select (left and right pick it). Under the area: **Variants**
-    (no swords, divekick only, throws only, sudden death only, low gravity, turbo,
-    slow, boomerang swords), **Time limit** (none, 1, 2, 3 or 5 minutes; when it runs
-    out, the bout goes on in the area's sudden death room, where the first kill wins)
-    and **Begin**.
+    and **Begin**. **Variants** lists the game's own: **Time limit** (none, or 3:00 to
+    9:30 in half minutes; when it runs out, the bout goes on in the area's sudden death
+    room, where the first kill wins), then divekicks, throws, no swords, throws only,
+    baby mode, low gravity, sudden death only, skippy mode, turbo, slow, spine swords,
+    boomerang swords and trails, each on or off, as many at once as you like. Attack
+    or start changes the one selected; jump goes back.
   - **Tournament**: 3 to 8 players taking turns at the two sides, double elimination.
-    Set **Players**, the area, variants and time limit, then **Start tournament**.
+    Set **Players**, the area and the variants, then **Start tournament**.
     Between matches the ladder shows every match so far and who fights next (yellow
     against orange); the last player standing is the champion.
   - **Online versus**: one machine hosts and another joins it; both play in the
@@ -71,8 +78,10 @@ menu:
     Across the internet, the host starts with a fixed port (`mix nidhox --port 9200`)
     and opens it and port 4369 to the joining machine; the traffic is not encrypted.
 - **How to play** — the game's own lessons, one at a time, with an orange dummy.
-- **Options** — sound effects and music on or off, and **Controls** to remap
-  each player's keys; kept in your settings. `Esc` opens them during play as well.
+- **Options** — **Controls** to remap each player's keys, flashing and persistent
+  blood on or off, and music and sound effect sliders (left and right; the effects
+  level scales the music too, as in the game). They are kept in your settings,
+  `~/.config/nidhox/<name>.settings`. `Esc` opens them during play as well.
 - **Credits** — from your copy's `credits.txt`.
 - **Quit to desktop**
 
