@@ -33,13 +33,11 @@ defmodule Nidhox.Flow do
       or the match ending, goes to the main menu
     * `:levels` — `Nidhox.Screen.Levels` over `rLevelSelect`: its chosen area begins a
       versus bout under the variants chosen; with no move for 720 steps, the main menu
-    * `:tournament_intro` — the tournament's players (`Nidhox.Screen.Ladder`) over
-      `rTournamentIntro`, for `@intro_steps` steps or until a press
-    * `:ladder` — the tournament so far and its next match over `rShowLadder`; a press
-      starts the match
-    * `:champion` — the tournament's champion over `rShowChampion` (its number the
-      world's global `:champion`, for the pyre's colour), for
-      `@champion_steps` steps or until a press, then the main menu
+    * `:tournament` — the tournament's own rooms, run by the game's objects
+      (`Nidhox.Objects.Tournament`, `Nidhox.Objects.CountDowns`): the ladder
+      (`rShowLadder`), the warm-up before each match (`rPreMatch`, where `:start`
+      pauses) and the champion (`rShowChampion`). Its match's start leads to `:bout`,
+      and the main menu, once the champion's countdown goes there, to the main menu
     * `:tutorial` — HOW TO PLAY: `rTutorial` with the game's own `Tutorial` (`System.flow`
       656686433); it ends at the main menu once the tutorial is gone
     * `:challenge` — CHALLENGE: `rChallengeMode` with the game's own `ChallengeMode`
@@ -66,10 +64,11 @@ defmodule Nidhox.Flow do
   menu. The main menu ends any run and match (`kill(ArcadeMode)`, `kill(Match)`). OFFLINE VERSUS is the two sides against each other
   in the area chosen. ONLINE VERSUS is the same with side 2 a player joined from
   another machine: the host's world is the one both play in, and CONTINUE after a bout
-  goes back to the level select. TOURNAMENT is a double elimination tournament (`Nidhox.Tournament`)
-  in its menu's MAP, each match a bout under the variants chosen, its first player on
-  side 1 and its second on side 2; a finished match goes to the ladder, or to the
-  champion after the last. OPTIONS and QUIT TO DESKTOP ask the client of the player who chose
+  goes back to the level select. TOURNAMENT is the game's single elimination tournament
+  (`Nidhox.Tournament`) of its menu's PLAYERS in its MAP (`Nidhox.Bout.start_tournament/4`),
+  each match a bout under the variants chosen, the first of its two players on side 1;
+  a finished match goes back to the ladder. OPTIONS and QUIT TO DESKTOP ask the client of
+  the player who chose
   them to open the game's options or to quit (`ask/3`).
   """
 
@@ -78,7 +77,7 @@ defmodule Nidhox.Flow do
   alias Cauldron2D.GameMaker.Rooms
   alias Cauldron2D.GameMaker.Step
   alias Cauldron2D.GameMaker.World
-  alias Nidhox.{Assets, Bout, Online, Tournament}
+  alias Nidhox.{Assets, Bout, Online}
   alias Nidhox.Gml
   alias Nidhox.Objects.Grass
   alias Nidhox.Bout.Sound
@@ -91,8 +90,6 @@ defmodule Nidhox.Flow do
   @ask_steps 30
   @sway_period 500
   @sway_margin 160
-  @intro_steps 180
-  @champion_steps 600
   @move_sound 65
   @attract_steps 1200
   @attract_levels [20, 21, 22, 23, 25]
@@ -106,9 +103,7 @@ defmodule Nidhox.Flow do
     credits: "rCredits",
     tutorial: "rTutorial",
     results: "rMatchStats",
-    tournament_intro: "rTournamentIntro",
     ladder: "rShowLadder",
-    champion: "rShowChampion",
     online: "rMainMenu"
   }
 
@@ -189,25 +184,11 @@ defmodule Nidhox.Flow do
     end
   end
 
-  def step(%{screen: :tournament_intro} = state, players) do
-    state = scenery(state, players)
-    if Title.continue?(players) or state.timer >= @intro_steps, do: ladder(state), else: state
-  end
-
-  def step(%{screen: :ladder} = state, players) do
-    state = scenery(state, players)
-
-    if Title.continue?(players),
-      do: begin(state, state.area, state.tournament.rules),
-      else: state
-  end
-
-  def step(%{screen: :champion} = state, players) do
-    state = scenery(state, players)
-
-    if Title.continue?(players) or state.timer >= @champion_steps,
-      do: main_menu(%{state | tournament: nil}),
-      else: state
+  def step(%{screen: :tournament} = state, players) do
+    if in_room?(state.world, "rPreMatch") and
+         Enum.any?(Map.values(players), &(:start in &1.pressed)),
+       do: %{state | screen: :paused, menu: Pause.menu(:tournament, false)},
+       else: state |> scenery(players) |> followed()
   end
 
   def step(%{screen: :credits} = state, players) do
@@ -566,51 +547,44 @@ defmodule Nidhox.Flow do
   defp offline(state), do: %{state | effects: [:unhost, :unlisten | state.effects]}
 
   defp tournament(state) do
-    tournament = %{bracket: Tournament.new(state.entrants), rules: state.rules}
-
-    enter(
-      %{
-        state
-        | screen: :tournament_intro,
-          mode: :tournament,
-          menu: nil,
-          tournament: tournament,
-          timer: 0
-      },
-      :tournament_intro
-    )
+    world = Bout.start_tournament(state.world, state.area, state.rules, state.entrants)
+    %{state | screen: :tournament, mode: :tournament, menu: nil, world: world, timer: 0}
   end
+
+  defp followed(%{world: world} = state) do
+    cond do
+      in_room?(world, "rMainMenu") -> main_menu(state)
+      Bout.running?(world) and Bout.area(room_name(world)) != nil -> tournament_bout(state)
+      true -> state
+    end
+  end
+
+  defp tournament_bout(state),
+    do: %{
+      state
+      | screen: :bout,
+        menu: nil,
+        area: Bout.area(room_name(state.world)),
+        winner: nil,
+        stats: nil,
+        timer: 0,
+        recording: %{world: state.world, inputs: [], kept: []}
+    }
+
+  defp room_name(%World{room: room} = world), do: Enum.at(world.data.rooms, room).name
 
   defp chosen(state, area), do: begin(state, area, state.rules)
 
-  defp ladder(state),
-    do:
-      enter(
-        %{state | screen: :ladder, menu: nil, timer: 0},
-        :ladder
-      )
-
-  defp decided(%{tournament: %{bracket: bracket} = tournament, winner: winner} = state) do
-    bracket = Tournament.won(bracket, elem(Tournament.next(bracket), winner - 1))
-
+  defp ladder(%{winner: winner} = state) do
     state = %{
       state
-      | tournament: %{tournament | bracket: bracket},
+      | screen: :tournament,
+        menu: nil,
+        timer: 0,
         events: result_events(state, winner) ++ state.events
     }
 
-    if bracket.champion,
-      do:
-        enter(
-          %{
-            state
-            | screen: :champion,
-              timer: 0,
-              world: World.put_global(state.world, :champion, bracket.champion)
-          },
-          :champion
-        ),
-      else: ladder(state)
+    enter(state, :ladder)
   end
 
   defp credits(state) do
@@ -675,6 +649,11 @@ defmodule Nidhox.Flow do
 
   defp resumed(%{mode: :tutorial}), do: :tutorial
   defp resumed(%{mode: :challenge}), do: :challenge
+
+  defp resumed(%{mode: :tournament, world: world}) do
+    if Bout.area(room_name(world)) != nil, do: :bout, else: :tournament
+  end
+
   defp resumed(_state), do: :bout
 
   defp begin(state, area, rules) do
@@ -698,7 +677,7 @@ defmodule Nidhox.Flow do
 
     cond do
       Bout.running?(state.world) -> state
-      state.mode == :tournament -> decided(finished(state))
+      state.mode == :tournament -> ladder(finished(state))
       true -> results(finished(state))
     end
   end

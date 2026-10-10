@@ -11,8 +11,9 @@ defmodule Nidhox.Bout.Frame do
 
     1. `System.frame` counts; the players' buttons are kept (`Nidhox.Bout.Input.record/3`,
        `updateMatchInput`)
-    2. on the room's first frame of a faceoff, the match and the camera's centre move
-       to the middle of the room
+    2. in the tournament's warm-up (`System.flow` 4890734) the clock is full
+       (`countDownTimer` 36000) and nobody leads; on the room's first frame of a
+       faceoff, the match and the camera's centre move to the middle of the room
     3. user event 2 for every `Doorway`, `HeldWeapon`, `PickupContainer`,
        `DroppedWeapon`, `Smoosher`, `SpikeSmoosher`, `NewCloudBlock`, `CloudPoof`,
        `FakeCloudPoof` and `Grass`; every fencer checked for falling out of the room
@@ -45,7 +46,20 @@ defmodule Nidhox.Bout.Frame do
   """
 
   alias Cauldron2D.GameMaker.{Instance, World}
-  alias Nidhox.Bout.{Camera, CameraFollow, Clash, Hits, Input, Outcome, Overlap, RightOfWay, Sound, Spawn}
+
+  alias Nidhox.Bout.{
+    Camera,
+    CameraFollow,
+    Clash,
+    Hits,
+    Input,
+    Outcome,
+    Overlap,
+    RightOfWay,
+    Sound,
+    Spawn
+  }
+
   alias Nidhox.Brain.Buttons
   alias Nidhox.Gml
   alias Nidhox.Man.Query
@@ -66,18 +80,26 @@ defmodule Nidhox.Bout.Frame do
   @push 0.2
   @sword 2
   @special_flow 9_836_834
+  @warm_up_flow 4_890_734
+  @full_clock 36_000
 
   @doc "The world after `System`'s begin step runs the match's frames (`updateSystemFrame`)."
   @spec system_step(World.t(), non_neg_integer()) :: World.t()
   def system_step(%World{} = world, system) do
     case Gml.first(world, "Match") do
-      nil -> Gml.put(world, system, %{frame: Gml.var(world, system, :frame) + 1})
-      match -> Enum.reduce(1..frames(world)//1, world, fn _frame, world -> run_if_here(world, match) end)
+      nil ->
+        Gml.put(world, system, %{frame: Gml.var(world, system, :frame) + 1})
+
+      match ->
+        Enum.reduce(1..frames(world)//1, world, fn _frame, world -> run_if_here(world, match) end)
     end
   end
 
   defp frames(world) do
-    times = if Gml.truthy?(System.get(world, :turboMode)) and System.get(world, :flow) in [3, 4], do: 2, else: 1
+    times =
+      if Gml.truthy?(System.get(world, :turboMode)) and System.get(world, :flow) in [3, 4],
+        do: 2,
+        else: 1
 
     if Gml.truthy?(System.get(world, :slowMode)) and System.get(world, :flow) in [3, 4] do
       times = times - 1
@@ -87,7 +109,8 @@ defmodule Nidhox.Bout.Frame do
     end
   end
 
-  defp run_if_here(world, match), do: if(World.fetch(world, match), do: run(world, match), else: world)
+  defp run_if_here(world, match),
+    do: if(World.fetch(world, match), do: run(world, match), else: world)
 
   @doc "The world one match frame on, for the match `match` (`updateMatchFrame`)."
   @spec run(World.t(), non_neg_integer()) :: World.t()
@@ -96,6 +119,7 @@ defmodule Nidhox.Bout.Frame do
       world
       |> count_frame()
       |> Input.record(match, held(world))
+      |> warm_up(match)
       |> centre_on_faceoff(match)
       |> each_object(@first_updated, @user_event_2)
       |> each_man(&RightOfWay.fell_off(&1, &2, match))
@@ -124,7 +148,12 @@ defmodule Nidhox.Bout.Frame do
     |> RightOfWay.manage(match)
     |> CameraFollow.manage(match)
     |> remember_places()
-    |> then(&if(Gml.truthy?(Gml.var(&1, match, :sudden_death)), do: Gml.put(&1, match, %{leadingPlayerIndex: 0}), else: &1))
+    |> then(
+      &if(Gml.truthy?(Gml.var(&1, match, :sudden_death)),
+        do: Gml.put(&1, match, %{leadingPlayerIndex: 0}),
+        else: &1
+      )
+    )
   end
 
   defp count_frame(world) do
@@ -145,8 +174,15 @@ defmodule Nidhox.Bout.Frame do
     end)
   end
 
+  defp warm_up(world, match) do
+    if System.get(world, :flow) == @warm_up_flow,
+      do: Gml.put(world, match, %{countDownTimer: @full_clock, leadingPlayerIndex: 0}),
+      else: world
+  end
+
   defp centre_on_faceoff(world, match) do
-    if System.get(world, :flow) != @special_flow and Gml.truthy?(Gml.var(world, match, :firstFrameOfRoom)) and
+    if System.get(world, :flow) != @special_flow and
+         Gml.truthy?(Gml.var(world, match, :firstFrameOfRoom)) and
          Gml.truthy?(Gml.var(world, match, :faceoff)) do
       middle = room_width(world) * 0.5
 
@@ -172,7 +208,12 @@ defmodule Nidhox.Bout.Frame do
     end)
   end
 
-  defp shown(world, man), do: if(World.fetch(world, man), do: World.update(world, man, &%{&1 | visible: true}), else: world)
+  defp shown(world, man),
+    do:
+      if(World.fetch(world, man),
+        do: World.update(world, man, &%{&1 | visible: true}),
+        else: world
+      )
 
   defp keep_in_room(world, match) do
     leader = Gml.var(world, match, :leadingPlayerIndex)
@@ -206,7 +247,10 @@ defmodule Nidhox.Bout.Frame do
   defp forget_gone(world, match) do
     Enum.reduce([:yellowInstance, :orangeInstance, :priorityInstance], world, fn name, world ->
       id = Gml.var(world, match, name, @noone)
-      if is_integer(id) and id >= 0 and World.fetch(world, id), do: world, else: Gml.put(world, match, %{name => @noone})
+
+      if is_integer(id) and id >= 0 and World.fetch(world, id),
+        do: world,
+        else: Gml.put(world, match, %{name => @noone})
     end)
   end
 
@@ -315,8 +359,11 @@ defmodule Nidhox.Bout.Frame do
 
   defp hit(world, match, man) do
     case Gml.var(world, man, :flesh, @noone) do
-      @noone -> world
-      flesh -> if World.fetch(world, flesh), do: Hits.weapon_to_flesh(world, match, flesh), else: world
+      @noone ->
+        world
+
+      flesh ->
+        if World.fetch(world, flesh), do: Hits.weapon_to_flesh(world, match, flesh), else: world
     end
   end
 
@@ -401,5 +448,6 @@ defmodule Nidhox.Bout.Frame do
     end)
   end
 
-  defp room_width(world), do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(0)
+  defp room_width(world),
+    do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(0)
 end

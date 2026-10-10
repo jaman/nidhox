@@ -23,7 +23,7 @@ defmodule Nidhox.Client do
 
   @atlas :nidhox
   alias Cauldron2D.DrawList
-  alias Cauldron2D.GameMaker.TileLayers
+  alias Cauldron2D.GameMaker.{Shapes, TileLayers}
   alias Nidhox.{Assets, Controls, Options, TileLayerCache}
 
   @impl true
@@ -189,6 +189,8 @@ defmodule Nidhox.Client do
       raster -> FrenchCurve.Raster.crop(raster, {left, top}, {width, height})
     end
   end
+
+  defp lookup(_pictures, _surfaces, {:ellipse, _size, _fill} = shape), do: Shapes.raster(shape)
 
   defp lookup(pictures, _surfaces, {:tile_layer, _room, _layer, _blend} = key) do
     TileLayerCache.fetch(key, fn ->

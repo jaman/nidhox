@@ -24,6 +24,7 @@ defmodule Nidhox.Man.Flesh do
   alias Nidhox.Bout.PlayerColour
   alias Nidhox.Gml
   alias Nidhox.Man.Physics
+  alias Nidhox.Objects.Tournament
 
   @swords %{
     202 => 203,
@@ -147,8 +148,8 @@ defmodule Nidhox.Man.Flesh do
 
   defp colour_index(world, player) do
     cond do
-      (tournament = Gml.first(world, "Tournament")) != nil ->
-        Map.get(Gml.var(world, tournament, :currentPlayer, %{}), player, 0) + 1
+      (playing = Tournament.player(world, player)) != nil ->
+        playing + 1
 
       Gml.exists?(world, "ArcadeMode") and brain_for?(world, player) ->
         @computer

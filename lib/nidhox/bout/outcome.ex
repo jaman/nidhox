@@ -13,14 +13,15 @@ defmodule Nidhox.Bout.Outcome do
     * `winner/2` (`showWinningPlayerIndex`): unless a winner is already shown
       (`ShowMatchStats`), the player is the match's winner (`MatchStats`), the match is
       `finished` and ends 180 steps on (its alarm 0), the winner is shown
-      (`ShowMatchStats`), a tournament's `nextWinner` is the player, and
+      (`ShowMatchStats`), a tournament's `nextWinner` is the tournament player on
+      that side (`Nidhox.Objects.Tournament.won/2`), and
       `System.winningPlayerHistory` and `System.wins` (by player and level) record it
   """
 
   alias Cauldron2D.GameMaker.{Instance, World}
   alias Nidhox.Bout.{Rooms, Sound}
   alias Nidhox.Gml
-  alias Nidhox.Objects.{Ear, MatchStats, RoomCodes, System}
+  alias Nidhox.Objects.{Ear, MatchStats, RoomCodes, System, Tournament}
 
   @tick 24
   @tick_every 60
@@ -82,7 +83,7 @@ defmodule Nidhox.Bout.Outcome do
       |> MatchStats.put_winner(player)
       |> finish()
       |> then(&elem(World.create(&1, World.object_index(&1, "ShowMatchStats"), {0, 0}), 0))
-      |> tournament_win(player)
+      |> Tournament.won(player)
       |> record(player)
     end
   end
@@ -95,12 +96,6 @@ defmodule Nidhox.Bout.Outcome do
       |> Gml.put(match, %{finished: 1})
       |> World.update(match, &Instance.put_alarm(&1, 0, @ending_steps))
     end)
-  end
-
-  defp tournament_win(world, player) do
-    world
-    |> Gml.all("Tournament")
-    |> Enum.reduce(world, &Gml.put(&2, &1, %{nextWinner: player}))
   end
 
   defp record(world, player) do

@@ -127,9 +127,13 @@ defmodule Nidhox.Tournament do
     {first_through?, second_through?} = {first in next, second in next}
 
     tournament =
-      if not first_through? and bye?(tournament, first), do: won(tournament, second), else: tournament
+      if not first_through? and bye?(tournament, first),
+        do: won(tournament, second),
+        else: tournament
 
-    if not second_through? and bye?(tournament, second), do: won(tournament, first), else: tournament
+    if not second_through? and bye?(tournament, second),
+      do: won(tournament, first),
+      else: tournament
   end
 
   defp first_undecided(round), do: Enum.find_index(round, &(&1 == @undecided)) || @undecided

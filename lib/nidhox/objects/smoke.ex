@@ -13,14 +13,14 @@ defmodule Nidhox.Objects.Smoke do
     * `Smoker`: the ellipse 32 × 4 about its place; it draws its particles itself
     * `Pyre`: the ellipse from 16 left to 16 right of it and from 16 to 2 above it; its
       particles draw themselves; in the tournament's champion room it is tinted the
-      champion's colour (`getPlayerColor`), the champion `World.global(:champion)`
-      standing for the last of the game's `Tournament.bracketHistory`
+      champion's colour (`getPlayerColor(champion + 1)`, the champion
+      `Nidhox.Objects.Tournament.champion/1`)
   """
 
   alias Cauldron2D.GameMaker.{Draw, Instance, PartSystems, World}
   alias Nidhox.Bout.PlayerColour
   alias Nidhox.Gml
-  alias Nidhox.Objects.System
+  alias Nidhox.Objects.{System, Tournament}
 
   @smoke_sprite 277
   @ember_sprite 274
@@ -42,12 +42,12 @@ defmodule Nidhox.Objects.Smoke do
   defp pyre(world, self, _other) do
     world = fire(world, self, true)
 
-    case World.global(world, :champion, nil) do
+    case Tournament.champion(world) do
       nil ->
         world
 
       champion ->
-        {colour, world} = PlayerColour.get(world, self, champion)
+        {colour, world} = PlayerColour.get(world, self, champion + 1)
         World.update(world, self, &%{&1 | image_blend: colour})
     end
   end

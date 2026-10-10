@@ -5,7 +5,7 @@ defmodule Nidhox.Screen do
   its objects; over it only the pause menu and the replay's skip line are added.
   """
 
-  alias Nidhox.Screen.{Art, Credits, Ladder, Levels, Logos, Online, Pause, Results, Title}
+  alias Nidhox.Screen.{Art, Credits, Levels, Logos, Online, Pause, Results, Title}
 
   @skip {160, 186}
 
@@ -27,17 +27,8 @@ defmodule Nidhox.Screen do
   def layer(%{screen: screen} = state, window) when screen in [:address, :code],
     do: {[], Online.entry(state.entry, state.online.status, window)}
 
-  def layer(%{screen: :tournament_intro} = state, window),
-    do: {[], Ladder.intro(state.tournament.bracket.count, window)}
-
-  def layer(%{screen: :ladder} = state, window),
-    do: {[], Ladder.items(state.tournament.bracket, window)}
-
-  def layer(%{screen: :champion} = state, window),
-    do: {[], Ladder.champion(state.tournament.bracket.champion, window)}
-
   def layer(%{screen: screen}, _window)
-      when screen in [:bout, :demo, :tutorial, :challenge, :arcade, :arcade_complete],
+      when screen in [:bout, :demo, :tutorial, :challenge, :arcade, :arcade_complete, :tournament],
       do: {[], []}
 
   def layer(%{screen: :paused} = state, window), do: {[], Pause.items(state.menu, window)}

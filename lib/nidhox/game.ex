@@ -72,7 +72,6 @@ defmodule Nidhox.Game do
       entrants: 3,
       idle: 0,
       tutorial: nil,
-      tournament: nil,
       online: Online.new(Keyword.get(opts, :port)),
       entry: nil,
       address: nil,

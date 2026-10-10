@@ -42,10 +42,11 @@ defmodule Nidhox.Objects.Match do
       else white — the clock as `getTime(countDownTimer + 1)`, shown only with a time
       limit, frames left and outside an end room
 
-  `create/1` makes one; `get/2` reads a variable of the first `Match`.
+  `create/1` makes one; `start_match/1` starts a match (`startMatch`); `get/2` reads a
+  variable of the first `Match`.
   """
 
-  alias Cauldron2D.GameMaker.{Draw, Instance, World}
+  alias Cauldron2D.GameMaker.{Data, Draw, Instance, World}
   alias Nidhox.Bout.{Camera, Outcome, Spawn, Variants}
   alias Nidhox.Gml
   alias Nidhox.Man.{Physics, Weapon}
@@ -66,6 +67,13 @@ defmodule Nidhox.Objects.Match do
   @grey {128, 128, 128}
   @last_frames 600
   @gui_depth -1_000_000
+  @centres %{
+    25 => "rCemeteryCenter",
+    20 => "rCastleCenter",
+    22 => "rSkyCenter",
+    23 => "rWildsCenter",
+    21 => "rMinesCenter"
+  }
 
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
@@ -78,7 +86,8 @@ defmodule Nidhox.Objects.Match do
       {"gml_Object_Match_Alarm_0", fn world, self, _other -> World.destroy(world, self) end},
       {"gml_Object_Match_Destroy_0", &gone/3},
       {"gml_Object_Match_Draw_0", &draw/3},
-      {"gml_Object_Match_Other_20", fn world, self, _other -> BloodSurface.free_bank(world, self) end}
+      {"gml_Object_Match_Other_20",
+       fn world, self, _other -> BloodSurface.free_bank(world, self) end}
     ]
   end
 
@@ -87,6 +96,27 @@ defmodule Nidhox.Objects.Match do
   def create(%World{} = world) do
     {world, id} = World.create(world, World.object_index(world, "Match"), {0, 0})
     {id, world}
+  end
+
+  @doc """
+  The world with a match started as the game's `startMatch` starts one: the level
+  select (`VsLevelSelect`) and any match gone, a new `Match`, a room transition
+  (`FinalFantasyVIIITransition`), the music's `firstChoice` 1, and the centre room of
+  `System.level`'s area gone to (`World.goto/2`). `System.level` must be an area's
+  level: castle 20, mines 21, sky 22, wilds 23 or cemetery 25.
+  """
+  @spec start_match(World.t()) :: World.t()
+  def start_match(%World{} = world) do
+    world = world |> kill_every("VsLevelSelect") |> kill_every("Match")
+    {_match, world} = create(world)
+    centre = Map.fetch!(@centres, round(System.get(world, :level)))
+
+    world
+    |> make("FinalFantasyVIIITransition")
+    |> then(fn world ->
+      Enum.reduce(Gml.all(world, "LayeredMusic"), world, &Gml.put(&2, &1, %{firstChoice: 1}))
+    end)
+    |> World.goto(Data.index(world.data, :rooms, centre))
   end
 
   @doc "Variable `name` of the first `Match`, `default` without one."
@@ -151,7 +181,8 @@ defmodule Nidhox.Objects.Match do
     |> music()
   end
 
-  defp kill_every(world, name), do: Enum.reduce(Gml.all(world, name), world, &World.destroy(&2, &1))
+  defp kill_every(world, name),
+    do: Enum.reduce(Gml.all(world, name), world, &World.destroy(&2, &1))
 
   defp zero_frame(world) do
     case Gml.first(world, "System") do
@@ -190,11 +221,17 @@ defmodule Nidhox.Objects.Match do
     |> sudden_death_only(self)
   end
 
-  defp make(world, name), do: world |> World.create(World.object_index(world, name), {0, 0}) |> elem(0)
+  defp make(world, name),
+    do: world |> World.create(World.object_index(world, name), {0, 0}) |> elem(0)
 
   defp enter_fencers(world, match) do
-    match_points = Gml.exists?(world, "YellowPlayerMatchEntryPoint") or Gml.exists?(world, "OrangePlayerMatchEntryPoint")
-    room_points = Gml.exists?(world, "YellowPlayerRoomEntryPoint") or Gml.exists?(world, "OrangePlayerRoomEntryPoint")
+    match_points =
+      Gml.exists?(world, "YellowPlayerMatchEntryPoint") or
+        Gml.exists?(world, "OrangePlayerMatchEntryPoint")
+
+    room_points =
+      Gml.exists?(world, "YellowPlayerRoomEntryPoint") or
+        Gml.exists?(world, "OrangePlayerRoomEntryPoint")
 
     cond do
       not (match_points or room_points) -> world
@@ -249,9 +286,10 @@ defmodule Nidhox.Objects.Match do
   end
 
   defp sudden_death_only(world, match) do
-    if not Gml.truthy?(Gml.var(world, match, :sudden_death)) and Variants.sudden_death_only?(world),
-      do: Outcome.sudden_death(world, match),
-      else: world
+    if not Gml.truthy?(Gml.var(world, match, :sudden_death)) and
+         Variants.sudden_death_only?(world),
+       do: Outcome.sudden_death(world, match),
+       else: world
   end
 
   defp step(world, self, _other) do
@@ -284,7 +322,12 @@ defmodule Nidhox.Objects.Match do
     |> keep_sword(self, "YellowPlayer", :yellowSword)
     |> keep_sword(self, "OrangePlayer", :orangeSword)
     |> Gml.put(self, %{flyingWeapons: [], pickupContainers: []})
-    |> then(&if(Gml.truthy?(System.get(&1, :persistent_blood)), do: &1, else: World.perform(&1, self, :other, 20)))
+    |> then(
+      &if(Gml.truthy?(System.get(&1, :persistent_blood)),
+        do: &1,
+        else: World.perform(&1, self, :other, 20)
+      )
+    )
   end
 
   defp gone(world, _self, _other) do
@@ -300,9 +343,10 @@ defmodule Nidhox.Objects.Match do
   end
 
   defp draw(world, self, _other) do
-    if System.get(world, :flow) != @demonstration and not Gml.truthy?(Gml.var(world, self, :faceoff)),
-      do: clock_text(world, self),
-      else: world
+    if System.get(world, :flow) != @demonstration and
+         not Gml.truthy?(Gml.var(world, self, :faceoff)),
+       do: clock_text(world, self),
+       else: world
   end
 
   defp clock_text(world, match) do
@@ -312,7 +356,8 @@ defmodule Nidhox.Objects.Match do
       Gml.truthy?(Gml.var(world, match, :sudden_death)) ->
         shadowed(world, "SUDDEN DEATH", @red)
 
-      Gml.truthy?(Gml.var(world, match, :useCountDownTimer)) and left > 0 and not Outcome.victory_lap?(world) ->
+      Gml.truthy?(Gml.var(world, match, :useCountDownTimer)) and left > 0 and
+          not Outcome.victory_lap?(world) ->
         shadowed(world, time(left + 1), if(left <= @last_frames, do: @red, else: @white))
 
       true ->
@@ -345,6 +390,9 @@ defmodule Nidhox.Objects.Match do
 
   defp pad(number), do: number |> Integer.to_string() |> String.pad_leading(2, "0")
 
-  defp room_width(world), do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(0)
-  defp room_height(world), do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(1)
+  defp room_width(world),
+    do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(0)
+
+  defp room_height(world),
+    do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(1)
 end

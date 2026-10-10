@@ -7,9 +7,14 @@ defmodule Nidhox.Bout do
     * `start_arcade/1`: a single player run begun; `area_of_level/1` the area of a
       `System.level`
     * `start/4`: `System`'s settings for the match — the flow (`4` versus and online,
-      `3` tournament, `2` single player), the area's level (castle 20, mines 21, sky 22,
-      wilds 23, cemetery 25), the time limit in frames and the variant switches
-      (`Nidhox.Rules.system/1`) — then a `Match` made and the area's centre room entered
+      `2` single player, `1` the title's demonstration), the area's level (castle 20,
+      mines 21, sky 22, wilds 23, cemetery 25), the time limit in frames and the variant
+      switches (`Nidhox.Rules.system/1`) — then the match started
+      (`Nidhox.Objects.Match.start_match/1`) and the area's centre room entered
+    * `start_tournament/4`: START TOURNAMENT as the main menu does it — `System`'s
+      settings with flow 3 and the area's level, `global.players` the number of players,
+      a room transition (`FinalFantasyVIIITransition`) and `rTournamentIntro` entered,
+      whose code makes the `Nidhox.Objects.Tournament`
     * `running?/1`: whether the match is still going (its `Match` exists)
     * `winner/1`: the winning player (`MatchStats.winningPlayerIndex`), `nil` before one
     * `stats/1`: `%{steps, kills, suicides}` from `MatchStats`
@@ -36,12 +41,41 @@ defmodule Nidhox.Bout do
           Gml.put(
             world,
             system,
-            Map.merge(Rules.system(rules), %{flow: Map.get(@flows, mode, 4), level: Map.fetch!(@levels, area)})
+            Map.merge(Rules.system(rules), %{
+              flow: Map.get(@flows, mode, 4),
+              level: Map.fetch!(@levels, area)
+            })
           )
       end
 
-    {_match, world} = Match.create(world)
-    Rooms.enter(world, Data.index(world.data, :rooms, "r#{area}Center"))
+    world = Match.start_match(world)
+    Rooms.enter(world, world.pending_room)
+  end
+
+  @doc "The world with a tournament of `players` begun in area `area` under `rules`."
+  @spec start_tournament(World.t(), String.t(), Rules.t(), pos_integer()) :: World.t()
+  def start_tournament(%World{} = world, area, %Rules{} = rules, players) do
+    world =
+      case Gml.first(world, "System") do
+        nil ->
+          world
+
+        system ->
+          Gml.put(
+            world,
+            system,
+            Map.merge(Rules.system(rules), %{
+              flow: @flows.tournament,
+              level: Map.fetch!(@levels, area)
+            })
+          )
+      end
+
+    world
+    |> World.put_global(:players, players)
+    |> World.create(World.object_index(world, "FinalFantasyVIIITransition"), {0, 0})
+    |> elem(0)
+    |> Rooms.enter(Data.index(world.data, :rooms, "rTournamentIntro"))
   end
 
   @doc """
@@ -78,7 +112,8 @@ defmodule Nidhox.Bout do
 
   @doc "The area whose `System.level` is `level`, `nil` for none."
   @spec area_of_level(number()) :: String.t() | nil
-  def area_of_level(level), do: Enum.find_value(@levels, fn {area, number} -> if round(level) == number, do: area end)
+  def area_of_level(level),
+    do: Enum.find_value(@levels, fn {area, number} -> if round(level) == number, do: area end)
 
   @doc "Whether the match is still going."
   @spec running?(World.t()) :: boolean()
@@ -107,7 +142,10 @@ defmodule Nidhox.Bout do
   def area(nil), do: nil
 
   def area(name) do
-    case Regex.run(~r/^r([A-Z][a-z]+)(LeftEnd|LeftC|LeftB|LeftA|Center|RightA|RightB|RightC|RightEnd|SuddenDeath)$/, name) do
+    case Regex.run(
+           ~r/^r([A-Z][a-z]+)(LeftEnd|LeftC|LeftB|LeftA|Center|RightA|RightB|RightC|RightEnd|SuddenDeath)$/,
+           name
+         ) do
       [_, area, _part] -> area
       nil -> nil
     end

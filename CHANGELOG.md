@@ -4,6 +4,9 @@
 
 ### Added
 
+- The title's attract mode: left alone for 1200 steps, the title plays a match of the
+  computer against itself in an area at random, the logo and a blinking "press start"
+  over it, until a key is pressed or the match ends.
 - CHALLENGE on the main menu: the game's challenge mode (`Nidhox.Objects.Challenge`),
   every move scored as the game's `challengeMode_move_completed` scores it, its
   popups, its score and best score, and a computer opponent growing harder.
@@ -30,8 +33,7 @@
   SKIP THIS), BACK TO MAIN MENU.
 - SINGLE PLAYER as the game's own run (`Nidhox.Objects.Arcade`): sixteen levels on its
   progress map, each an area and a computer personality growing harder, "GAME
-  COMPLETE" with the time; OFFLINE VERSUS in the area chosen; TOURNAMENT for 3 to 8 players at one machine (`Nidhox.Tournament`,
-  `Nidhox.Screen.Ladder`); ONLINE VERSUS host-as-server over the local network
+  COMPLETE" with the time; OFFLINE VERSUS in the area chosen; TOURNAMENT for 3 to 8 players at one machine (`Nidhox.Tournament`); ONLINE VERSUS host-as-server over the local network
   (`Nidhox.Online`).
 - The level select's VARIANTS (NO SWORDS, THROWS ONLY, SUDDEN DEATH ONLY, LOW GRAVITY,
   TURBO MODE, SLOW MODE, BOOMERANG SWORDS) and TIME LIMIT (none, 1, 2, 3 or 5
@@ -91,7 +93,19 @@
 - The level select is the game's: up and down through the areas, the area's plate on
   the map, back to the main menu when left alone.
 - The results are the game's match statistics, and any press goes on to the level
-  select. WATCH REPLAY and BACK TO MAIN MENU are gone, as the game has neither.
+  select; up or down turns their bottom line to "watch replay", NidhOX's replay of the
+  bout. BACK TO MAIN MENU is gone, as the game has none.
+- The logos and the credits are the game's: `sMesshofLogo` then `sDaedelus` fading in
+  and out with "with music by", and the copy's credits rising in a slowly changing
+  colour.
+- TOURNAMENT is the game's single elimination tournament, run by the game's own
+  `Tournament` in its rooms (`Nidhox.Objects.Tournament`, `Nidhox.Tournament`): the
+  shuffled bracket with its byes, the ladder drawn as `drawBracketsListXYWH` draws it,
+  the warm-up before each match in `rPreMatch` (`Nidhox.Objects.CountDowns`), the
+  fencers in their tournament players' colours, and the champion's room with
+  `sWinner` and the pyre in the champion's colour.
+- Every match starts as the game's `startMatch` starts one, with its room transition
+  (`Nidhox.Objects.Match.start_match/1`).
 
 - Side 2 plays the game's default keys: `M` attacks, `N` jumps, `Enter` starts.
 

@@ -38,12 +38,15 @@ The first controller to send anything plays side 1, the second side 2.
 NidhOX opens on the logos, then the title. Press `Enter` (or attack) to reach the
 menu. The menus turn like a wheel under the logo, the selected line in the middle;
 up and down turn them, `Enter` or attack chooses, and jump goes back (on the main menu,
-to **Quit to desktop**).
+to **Quit to desktop**). Left on the title for twenty seconds, the computer plays a
+match against itself; any key brings back the menu.
 
 - **Multiplayer**
   - **Offline versus**: two players at one keyboard, or a controller each. The level
     select pans across the map; up and down pick the area, `Enter` or attack starts the
-    bout. Left alone for twelve seconds, it goes back to the main menu.
+    bout. Left alone for twelve seconds, it goes back to the main menu. After a bout
+    the match statistics show; up or down switches their bottom line between going on
+    and **watch replay**, which plays the bout again (`Enter` skips it).
   - **Online versus**: one machine hosts and another joins it; both play in the
     host's game.
     - **Host** shows this machine's address and a join code. Tell both to the player
@@ -66,10 +69,13 @@ to **Quit to desktop**).
     low gravity, sudden death only, skippy mode, turbo, slow, spine swords, boomerang
     swords and trails, each on or off, as many at once as you like. Attack or start
     changes the one selected.
-- **Tournament** — 3 to 8 players taking turns at the two sides, double elimination.
+- **Tournament** — 3 to 8 players taking turns at the two sides, single elimination.
   Set **Players** and the **Map** with left and right, and the **Variants**, then
-  **Start tournament**. Between matches the ladder shows every match so far and who
-  fights next (yellow against orange); the last player standing is the champion.
+  **Start tournament**. The ladder shows the bracket, the next two players flashing;
+  a player drawn against an empty place (X) goes through. `Enter` or attack leads to a
+  nine-second warm-up in which the next two find their controllers and can already
+  fence, then their match; the first of the two plays yellow. The last player left is
+  the champion; their room ends the tournament after ten seconds or on `Enter`.
 - **Options** — **Controls** to remap each player's keys, flashing and persistent
   blood on or off, and music and sound effect sliders (left and right; the effects
   level scales the music too, as in the game). They are kept in your settings,

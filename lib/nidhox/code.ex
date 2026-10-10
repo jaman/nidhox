@@ -54,6 +54,8 @@ defmodule Nidhox.Code do
       Nidhox.Objects.FireClouds,
       Nidhox.Objects.PlayerOutlines,
       Nidhox.Objects.Arcade,
+      Nidhox.Objects.Tournament,
+      Nidhox.Objects.CountDowns,
       Nidhox.Objects.Challenge,
       Nidhox.Objects.MainMenu,
       Nidhox.Objects.InstanceCodes,

@@ -66,7 +66,6 @@ defmodule Nidhox.Objects.Arcade do
     {23, 5_646_466},
     {20, 5_646_466}
   ]
-  @centres %{25 => "rCemeteryCenter", 20 => "rCastleCenter", 22 => "rSkyCenter", 23 => "rWildsCenter", 21 => "rMinesCenter"}
   @map_points %{20 => 0, 21 => 1, 23 => 2, 22 => 3, 25 => 4}
   @buttons %{8 => :attack, 9 => :jump, 10 => :start}
   @room_percent %{
@@ -230,21 +229,7 @@ defmodule Nidhox.Objects.Arcade do
 
   defp start_level(world, self, _other) do
     area = Map.fetch!(Gml.var(world, self, :locationMap), round(Gml.var(world, self, :level)))
-    world |> Gml.put(Gml.first(world, "System"), %{level: area}) |> start_match(area)
-  end
-
-  defp start_match(world, area) do
-    world =
-      world
-      |> kill_all("VsLevelSelect")
-      |> kill_all("Match")
-
-    {_match, world} = Match.create(world)
-
-    world
-    |> make("FinalFantasyVIIITransition")
-    |> then(fn world -> Enum.reduce(Gml.all(world, "LayeredMusic"), world, &Gml.put(&2, &1, %{firstChoice: 1})) end)
-    |> goto(Map.fetch!(@centres, area))
+    world |> Gml.put(Gml.first(world, "System"), %{level: area}) |> Match.start_match()
   end
 
   defp arcade_draw(world, self, _other) do
@@ -348,8 +333,6 @@ defmodule Nidhox.Objects.Arcade do
     do: %{picture: :pixel, position: {x1, y1}, scale: {x2 - x1 + 1, y2 - y1 + 1}, blend: colour}
 
   defp make(world, name), do: world |> World.create(World.object_index(world, name), {0, 0}) |> elem(0)
-
-  defp kill_all(world, name), do: world |> Gml.all(name) |> Enum.reduce(world, &World.destroy(&2, &1))
 
   defp goto(world, room), do: World.goto(world, Data.index(world.data, :rooms, room))
 
