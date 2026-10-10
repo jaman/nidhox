@@ -25,18 +25,28 @@ defmodule Nidhox.Objects.System do
   0.15)`: `lightAmount` 140, `darkAmount` 0.15, `darknessAlpha` 0); each end step takes
   0.1 from `aperture`; and its GUI draw, while `aperture` is above 0, covers the
   320 × 200 GUI in black at alpha `aperture`, the screen coming up out of black over
-  the first ten steps of every room.
+  the first ten steps of every room. In a demonstration (`flow` 1, a `Match` there) the
+  GUI draw first shows the copy's `sNewTitle` at (160, 36) and, on the first 60 of every
+  120 frames, "press start" (`pressStart`) white outlined in black, its bottom middle at
+  (160, 188).
 
   `create/1` makes it; `get/2` reads one of its variables.
   """
 
-  alias Cauldron2D.GameMaker.{Draw, World}
+  alias Cauldron2D.GameMaker.{Data, Draw, World}
   alias Nidhox.Bout.Frame
   alias Nidhox.Gml
+  alias Nidhox.Objects.Challenge
 
   @object "System"
   @gui_width 320
   @gui_height 200
+  @demonstration 1
+  @logo "sNewTitle"
+  @logo_at {160, 36}
+  @press_start_at {160, 188}
+  @blink_period 120
+  @blink_shown 60
   @made ["Ear", "BackgroundObject", "Particles", "PlayerOutlines"]
 
   @start %{
@@ -129,12 +139,58 @@ defmodule Nidhox.Objects.System do
     do: Gml.put(world, self, %{aperture: Gml.var(world, self, :aperture) - 0.1})
 
   defp draw_gui(world, self, _other) do
+    world = if demonstration?(world, self), do: demonstration(world, self), else: world
     aperture = Gml.var(world, self, :aperture)
     if Gml.gt?(aperture, 0), do: Draw.item(world, blackout(world, aperture)), else: world
   end
 
-  defp blackout(%World{data: %{general: %{window: {width, _height}}}}, aperture) do
-    zoom = width / @gui_width
+  defp demonstration?(world, self),
+    do: Gml.var(world, self, :flow) == @demonstration and Gml.exists?(world, "Match")
+
+  defp demonstration(world, self) do
+    zoom = gui_zoom(world)
+    logo = Data.index(world.data, :sprites, @logo)
+    %{origin: origin} = World.sprite(world, logo)
+    {logo_x, logo_y} = @logo_at
+
+    world =
+      Draw.item(world, %{
+        picture: {:sprite, logo, 0},
+        position: {logo_x * zoom, logo_y * zoom},
+        origin: origin,
+        scale: {zoom, zoom},
+        depth: 0
+      })
+
+    if rem(trunc(Gml.var(world, self, :frame)), @blink_period) < @blink_shown,
+      do: press_start(world, zoom),
+      else: world
+  end
+
+  defp press_start(world, zoom) do
+    {x, y} = @press_start_at
+
+    Challenge.outlined(
+      world,
+      "press start",
+      {x * zoom, y * zoom},
+      %{
+        font: "fMenu",
+        scale: {zoom, zoom},
+        angle: 0,
+        colour: {255, 255, 255},
+        outline: {0, 0, 0},
+        spread: zoom
+      },
+      halign: :center,
+      valign: :bottom
+    )
+  end
+
+  defp gui_zoom(%World{data: %{general: %{window: {width, _height}}}}), do: width / @gui_width
+
+  defp blackout(world, aperture) do
+    zoom = gui_zoom(world)
 
     %{
       picture: :pixel,

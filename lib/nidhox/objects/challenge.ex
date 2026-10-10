@@ -111,7 +111,8 @@ defmodule Nidhox.Objects.Challenge do
 
   @doc """
   From draw code: `text` in `font` at `{x, y}`, `scale` `{x, y}` and turned `angle`, in
-  `colour` over an outline of `outline` (`drawTextXYXScaleYScaleAngleColorOutlinecolor`).
+  `colour` over an outline of `outline` (`drawTextXYXScaleYScaleAngleColorOutlinecolor`),
+  the outline `:spread` (default 1) pixels to each side.
   `opts` are `Cauldron2D.GameMaker.Text.items/5`'s alignment options.
   """
   @spec outlined(World.t(), String.t(), {number(), number()}, map(), keyword()) :: World.t()
@@ -119,14 +120,15 @@ defmodule Nidhox.Objects.Challenge do
         %World{} = world,
         text,
         {x, y},
-        %{font: font, scale: scale, angle: angle, colour: colour, outline: outline},
+        %{font: font, scale: scale, angle: angle, colour: colour, outline: outline} = look,
         opts \\ []
       ) do
     style = [scale: scale, angle: angle] ++ opts
+    spread = Map.get(look, :spread, 1)
 
     world =
       Enum.reduce(0..3, world, fn turn, world ->
-        offset = {x + Gml.lengthdir_x(1, turn * 90), y + Gml.lengthdir_y(1, turn * 90)}
+        offset = {x + Gml.lengthdir_x(spread, turn * 90), y + Gml.lengthdir_y(spread, turn * 90)}
         Draw.text(world, font, text, offset, [{:colour, outline} | style])
       end)
 

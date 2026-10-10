@@ -1,9 +1,27 @@
 defmodule Nidhox.Screen.Results do
   @moduledoc """
-  The match's statistics after a bout, over `rMatchStats`, in `fMenu`: who won, how long
-  the bout took, and each side's kills and suicides (falls out of the room), and the
-  results' menu under them (`menu/0`). The statistics are `Nidhox.Bout.stats/1`'s.
+  The match's statistics after a bout, over `rMatchStats`, as the game's
+  `ShowMatchStats` draws them, every line in `fMenu` centred on its x, from its top,
+  lines 7 apart:
+
+    * "time" and the bout's time (`getTime`) at y 15
+    * the copy's `sWinner` at (160, 72) by its own origin, in the winner's colour
+      (`getPlayerColor`)
+    * for each side, in its colour, at y 130, around a point 64 to its side of the
+      middle (yellow left, orange right): "kills" and its kills 32 left of the point,
+      "suicides" and its suicides (falls out of the room) 32 right of it
+    * "continue" 32 above the bottom, white
+
+  Any of `:attack`, `:start` or `:jump` goes on. NidhOX adds the replay to it: `:up` or
+  `:down` turns the bottom line between "continue" and "watch replay", and the press
+  that goes on does what it shows (`input/2`). The statistics are
+  `Nidhox.Bout.stats/1`'s.
   """
+
+  alias Cauldron2D.GameMaker.World
+  alias Nidhox.Bout.PlayerColour
+  alias Nidhox.Objects.Match
+  alias Nidhox.Screen.Art
 
   @type stats :: %{
           steps: non_neg_integer(),
@@ -11,59 +29,69 @@ defmodule Nidhox.Screen.Results do
           suicides: %{1 => non_neg_integer(), 2 => non_neg_integer()}
         }
 
-  alias Nidhox.Screen.{Art, Menu}
+  @centre 160
+  @time_top 15
+  @winner_at 72
+  @rows_top 130
+  @apart 64
+  @half_apart 32
+  @continue_rise 32
+  @view_height 200
+  @separation 7
+  @white {255, 255, 255}
 
-  @hz 60
-  @winner {160, 40}
-  @time {160, 64}
-  @rows_top 88
-  @row 16
-  @left 96
-  @right 224
-  @label 160
-  @menu_top {160, 130}
-  @colours %{1 => {255, 214, 60}, 2 => {255, 140, 40}}
+  @type choice :: :continue | :replay
 
-  @doc "The results' menu: CONTINUE, WATCH REPLAY, BACK TO MAIN MENU."
-  @spec menu() :: Menu.t()
-  def menu,
+  @doc "What the players did on the results with `choice` shown: `{:go, choice}` or `{:stay, choice}`."
+  @spec input(choice(), %{1 => map(), 2 => map()}) :: {:go, choice()} | {:stay, choice()}
+  def input(choice, players) do
+    pressed = players |> Map.values() |> Enum.flat_map(&MapSet.to_list(&1.pressed))
+
+    cond do
+      Enum.any?([:attack, :start, :jump], &(&1 in pressed)) -> {:go, choice}
+      :up in pressed or :down in pressed -> {:stay, other(choice)}
+      true -> {:stay, choice}
+    end
+  end
+
+  defp label(:continue), do: "continue"
+  defp label(:replay), do: "watch replay"
+
+  defp other(:continue), do: :replay
+  defp other(:replay), do: :continue
+
+  @doc "The GUI items for a bout won by side `winner` with `stats` and `choice` on the bottom line, coloured as `world` colours the sides."
+  @spec items(World.t(), 1 | 2, stats(), choice(), {number(), number()}) :: [map()]
+  def items(%World{} = world, winner, stats, choice, window) do
+    List.flatten([
+      text("time##{Match.time(stats.steps)}", {@centre, @time_top}, @white, window),
+      Art.sprite("sWinner", 0, {@centre, @winner_at}, window, blend: colour(world, winner)),
+      Enum.map([1, 2], &side(world, &1, stats, window)),
+      text(label(choice), {@centre, @view_height - @continue_rise}, @white, window)
+    ])
+  end
+
+  defp side(world, side, stats, window) do
+    sign = if side == 1, do: -1, else: 1
+    middle = @centre + sign * @apart
+    colour = colour(world, side)
+
+    [
+      text("kills##{stats.kills[side]}", {middle - @half_apart, @rows_top}, colour, window),
+      text("suicides##{stats.suicides[side]}", {middle + @half_apart, @rows_top}, colour, window)
+    ]
+  end
+
+  defp text(words, at, colour, window),
     do:
-      Menu.new([{"CONTINUE", :continue}, {"WATCH REPLAY", :replay}, {"BACK TO MAIN MENU", :main}])
-
-  @doc "The GUI items for a bout won by `winner` with `stats`, the results' `menu` under them."
-  @spec items(1 | 2, stats(), Menu.t(), {number(), number()}) :: [map()]
-  def items(winner, stats, %Menu{} = menu, window) do
-    rows = [
-      {"kills", stats.kills[1], stats.kills[2]},
-      {"suicides", stats.suicides[1], stats.suicides[2]}
-    ]
-
-    [
-      Art.shade(window, {0, 0, 0}, 0.6),
-      Art.text("fMenu", "player #{winner} won!", @winner, window,
+      Art.text("fMenu", words, at, window,
         halign: :center,
-        colour: @colours[winner]
-      ),
-      Art.text("fMenu", "time #{clock(stats.steps)}", @time, window, halign: :center),
-      Enum.with_index(rows) |> Enum.map(&row(&1, window)),
-      Menu.items(menu, @menu_top, window)
-    ]
-    |> List.flatten()
-  end
+        colour: colour,
+        separation: @separation
+      )
 
-  defp row({{label, yellow, orange}, index}, window) do
-    y = @rows_top + index * @row
-
-    [
-      Art.text("fMenu", "#{yellow}", {@left, y}, window, halign: :center, colour: @colours[1]),
-      Art.text("fMenu", label, {@label, y}, window, halign: :center),
-      Art.text("fMenu", "#{orange}", {@right, y}, window, halign: :center, colour: @colours[2])
-    ]
-  end
-
-  defp clock(steps) do
-    seconds = div(steps, @hz)
-
-    "#{div(seconds, 60)}:#{seconds |> rem(60) |> Integer.to_string() |> String.pad_leading(2, "0")}"
+  defp colour(world, side) do
+    {colour, _world} = PlayerColour.get(world, nil, side)
+    colour
   end
 end

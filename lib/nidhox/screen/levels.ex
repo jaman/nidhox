@@ -1,49 +1,34 @@
 defmodule Nidhox.Screen.Levels do
   @moduledoc """
-  The level select over `rLevelSelect`, the copy's painted map of every area: the view
-  pans across the map to the selected area, and that area's name plate from the copy
-  (`sCemetery`, `sCastle`, `sMines`, `sClouds`, `sWilds`) stands at the top of the
-  screen.
+  The level select over `rLevelSelect`, the copy's painted map, as the game's
+  `VsLevelSelect` runs it.
 
-  Under the plate are the rows VARIANTS and BEGIN; for a tournament (`new/3` with
-  `:tournament`), PLAYERS (`Nidhox.Tournament.fewest/0` to `most/0`, `players/1`),
-  VARIANTS and START TOURNAMENT. Either side moves between the area and the rows with
-  `:up` and `:down`, changes the area or the players with `:left` and `:right`, wrapping
-  around, chooses with `:start` or `:attack` from any of them, and goes back with
-  `:jump`. Choosing VARIANTS opens the game's VARIANTS menu over the map: every entry of
-  `Nidhox.Rules` with its value, `:up` and `:down` moving, `:start` or `:attack`
-  choosing (`Nidhox.Rules.choose/2`), `:jump` going back to the rows; the rules it
-  leaves are `rules/1`'s. The view's place on the map
-  for each area is `@views`' top-left corner; it moves `@ease` of the way there each
-  step, and `new/2` puts it there at once.
+    * its areas, in order: Clouds (`"Sky"`), Cemetery, Castle, Wilds, Mines; Castle
+      selected at first, every time
+    * `:up` and `:down` from either side move through them, round from the last to the
+      first; `:attack` or `:start` choose the selected area once more than 4 steps have
+      passed; with no move for 720 steps the select gives up for the main menu.
+      Nothing goes back
+    * the view eases 0.1 of the way each step towards the area's point on the map's
+      camera path (path 2), its middle kept 160 from the map's sides and 100 from its
+      top and bottom (`setCameraToSelectedLevel`)
+    * the area's name plate (`sCastle`, `sMines`, `sWilds`, `sClouds`, `sCemetery`)
+      stands on the map at the area's point of the plate path (path 3) (`drawLevelTitle`)
+
+  Each area's point on both paths: Castle 0, Mines 1, Wilds 2, Clouds 3, Cemetery 4.
   """
 
   alias Cauldron2D.GameMaker.World
-  alias Nidhox.{Rules, Tournament}
-  alias Nidhox.Screen.Art
+  alias Nidhox.Bout.Camera
 
-  @enforce_keys [:areas]
-  defstruct [
-    :areas,
-    rows: [:variants, :begin],
-    selected: 0,
-    row: 0,
-    rules: %Rules{},
-    variants: nil,
-    players: 4
-  ]
+  @enforce_keys [:selected]
+  defstruct [:selected, steps: 0, idle: 0]
 
-  @type row :: :players | :variants | :begin | :start
-  @type t :: %__MODULE__{
-          areas: [String.t()],
-          rows: [row()],
-          selected: non_neg_integer(),
-          row: non_neg_integer(),
-          rules: Rules.t(),
-          variants: non_neg_integer() | nil,
-          players: pos_integer()
-        }
+  @type t :: %__MODULE__{selected: String.t(), steps: non_neg_integer(), idle: non_neg_integer()}
 
+  @order ["Sky", "Cemetery", "Castle", "Wilds", "Mines"]
+  @first "Castle"
+  @points %{"Castle" => 0, "Mines" => 1, "Wilds" => 2, "Sky" => 3, "Cemetery" => 4}
   @plates %{
     "Cemetery" => "sCemetery",
     "Castle" => "sCastle",
@@ -51,197 +36,105 @@ defmodule Nidhox.Screen.Levels do
     "Sky" => "sClouds",
     "Wilds" => "sWilds"
   }
-  @views %{
-    "Cemetery" => {0, 40},
-    "Castle" => {220, 110},
-    "Mines" => {470, 200},
-    "Sky" => {420, 0},
-    "Wilds" => {640, 90}
-  }
-  @plate {160, 26}
-  @ease 0.12
-  @rows_top 140
-  @row_spacing 14
-  @chosen {255, 255, 255}
-  @other {150, 150, 150}
-  @variants_heading {160, 18}
-  @variants_top 36
-  @variants_spacing 11
+  @camera_path 2
+  @plate_path 3
+  @ease 0.1
+  @side_margin 160
+  @top_margin 100
+  @wait_steps 4
+  @idle_steps 720
 
-  @doc """
-  A level select over `areas` with `area` selected, or the first when it is not among
-  them, for a `:versus` bout or a `:tournament`.
-  """
-  @spec new([String.t()], String.t() | nil, :versus | :tournament) :: t()
-  def new([_ | _] = areas, area, mode \\ :versus),
-    do: %__MODULE__{
-      areas: areas,
-      rows: rows_for(mode),
-      selected: Enum.find_index(areas, &(&1 == area)) || 0
-    }
+  @doc "A level select with Castle selected."
+  @spec new() :: t()
+  def new, do: %__MODULE__{selected: @first}
 
-  @doc "How many players the tournament is for."
-  @spec players(t()) :: pos_integer()
-  def players(%__MODULE__{players: players}), do: players
+  @doc "The game's name for `area` (`getLevelName`): `\"Clouds\"` for `\"Sky\"`, else the area's own."
+  @spec name(String.t()) :: String.t()
+  def name("Sky"), do: "Clouds"
+  def name(area), do: area
 
-  @doc "The rules the level select's rows set (`Nidhox.Rules`)."
-  @spec rules(t()) :: Rules.t()
-  def rules(%__MODULE__{rules: rules}), do: rules
+  @doc "The area `step` places on from `area` in the level select's order, round from the last to the first."
+  @spec next(String.t(), integer()) :: String.t()
+  def next(area, step) do
+    index = Enum.find_index(@order, &(&1 == area)) || Enum.find_index(@order, &(&1 == @first))
+    Enum.at(@order, Integer.mod(index + step, length(@order)))
+  end
 
   @doc "The selected area."
   @spec selected(t()) :: String.t()
-  def selected(%__MODULE__{areas: areas, selected: index}), do: Enum.at(areas, index)
+  def selected(%__MODULE__{selected: area}), do: area
 
   @doc """
-  What the players did this step: `{:choose, area, side}`, `{:back, side}`, or
-  `{:stay, levels}` with the selection moved if they moved it.
+  What the players did this step: `{:choose, area}`, `:given_up` after 720
+  steps with no move, `{:moved, levels}` or `{:stay, levels}`.
   """
   @spec input(t(), %{1 => map(), 2 => map()}) ::
-          {:choose, String.t(), 1 | 2} | {:back, 1 | 2} | {:stay, t()}
+          {:choose, String.t()} | :given_up | {:moved, t()} | {:stay, t()}
   def input(%__MODULE__{} = levels, players) do
-    case Enum.find_value([1, 2], &pressed(levels, &1, players[&1].pressed)) do
-      nil -> {:stay, levels}
-      outcome -> outcome
+    pressed = players |> Map.values() |> Enum.flat_map(&MapSet.to_list(&1.pressed))
+    levels = %{levels | steps: levels.steps + 1, idle: levels.idle + 1}
+
+    cond do
+      :up in pressed ->
+        {:moved, %{moved(levels, -1) | idle: 0}}
+
+      :down in pressed ->
+        {:moved, %{moved(levels, 1) | idle: 0}}
+
+      levels.steps > @wait_steps and (:attack in pressed or :start in pressed) ->
+        {:choose, levels.selected}
+
+      levels.idle >= @idle_steps ->
+        :given_up
+
+      true ->
+        {:stay, levels}
     end
   end
 
-  @doc """
-  `world` in `rLevelSelect` with its view moved towards the selected area's place on the
-  map, `:ease` moving `@ease` of the way and `:snap` all of it.
-  """
-  @spec pan(t(), World.t(), :ease | :snap) :: World.t()
-  def pan(
-        %__MODULE__{} = levels,
-        %World{views: [%{view: {x, y, width, height}} | _]} = world,
-        mode
-      ) do
-    {to_x, to_y} = Map.fetch!(@views, selected(levels))
-    World.put_view(world, 0, {towards(x, to_x, mode), towards(y, to_y, mode), width, height})
+  @doc "`world` with its view eased towards the selected area (`setCameraToSelectedLevel`)."
+  @spec pan(t(), World.t()) :: World.t()
+  def pan(%__MODULE__{selected: area}, %World{} = world) do
+    {x, y} = point(world, @camera_path, area)
+    {room_width, room_height} = Enum.at(world.data.rooms, world.room).size
+    target_x = clamp(x, @side_margin, room_width - @side_margin)
+    target_y = clamp(y, @top_margin, room_height - @top_margin)
+    centre_x = Camera.center_x(world)
+    centre_y = Camera.center_y(world)
+
+    world
+    |> Camera.put_center_x(centre_x + (target_x - centre_x) * @ease)
+    |> Camera.put_center_y(centre_y + (target_y - centre_y) * @ease)
   end
 
-  @doc "The level select's GUI items: the selected area's name plate and the rows, or the VARIANTS menu."
-  @spec items(t(), {number(), number()}) :: [map()]
-  def items(%__MODULE__{variants: nil} = levels, window),
-    do: [
-      Art.centred(Map.fetch!(@plates, selected(levels)), 0, @plate, window) | rows(levels, window)
-    ]
-
-  def items(%__MODULE__{variants: at, rules: rules}, window) do
-    entries =
-      Rules.entries()
-      |> Enum.with_index()
-      |> Enum.flat_map(fn {entry, index} ->
-        Art.text(
-          "fMenu",
-          Rules.label(rules, entry),
-          {160, @variants_top + index * @variants_spacing},
-          window,
-          halign: :center,
-          colour: if(index == at, do: @chosen, else: @other)
-        )
-      end)
+  @doc "The level select's room items: the selected area's plate on the map (`drawLevelTitle`)."
+  @spec items(t(), World.t()) :: [map()]
+  def items(%__MODULE__{selected: area}, %World{} = world) do
+    sprite = Cauldron2D.GameMaker.Data.index(world.data, :sprites, Map.fetch!(@plates, area))
+    %{origin: origin} = World.sprite(world, sprite)
 
     [
-      Art.shade(window, {0, 0, 0}, 0.75)
-      | Art.text("fMenu", "VARIANTS", @variants_heading, window, halign: :center)
-    ] ++
-      entries
+      %{
+        picture: {:sprite, sprite, 0},
+        position: point(world, @plate_path, area),
+        origin: origin,
+        depth: -1_000_000
+      }
+    ]
   end
 
-  defp towards(_from, to, :snap), do: to
-  defp towards(from, to, :ease), do: from + (to - from) * @ease
+  defp moved(%__MODULE__{selected: area} = levels, step),
+    do: %{levels | selected: next(area, step)}
 
-  defp pressed(%__MODULE__{variants: at} = levels, _side, pressed) when at != nil do
-    last = length(Rules.entries()) - 1
+  defp point(world, path, area) do
+    {x, y, _speed} =
+      world.data.paths
+      |> Enum.at(path)
+      |> Map.fetch!(:points)
+      |> Enum.at(Map.fetch!(@points, area))
 
-    cond do
-      :start in pressed or :attack in pressed ->
-        {:stay, %{levels | rules: Rules.choose(levels.rules, Enum.at(Rules.entries(), at))}}
-
-      :jump in pressed ->
-        {:stay, %{levels | variants: nil}}
-
-      :up in pressed ->
-        {:stay, %{levels | variants: max(at - 1, 0)}}
-
-      :down in pressed ->
-        {:stay, %{levels | variants: min(at + 1, last)}}
-
-      true ->
-        nil
-    end
+    {x, y}
   end
 
-  defp pressed(levels, side, pressed) do
-    cond do
-      (:start in pressed or :attack in pressed) and row(levels) == :variants ->
-        {:stay, %{levels | variants: 0}}
-
-      :start in pressed or :attack in pressed ->
-        {:choose, selected(levels), side}
-
-      :jump in pressed ->
-        {:back, side}
-
-      :up in pressed ->
-        {:stay, %{levels | row: max(levels.row - 1, 0)}}
-
-      :down in pressed ->
-        {:stay, %{levels | row: min(levels.row + 1, length(levels.rows))}}
-
-      :left in pressed ->
-        {:stay, change(levels, -1)}
-
-      :right in pressed ->
-        {:stay, change(levels, 1)}
-
-      true ->
-        nil
-    end
-  end
-
-  defp rows_for(:versus), do: [:variants, :begin]
-  defp rows_for(:tournament), do: [:players, :variants, :start]
-
-  defp row(%__MODULE__{row: 0}), do: :area
-  defp row(%__MODULE__{rows: rows, row: row}), do: Enum.at(rows, row - 1)
-
-  defp change(%__MODULE__{row: 0} = levels, step), do: move(levels, step)
-
-  defp change(levels, step), do: change_row(row(levels), levels, step)
-
-  defp change_row(:players, %__MODULE__{players: players} = levels, step) do
-    span = Tournament.most() - Tournament.fewest() + 1
-
-    %{
-      levels
-      | players: Tournament.fewest() + Integer.mod(players - Tournament.fewest() + step, span)
-    }
-  end
-
-  defp change_row(_row, levels, _step), do: levels
-
-  defp rows(%__MODULE__{rows: rows} = levels, window) do
-    rows
-    |> Enum.map(&label(&1, levels))
-    |> Enum.with_index(1)
-    |> Enum.flat_map(fn {words, row} ->
-      colour = if row == levels.row, do: @chosen, else: @other
-
-      Art.text("fMenu", words, {160, @rows_top + (row - 1) * @row_spacing}, window,
-        halign: :center,
-        colour: colour
-      )
-    end)
-  end
-
-  defp label(:players, levels), do: "PLAYERS: #{levels.players}"
-
-  defp label(:variants, _levels), do: "VARIANTS"
-
-  defp label(:begin, _levels), do: "BEGIN"
-  defp label(:start, _levels), do: "START TOURNAMENT"
-
-  defp move(%__MODULE__{areas: areas, selected: selected} = levels, step),
-    do: %{levels | selected: Integer.mod(selected + step, length(areas))}
+  defp clamp(value, low, high), do: value |> max(low) |> min(high)
 end

@@ -93,14 +93,17 @@ defmodule Nidhox.Screen.Art do
   @doc """
   `words` in the copy's font `font` at `{x, y}`, laid out as
   `Cauldron2D.GameMaker.Text.items/5` lays them out with `opts`, `:wrap` and
-  `:separation` in view pixels.
+  `:separation` in view pixels and `:scale` on top of the window's.
   """
   @spec text(String.t(), String.t(), {number(), number()}, {number(), number()}, keyword()) ::
           [map()]
   def text(font, words, {x, y}, window, opts \\ []) do
     zoom = zoom(window)
 
-    opts = opts |> Keyword.put(:scale, {zoom, zoom}) |> Keyword.put_new(:depth, 0)
+    {scale_x, scale_y} = Keyword.get(opts, :scale, {1, 1})
+
+    opts =
+      opts |> Keyword.put(:scale, {scale_x * zoom, scale_y * zoom}) |> Keyword.put_new(:depth, 0)
 
     Text.items(Assets.get().data, font, words, {x * zoom, y * zoom}, opts)
   end

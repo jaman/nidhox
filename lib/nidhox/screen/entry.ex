@@ -89,13 +89,26 @@ defmodule Nidhox.Screen.Entry do
 
   defp pressed(entry, side, pressed) do
     cond do
-      :start in pressed or :attack in pressed -> {:done, String.replace(text(entry), " ", ""), side}
-      :jump in pressed -> {:back, side}
-      :up in pressed -> {:stay, turn(entry, 1)}
-      :down in pressed -> {:stay, turn(entry, -1)}
-      :left in pressed -> {:stay, %{entry | cursor: max(entry.cursor - 1, 0)}}
-      :right in pressed -> {:stay, forward(entry)}
-      true -> nil
+      :start in pressed or :attack in pressed ->
+        {:done, String.replace(text(entry), " ", ""), side}
+
+      :jump in pressed ->
+        {:back, side}
+
+      :up in pressed ->
+        {:stay, turn(entry, 1)}
+
+      :down in pressed ->
+        {:stay, turn(entry, -1)}
+
+      :left in pressed ->
+        {:stay, %{entry | cursor: max(entry.cursor - 1, 0)}}
+
+      :right in pressed ->
+        {:stay, forward(entry)}
+
+      true ->
+        nil
     end
   end
 

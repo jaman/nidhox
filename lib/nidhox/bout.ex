@@ -22,7 +22,7 @@ defmodule Nidhox.Bout do
   alias Nidhox.Rules
 
   @levels %{"Castle" => 20, "Mines" => 21, "Sky" => 22, "Wilds" => 23, "Cemetery" => 25}
-  @flows %{versus: 4, online: 4, tournament: 3, arcade: 2}
+  @flows %{versus: 4, online: 4, tournament: 3, arcade: 2, demo: 1}
 
   @doc "The world with a match begun in area `area` under `rules`, for the screens' `mode`."
   @spec start(World.t(), String.t(), Rules.t(), atom()) :: World.t()

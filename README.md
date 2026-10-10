@@ -36,35 +36,18 @@ The first controller to send anything plays side 1, the second side 2.
 ## Modes
 
 NidhOX opens on the logos, then the title. Press `Enter` (or attack) to reach the
-menu:
+menu. The menus turn like a wheel under the logo, the selected line in the middle;
+up and down turn them, `Enter` or attack chooses, and jump goes back (on the main menu,
+to **Quit to desktop**).
 
-- **Single player** — sixteen bouts against the computer across the Mines, Sky, Wilds
-  and Castle, each against a different opponent and harder as you go. The map shows
-  your run and its time; press attack or start to fight the next bout. Lose and you
-  fight that opponent again; win the last and the game is complete, with your time.
-- **Challenge** — you against a computer opponent that gets harder each time you kill
-  it. Every move that lands scores its worth: lunge, snap, kick, punch, sweep, guard,
-  parry, throw and dodge. A move's worth halves each time you use it and climbs back
-  while you use others, so vary them. Dying ends the run; your best score is shown
-  along the bottom. `Enter` pauses.
 - **Multiplayer**
-  - **Offline versus**: two players at one keyboard, or a controller each, in the area
-    chosen on the level select (left and right pick it). Under the area: **Variants**
-    and **Begin**. **Variants** lists the game's own: **Time limit** (none, or 3:00 to
-    9:30 in half minutes; when it runs out, the bout goes on in the area's sudden death
-    room, where the first kill wins), then divekicks, throws, no swords, throws only,
-    baby mode, low gravity, sudden death only, skippy mode, turbo, slow, spine swords,
-    boomerang swords and trails, each on or off, as many at once as you like. Attack
-    or start changes the one selected; jump goes back.
-  - **Tournament**: 3 to 8 players taking turns at the two sides, double elimination.
-    Set **Players**, the area and the variants, then **Start tournament**.
-    Between matches the ladder shows every match so far and who fights next (yellow
-    against orange); the last player standing is the champion.
+  - **Offline versus**: two players at one keyboard, or a controller each. The level
+    select pans across the map; up and down pick the area, `Enter` or attack starts the
+    bout. Left alone for twelve seconds, it goes back to the main menu.
   - **Online versus**: one machine hosts and another joins it; both play in the
     host's game.
     - **Host** shows this machine's address and a join code. Tell both to the player
-      joining. Hosting stops when you go back from the level select or to the menus
-      before it.
+      joining. Hosting stops when you go back to the menus before it.
     - **Join** lists the hosts on your local network; pick one and type its code.
     - **Set IP** types a host's address (it starts with your own network's part),
       then its code.
@@ -77,20 +60,37 @@ menu:
     to the player you are playing with. On a local network this needs nothing more.
     Across the internet, the host starts with a fixed port (`mix nidhox --port 9200`)
     and opens it and port 4369 to the joining machine; the traffic is not encrypted.
-- **How to play** — the game's own lessons, one at a time, with an orange dummy.
+  - **Variants**: the game's own. **Time limit** (none, or 3:00 to 9:30 in half
+    minutes; when it runs out, the bout goes on in the area's sudden death room, where
+    the first kill wins), then divekicks, throws, no swords, throws only, baby mode,
+    low gravity, sudden death only, skippy mode, turbo, slow, spine swords, boomerang
+    swords and trails, each on or off, as many at once as you like. Attack or start
+    changes the one selected.
+- **Tournament** — 3 to 8 players taking turns at the two sides, double elimination.
+  Set **Players** and the **Map** with left and right, and the **Variants**, then
+  **Start tournament**. Between matches the ladder shows every match so far and who
+  fights next (yellow against orange); the last player standing is the champion.
 - **Options** — **Controls** to remap each player's keys, flashing and persistent
   blood on or off, and music and sound effect sliders (left and right; the effects
   level scales the music too, as in the game). They are kept in your settings,
   `~/.config/nidhox/<name>.settings`. `Esc` opens them during play as well.
 - **Credits** — from your copy's `credits.txt`.
 - **Quit to desktop**
+- **How to play** — the game's own lessons, one at a time, with an orange dummy.
+- **Single player** — sixteen bouts against the computer across the Mines, Sky, Wilds
+  and Castle, each against a different opponent and harder as you go. The map shows
+  your run and its time; press attack or start to fight the next bout. Lose and you
+  fight that opponent again; win the last and the game is complete, with your time.
+- **Challenge** — you against a computer opponent that gets harder each time you kill
+  it. Every move that lands scores its worth: lunge, snap, kick, punch, sweep, guard,
+  parry, throw and dodge. A move's worth halves each time you use it and climbs back
+  while you use others, so vary them. Dying ends the run; your best score is shown
+  along the bottom. `Enter` pauses.
 
-On the menus, up and down move, `Enter` or attack chooses, and jump goes back. `Enter`
-during a bout pauses it: unpause, change level (versus), or quit to the title. After
-a bout, the match's statistics (its time, and each side's kills and suicides), then
-**Continue**, **Watch replay** (the bout again; `Enter` skips it) or **Back to main
-menu**. Every
-bout's result is kept, per player, in `~/.local/share/nidhox/ledger.dets`.
+`Enter` during a bout pauses it: unpause, change level (versus), or quit to the title.
+After a bout come its time, the winner, and each side's kills and suicides; any press
+goes on to the level select. Every bout's result is kept, per player, in
+`~/.local/share/nidhox/ledger.dets`.
 
 ## How it plays
 

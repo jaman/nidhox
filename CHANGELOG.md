@@ -83,6 +83,16 @@
 
 ### Changed
 
+- The menus are the game's own: one ring of choices turning under the logo
+  (`Nidhox.Screen.MenuList`), drawn and sounded as the game's `MainMenu` draws them, its
+  lists in the game's order, every one in the title room, VARIANTS under MULTIPLAYER and
+  TOURNAMENT, and TOURNAMENT on the main menu with its PLAYERS and MAP. OPTIONS has the
+  same look.
+- The level select is the game's: up and down through the areas, the area's plate on
+  the map, back to the main menu when left alone.
+- The results are the game's match statistics, and any press goes on to the level
+  select. WATCH REPLAY and BACK TO MAIN MENU are gone, as the game has neither.
+
 - Side 2 plays the game's default keys: `M` attacks, `N` jumps, `Enter` starts.
 
 ### Fixed
