@@ -39,7 +39,9 @@ defmodule Nidhox.Flow do
     * `:bout` — the match (`Nidhox.Bout`), run by the game's own objects from its
       faceoff on under the rules chosen on the level select (`Nidhox.Rules`), until its
       `Match` is gone; `:start` pauses it
-    * `:paused` — `Nidhox.Screen.Pause`; UNPAUSE GAME goes back to the bout
+    * `:paused` — `Nidhox.Screen.Pause`; UNPAUSE GAME goes back to the bout, CHANGE LEVEL
+      ends the match (its music with it) for the level select, and QUIT TO TITLE SCREEN
+      ends the match and any tournament for the title
     * `:results` — `Nidhox.Screen.Results` over `rMatchStats`: CONTINUE goes to the main
       menu; WATCH REPLAY; BACK TO MAIN MENU. In a single player run only CONTINUE, and
       the run's own step moves on at a press
@@ -262,8 +264,8 @@ defmodule Nidhox.Flow do
   def step(%{screen: :paused} = state, players) do
     case Pause.input(state.menu, players) do
       {:choose, :unpause} -> %{state | screen: resumed(state), menu: nil}
-      {:choose, :change_level} -> levels(state)
-      {:choose, :title} -> title(state)
+      {:choose, :change_level} -> state |> killed(["Match"]) |> levels()
+      {:choose, :title} -> state |> killed(["Match", "Tournament"]) |> title()
       {:stay, menu} -> %{state | menu: menu}
     end
   end
@@ -551,6 +553,9 @@ defmodule Nidhox.Flow do
 
   defp in_room?(%World{room: room} = world, name),
     do: room == Data.index(world.data, :rooms, name)
+
+  defp killed(state, names),
+    do: %{state | world: Enum.reduce(names, state.world, &kill_all(&2, &1))}
 
   defp kill_all(world, name),
     do: world |> Gml.all(name) |> Enum.reduce(world, &World.destroy(&2, &1))

@@ -18,11 +18,16 @@ defmodule Nidhox.Objects.LayeredMusic do
       room_width)²` in 7, × 0.25, nothing without a fencer; `counter` counts on,
       `maximumVol` and `dipLevels` move towards 1 (by 0.05 and 0.015 of the way). Then
       each layer's `volumes` moves 0.05 of the way to `mixer × fade × maximumVol` and the
-      layer plays at `volumes × System.musicVol`
+      layer plays at `volumes × System.musicVol` (`audio_sound_gain`)
+    * destroy and game end: every layer stopped
 
-  `dip/3` is `dipMusic`; `levels/1` the level each layer plays at.
+  Each layer is the copy's recording, looping at the client's music level
+  (`Cauldron2D.Audio.keyed/4`'s `music: true`), all started together.
+
+  `dip/3` is `dipMusic`.
   """
 
+  alias Cauldron2D.Audio
   alias Cauldron2D.GameMaker.{Instance, World}
   alias Nidhox.Bout.Camera
   alias Nidhox.Gml
@@ -53,7 +58,9 @@ defmodule Nidhox.Objects.LayeredMusic do
     [
       {"gml_Object_LayeredMusic_Create_0", &start/3},
       {"gml_Object_LayeredMusic_Other_4", &begin/3},
-      {"gml_Object_LayeredMusic_Step_2", &step/3}
+      {"gml_Object_LayeredMusic_Step_2", &step/3},
+      {"gml_Object_LayeredMusic_Destroy_0", &stop/3},
+      {"gml_Object_LayeredMusic_Other_3", &stop/3}
     ]
   end
 
@@ -68,27 +75,11 @@ defmodule Nidhox.Objects.LayeredMusic do
     world
     |> Gml.all("LayeredMusic")
     |> Enum.reduce(world, fn music, world ->
-      dip_levels = if add, do: Gml.clamp(Gml.var(world, music, :dipLevels, 1) + amount, 0, 1), else: amount
+      dip_levels =
+        if add, do: Gml.clamp(Gml.var(world, music, :dipLevels, 1) + amount, 0, 1), else: amount
+
       Gml.put(world, music, %{dipLevels: dip_levels})
     end)
-  end
-
-  @doc """
-  The level each layer of the first playing `LayeredMusic` plays at, by the sound's
-  name (`volumes × System.musicVol`); `nil` without one.
-  """
-  @spec levels(World.t()) :: %{String.t() => float()} | nil
-  def levels(%World{} = world) do
-    with music when music != nil <- Gml.first(world, "LayeredMusic"),
-         true <- Gml.truthy?(Gml.var(world, music, :playingMusic)) do
-      volume = System.get(world, :musicVol, 1)
-
-      world
-      |> Gml.var(music, :volumes, %{})
-      |> Map.new(fn {sound, level} -> {sound_name(world, sound), level * volume} end)
-    else
-      _none -> nil
-    end
   end
 
   defp start(world, self, _other) do
@@ -111,15 +102,26 @@ defmodule Nidhox.Objects.LayeredMusic do
     if Gml.truthy?(Gml.var(world, self, :playingMusic)) do
       world
     else
-      silent = world |> Gml.var(self, :layers, []) |> Map.new(&{&1, 0})
-      Gml.put(world, self, %{playingMusic: 1, mixer: silent, volumes: silent})
+      layers = Gml.var(world, self, :layers, [])
+      silent = Map.new(layers, &{&1, 0})
+
+      layers
+      |> Enum.reduce(world, fn layer, world ->
+        recording = {:recording, sound_name(world, layer)}
+
+        World.emit(
+          world,
+          Audio.keyed(key(self, layer), recording, {:level, 0.0, 0.0}, loop: true, music: true)
+        )
+      end)
+      |> Gml.put(self, %{playingMusic: 1, mixer: silent, volumes: silent, gains: silent})
     end
   end
 
   defp step(world, self, _other) do
     if Gml.truthy?(Gml.var(world, self, :playingMusic)) do
       {world, fade} = world |> dip_by_fencers() |> unpaused(self)
-      apply_volumes(world, self, fade)
+      world |> apply_volumes(self, fade) |> sounded(self)
     else
       world
     end
@@ -127,16 +129,35 @@ defmodule Nidhox.Objects.LayeredMusic do
 
   defp dip_by_fencers(world) do
     case length(Gml.all(world, "Man")) do
-      2 -> dip(world, @pair_dip + Gml.clamp(abs(x_of(world, "OrangePlayer") - x_of(world, "YellowPlayer")) / @apart, 0, 1), false)
-      1 -> dip(world, @lone_dip, false)
-      0 -> dip(world, @empty_dip, false)
-      _more -> world
+      2 ->
+        dip(
+          world,
+          @pair_dip +
+            Gml.clamp(
+              abs(x_of(world, "OrangePlayer") - x_of(world, "YellowPlayer")) / @apart,
+              0,
+              1
+            ),
+          false
+        )
+
+      1 ->
+        dip(world, @lone_dip, false)
+
+      0 ->
+        dip(world, @empty_dip, false)
+
+      _more ->
+        world
     end
   end
 
   defp unpaused(world, self) do
     speed = Gml.clamp(man_velocity(world), 0, 1)
-    world = Gml.put(world, self, %{movementCounter: Gml.var(world, self, :movementCounter) + speed})
+
+    world =
+      Gml.put(world, self, %{movementCounter: Gml.var(world, self, :movementCounter) + speed})
+
     world = if speed < @still, do: Gml.put(world, self, %{movementCounter: 0}), else: world
     drums = Gml.var(world, self, :DRUMS)
     drums = if speed < drums, do: Gml.clamp(drums - @drum_fall, 0, 1), else: speed
@@ -193,14 +214,46 @@ defmodule Nidhox.Objects.LayeredMusic do
     Gml.put(world, self, %{volumes: volumes})
   end
 
+  defp sounded(world, self) do
+    music_volume = System.get(world, :musicVol, 1)
+    gains = Gml.var(world, self, :gains, %{})
+
+    {world, gains} =
+      world
+      |> Gml.var(self, :volumes, %{})
+      |> Enum.reduce({world, gains}, fn {layer, volume}, {world, gains} ->
+        gain = volume * music_volume
+
+        if Map.get(gains, layer) == gain,
+          do: {world, gains},
+          else:
+            {World.emit(world, Audio.moved(key(self, layer), {:level, gain, 0.0})),
+             Map.put(gains, layer, gain)}
+      end)
+
+    Gml.put(world, self, %{gains: gains})
+  end
+
+  defp stop(world, self, _other) do
+    world
+    |> Gml.var(self, :layers, [])
+    |> Enum.reduce(world, &World.emit(&2, Audio.stopped(key(self, &1))))
+  end
+
+  defp key(self, layer), do: {:layered_music, self, layer}
+
   defp man_velocity(world) do
     single = Gml.eq?(System.get(world, :flow), 2)
 
     world
     |> Gml.all("Man")
     |> Enum.map(&World.fetch(world, &1))
-    |> Enum.filter(fn %Instance{vars: vars} -> not single or Gml.eq?(Map.get(vars, :playerIndex, 0), 1) end)
-    |> Enum.reduce(0, fn %Instance{vars: vars}, total -> total + abs(Map.get(vars, :hspd, 0)) + abs(Map.get(vars, :vspd, 0)) end)
+    |> Enum.filter(fn %Instance{vars: vars} ->
+      not single or Gml.eq?(Map.get(vars, :playerIndex, 0), 1)
+    end)
+    |> Enum.reduce(0, fn %Instance{vars: vars}, total ->
+      total + abs(Map.get(vars, :hspd, 0)) + abs(Map.get(vars, :vspd, 0))
+    end)
   end
 
   defp x_of(world, name) do

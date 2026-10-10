@@ -25,8 +25,7 @@ defmodule Nidhox.Game do
 
   A view is the frame — `items` (room pixels), `gui` (the room's own, window pixels),
   `overlay` (the screen's, window pixels, over `gui`), `surfaces` (the rasters
-  `{:surface, id}` pictures name), `music` (each playing music layer's level,
-  `Nidhox.Objects.LayeredMusic.levels/1`), `background`,
+  `{:surface, id}` pictures name), `background`,
   `view`, `window`, `screen`, `area` — with the viewer's `side` and `ask`, what the game
   asks of the viewer's client (`Nidhox.Flow.ask/3`), or `nil`.
 
@@ -44,7 +43,7 @@ defmodule Nidhox.Game do
   alias Cauldron2D.GameMaker.Draw
   alias Cauldron2D.GameMaker.World
   alias Nidhox.{Assets, Flow, Online, Screen}
-  alias Nidhox.Objects.{LayeredMusic, System}
+  alias Nidhox.Objects.System
 
   @sides [1, 2]
 
@@ -270,8 +269,7 @@ defmodule Nidhox.Game do
           window: window,
           screen: state.screen,
           area: state.area,
-          surfaces: world.surfaces,
-          music: LayeredMusic.levels(world)
+          surfaces: world.surfaces
         }
     }
   end

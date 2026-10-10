@@ -15,7 +15,8 @@ defmodule Nidhox.Objects.Wind do
     * draw: the canvas added at the instance's place, blend and alpha
     * destroy, room end and game end: its user event 15, the canvas and copy freed
 
-  The title's menu (`MainMenu`) makes one as it starts, at alpha `@title_alpha`.
+  The title's menu (`MainMenu`, `Nidhox.Objects.MainMenu`) makes one as it starts, at
+  alpha 0.1.
 
   The random draws come from the world's generator in that order.
   """
@@ -32,7 +33,6 @@ defmodule Nidhox.Objects.Wind do
   @low_passes 5
   @low_detail 9001
   @follow 0.8
-  @title_alpha 0.1
 
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
@@ -42,10 +42,12 @@ defmodule Nidhox.Objects.Wind do
       {"gml_Object_WindSurface_Step_0", &churn/3},
       {"gml_Object_WindSurface_Draw_0", &draw/3},
       {"gml_Object_WindSurface_Other_25", &free/3},
-      {"gml_Object_WindSurface_Destroy_0", fn world, self, _other -> World.perform(world, self, :other, 25) end},
-      {"gml_Object_WindSurface_Other_5", fn world, self, _other -> World.perform(world, self, :other, 25) end},
-      {"gml_Object_WindSurface_Other_3", fn world, self, _other -> World.perform(world, self, :other, 25) end},
-      {"gml_Object_MainMenu_Create_0", fn world, _self, _other -> create(world, @title_alpha) end}
+      {"gml_Object_WindSurface_Destroy_0",
+       fn world, self, _other -> World.perform(world, self, :other, 25) end},
+      {"gml_Object_WindSurface_Other_5",
+       fn world, self, _other -> World.perform(world, self, :other, 25) end},
+      {"gml_Object_WindSurface_Other_3",
+       fn world, self, _other -> World.perform(world, self, :other, 25) end}
     ]
   end
 
@@ -149,7 +151,9 @@ defmodule Nidhox.Objects.Wind do
 
     [Map.get(vars, :canvas), Map.get(vars, :copy)]
     |> Enum.reduce(world, fn surface, world ->
-      if surface != nil and Surfaces.exists?(world, surface), do: Surfaces.free(world, surface), else: world
+      if surface != nil and Surfaces.exists?(world, surface),
+        do: Surfaces.free(world, surface),
+        else: world
     end)
   end
 

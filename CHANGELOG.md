@@ -87,6 +87,14 @@
 
 ### Fixed
 
+- Music plays as the game plays it, from the game's own objects: the title's track
+  (`MainMenuMusic`) only in the title room, three seconds after entering it, chosen by
+  the level last played (the castle's at first), and each area's layers with its
+  match, stopped when the match ends. The recordings play in stereo from their start,
+  instead of folded to mono and played as a synthesizer's voice, and only the music
+  in use is kept in memory.
+- Quitting a bout from its pause, to the title or to change level, ends its match.
+
 - A fencer's death has its computer player choose its next personality, as the game's
   `Man` destroy event does.
 

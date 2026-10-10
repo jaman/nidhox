@@ -11,6 +11,9 @@ defmodule Nidhox.Client do
   picture `{:part, key, {left, top, width, height}}` shows that part of picture `key`, and
   a tile layer's picture is drawn once a room and kept (`Nidhox.TileLayerCache`).
 
+  The game's music is the world's own sound events — the title's `MainMenuMusic`, the
+  match's `LayeredMusic`, the tutorial's — so the client cues no music of its own.
+
   The world is this machine's NidhOX world, or with the mount prop `source:
   {:node, node}` the NidhOX world of that connected node (ONLINE VERSUS's joining,
   `Nidhox.Online`).
@@ -21,7 +24,7 @@ defmodule Nidhox.Client do
   @atlas :nidhox
   alias Cauldron2D.DrawList
   alias Cauldron2D.GameMaker.TileLayers
-  alias Nidhox.{Assets, Controls, Music, Options, TileLayerCache}
+  alias Nidhox.{Assets, Controls, Options, TileLayerCache}
 
   @impl true
   def title, do: %{name: "NidhOX", tagline: "Nidhogg Open-source eXperience"}
@@ -92,12 +95,12 @@ defmodule Nidhox.Client do
   def sounds, do: &Nidhox.Sounds.voice/1
 
   @impl true
-  def music, do: Music.specs()
+  def recordings, do: &Nidhox.Sounds.recording/1
 
   @impl true
-  def cue(%{area: area, screen: screen} = frame, _client_screen),
-    do: Music.cue(area, screen, Map.get(frame, :music))
+  def music, do: []
 
+  @impl true
   def cue(_frame, _client_screen), do: nil
 
   @impl true
