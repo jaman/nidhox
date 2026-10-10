@@ -55,6 +55,17 @@ defmodule Nidhox.Objects.Ear do
     end
   end
 
+  @doc "The world with following sound `key` stopped and no longer kept (`audio_stop_sound`)."
+  @spec detach(World.t(), term()) :: World.t()
+  def detach(%World{} = world, key) do
+    world = World.emit(world, Audio.stopped(key))
+
+    case Gml.first(world, "Ear") do
+      nil -> world
+      ear -> Gml.put(world, ear, %{specialSounds: Enum.reject(Gml.var(world, ear, :specialSounds, []), &match?({^key, _owner}, &1))})
+    end
+  end
+
   defp follow(world, self, _other) do
     world = World.update(world, self, &%{&1 | x: Camera.center_x(world), y: Camera.center_y(world)})
     {kept, world} = Enum.flat_map_reduce(Gml.var(world, self, :specialSounds, []), world, &keep_following/2)

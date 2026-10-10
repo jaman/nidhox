@@ -38,8 +38,10 @@ The first controller to send anything plays side 1, the second side 2.
 NidhOX opens on the logos, then the title. Press `Enter` (or attack) to reach the
 menu:
 
-- **Single player** — you against the computer through every area in turn: Cemetery,
-  Castle, Mines, Sky, Wilds. A loss ends the run.
+- **Single player** — sixteen bouts against the computer across the Mines, Sky, Wilds
+  and Castle, each against a different opponent and harder as you go. The map shows
+  your run and its time; press attack or start to fight the next bout. Lose and you
+  fight that opponent again; win the last and the game is complete, with your time.
 - **Multiplayer**
   - **Offline versus**: two players at one keyboard, or a controller each, in the area
     chosen on the level select (left and right pick it). Under the area: **Variants**

@@ -20,8 +20,8 @@ defmodule Nidhox.Game do
 
   A view is the frame — `items` (room pixels), `gui` (the room's own, window pixels),
   `overlay` (the screen's, window pixels, over `gui`), `surfaces` (the rasters
-  `{:surface, id}` pictures name), `progress` (`Nidhox.Bout.progress/1`
-  of the bout, `0.0` with none), `background`,
+  `{:surface, id}` pictures name), `music` (each playing music layer's level,
+  `Nidhox.Objects.LayeredMusic.levels/1`), `background`,
   `view`, `window`, `screen`, `area` — with the viewer's `side` and `ask`, what the game
   asks of the viewer's client (`Nidhox.Flow.ask/3`), or `nil`.
 
@@ -35,11 +35,10 @@ defmodule Nidhox.Game do
   alias Cauldron2D.GameMaker.Data
   alias Cauldron2D.GameMaker.Draw
   alias Cauldron2D.GameMaker.World
-  alias Nidhox.{Assets, Bout, Flow, Online, Screen}
-  alias Nidhox.Objects.{Ambience, System}
+  alias Nidhox.{Assets, Flow, Online, Screen}
+  alias Nidhox.Objects.{LayeredMusic, System}
 
   @sides [1, 2]
-  @bouts [:bout, :paused, :replay]
 
   @impl true
   def init(opts) do
@@ -58,7 +57,6 @@ defmodule Nidhox.Game do
       levels: nil,
       mode: nil,
       area: Keyword.get(opts, :area) || "Cemetery",
-      arcade: 0,
       winner: nil,
       stats: nil,
       recording: nil,
@@ -132,7 +130,6 @@ defmodule Nidhox.Game do
     |> Online.pending()
     |> Flow.step(players)
     |> Online.perform()
-    |> then(&%{&1 | world: Ambience.settle(&1.world)})
     |> present()
   end
 
@@ -225,7 +222,7 @@ defmodule Nidhox.Game do
           screen: state.screen,
           area: state.area,
           surfaces: world.surfaces,
-          progress: if(state.screen in @bouts, do: Bout.progress(world), else: 0.0)
+          music: LayeredMusic.levels(world)
         }
     }
   end

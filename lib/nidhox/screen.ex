@@ -35,7 +35,7 @@ defmodule Nidhox.Screen do
   def layer(%{screen: :champion} = state, window),
     do: {[], Ladder.champion(state.tournament.bracket.champion, window)}
 
-  def layer(%{screen: screen}, _window) when screen in [:bout, :tutorial], do: {[], []}
+  def layer(%{screen: screen}, _window) when screen in [:bout, :tutorial, :arcade, :arcade_complete], do: {[], []}
 
   def layer(%{screen: :paused} = state, window), do: {[], Pause.items(state.menu, window)}
 

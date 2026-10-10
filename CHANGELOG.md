@@ -16,8 +16,9 @@
   copy's `credits.txt`, the level select panning across the copy's map, the pause, and
   the results — CONTINUE, WATCH REPLAY (the bout again from its recorded inputs, with
   SKIP THIS), BACK TO MAIN MENU.
-- SINGLE PLAYER through every area against the computer; OFFLINE VERSUS in the area
-  chosen; TOURNAMENT for 3 to 8 players at one machine (`Nidhox.Tournament`,
+- SINGLE PLAYER as the game's own run (`Nidhox.Objects.Arcade`): sixteen levels on its
+  progress map, each an area and a computer personality growing harder, "GAME
+  COMPLETE" with the time; OFFLINE VERSUS in the area chosen; TOURNAMENT for 3 to 8 players at one machine (`Nidhox.Tournament`,
   `Nidhox.Screen.Ladder`); ONLINE VERSUS host-as-server over the local network
   (`Nidhox.Online`).
 - The level select's VARIANTS (NO SWORDS, THROWS ONLY, SUDDEN DEATH ONLY, LOW GRAVITY,
@@ -47,11 +48,22 @@
   surface, the title's colour, sway and grass, grass that flattens and rises, doors and
   the castle's facades, the chandelier, conveyors, smashers, the mines' camera, cloud
   platforms and puffs, spawn areas, water.
-- The rooms' standing sounds: wind, fire, the mines' drone, the waterfall and its edges
+- The rooms' standing sounds from the game's code: wind, fire, the mines' drone, the
+  waterfall and its edges, each room starting and stopping its own
   (`Nidhox.Objects.Ambience`); every sound of the copy decoded ahead of play
   (`Nidhox.Sounds`).
-- Music from the player's copy: each area's title track on the title, menus and
-  results, and its layers during the bout (`Nidhox.Music`).
+- More scenery from the game's code: the clouds' sun, tint, defensive walls and "Final
+  Screen" text; the castle's burning sky, swinging lamps, chandeliers with their creak
+  and the sudden death backdrop, crumbling stone; the mines' screws, smoke and worms
+  with their tunnels; the wilds' rain, leaves, waterfall spray and warping foliage;
+  windows that shatter; candle and torch flames; the crowd in the end rooms' stands and
+  its cheer; the fencers' faint outlines; the placed instances' creation code
+  (`Nidhox.Objects.InstanceCodes`) and the rooms' backgrounds changed by code
+  (`Nidhox.Backgrounds`).
+- Music from the player's copy as the game mixes it: the area's track the game's
+  `MainMenuMusic` chooses on the title, menus and results, and during the bout its
+  layers mixed by `LayeredMusic` (`Nidhox.Objects.LayeredMusic`, `Nidhox.Music.Mixer`)
+  by the fencers' speed, each area's own rule and the end rooms' fade.
 - Each bout's result kept in NidhOX's ledger through `Cauldron2D.Worlds` and
   `Cauldron2D.Ledger.Recorder`.
 - `PARITY.md`, the list of what still differs from Nidhogg, and `tools/yyc`, which reads

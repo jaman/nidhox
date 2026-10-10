@@ -1,117 +1,101 @@
 defmodule Nidhox.Objects.Ambience do
   @moduledoc """
-  The rooms' standing sounds, from the objects the copy places for them, each sounding
-  the copy's own recording (`{:recording, name}` in `Nidhox.Sounds`) round and round
-  under the key `{:ambience, object}` while the room has an instance of the object:
+  The rooms' standing sounds, as the game's code plays them, each looping
+  (`playSoundAtLoopEffect(sound, x, y, 1, …)`):
 
-  | object | recording | where it sounds |
-  | --- | --- | --- |
-  | `CenterRoomNoises` | `sfxWind` | everywhere, at `@wind` |
-  | `CenterRoomNoises` | `sfxEdgeOfCenter` | twice: `@edge` pixels in from each end of the room, at the camera's middle height |
-  | `BGFireRoomNoise` | `sfxFireBackground` | everywhere, at `@fire` |
-  | `DroneSounds` | `sfxDrone` | everywhere, at `@drone` |
-  | `WaterfallSounds` | `sfxWaterfall` | at the instance |
-  | `WaterfallRoomEdges` | `sndWaterfallEdge` | at the instance |
+    * `CenterRoomNoises` create: the edge of the centre (sound 94) 160 pixels in from
+      each end of the room at the camera's middle height (`leftSound`, `rightSound`),
+      and the wind (93) following the `Ear` (`wind`)
+    * `BGFireRoomNoise` create: the background fire (92) following the `Ear` (`fire`)
+    * `WaterfallRoomEdges` create: the waterfall's edge (123) 160 pixels in from each
+      end at the camera's middle height
+    * these three stop their sounds in user event 0, which their destroy and room end
+      run, so each room starts its own
+    * `WaterfallSounds` and `DroneSounds` create: the waterfall (122) or the drone (128)
+      following the instance (`Nidhox.Objects.Ear.attach/3`, let go once it is gone),
+      which then moves to the camera's middle height
 
-  An instance's creation starts its sound unless the same object's is already
-  sounding, so a sound carries on unbroken from one room into the next that has it.
-  `settle/1`, after every step, stops each sound whose object the room no longer has.
-  The sounding objects are kept in the world's global `:ambience`.
-
-  A swinging chandelier's creak (`creak/2`), one of `sfxChandelier1`–`3`, sounds round
-  and round at it the same way.
-
-  The sounds are `Cauldron2D.Audio` events in the world's outbox; a placed sound is at
-  the instance's position in tiles of `@tile` pixels.
+  A sound at a place is a `Cauldron2D.Audio` event at it in tiles of 16 pixels.
   """
 
   alias Cauldron2D.Audio
-  alias Cauldron2D.GameMaker.Instance
-  alias Cauldron2D.GameMaker.World
+  alias Cauldron2D.GameMaker.{Instance, World}
+  alias Nidhox.Bout.Camera
+  alias Nidhox.Gml
+  alias Nidhox.Objects.Ear
 
   @tile 16
-  @wind 0.45
-  @fire 0.5
-  @drone 0.4
-  @fade 0.4
   @edge 160
-  @creaks ["sfxChandelier1", "sfxChandelier2", "sfxChandelier3"]
+  @centre_edge 94
+  @wind 93
+  @fire 92
+  @waterfall_edge 123
+  @waterfall 122
+  @drone 128
 
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
   def handlers do
     [
       {"gml_Object_CenterRoomNoises_Create_0", &centre_room/3},
-      {"gml_Object_BGFireRoomNoise_Create_0", everywhere("sfxFireBackground", @fire)},
-      {"gml_Object_DroneSounds_Create_0", everywhere("sfxDrone", @drone)},
-      {"gml_Object_WaterfallSounds_Create_0", placed("sfxWaterfall")},
-      {"gml_Object_WaterfallRoomEdges_Create_0", placed("sndWaterfallEdge")}
-    ]
-  end
-
-  @doc "The world with every sounding ambience whose object the room no longer has stopped."
-  @spec settle(World.t()) :: World.t()
-  def settle(%World{} = world) do
-    sounding = World.global(world, :ambience, MapSet.new())
-    {kept, gone} = Enum.split_with(sounding, &present?(world, &1))
-
-    gone
-    |> Enum.reduce(world, &World.emit(&2, Audio.stopped({:ambience, &1}, @fade)))
-    |> World.put_global(:ambience, MapSet.new(kept))
+      {"gml_Object_CenterRoomNoises_Other_10", fn world, self, _other -> hush(world, self, [:leftSound, :rightSound, :wind]) end},
+      {"gml_Object_BGFireRoomNoise_Create_0", &fire_room/3},
+      {"gml_Object_BGFireRoomNoise_Other_10", fn world, self, _other -> hush(world, self, [:fire]) end},
+      {"gml_Object_WaterfallRoomEdges_Create_0", &waterfall_edges/3},
+      {"gml_Object_WaterfallRoomEdges_Other_10", fn world, self, _other -> hush(world, self, [:leftSound, :rightSound]) end},
+      {"gml_Object_WaterfallSounds_Create_0", fn world, self, _other -> follow(world, self, @waterfall) end},
+      {"gml_Object_DroneSounds_Create_0", fn world, self, _other -> follow(world, self, @drone) end}
+    ] ++
+      for object <- ["CenterRoomNoises", "BGFireRoomNoise", "WaterfallRoomEdges"], event <- ["Destroy_0", "Other_5"] do
+        {"gml_Object_#{object}_#{event}", fn world, self, _other -> World.perform(world, self, :other, 10) end}
+      end
   end
 
   defp centre_room(world, self, _other) do
-    {width, _height} = Enum.at(world.data.rooms, world.room).size
-    middle = camera_center_y(world)
+    world = edges(world, self, @centre_edge)
+    {wind, world} = Ear.attach(world, Gml.first(world, "Ear"), @wind)
+    Gml.put(world, self, %{wind: wind})
+  end
+
+  defp fire_room(world, self, _other) do
+    {fire, world} = Ear.attach(world, Gml.first(world, "Ear"), @fire)
+    Gml.put(world, self, %{fire: fire})
+  end
+
+  defp waterfall_edges(world, self, _other), do: edges(world, self, @waterfall_edge)
+
+  defp edges(world, self, sound) do
+    middle = Camera.center_y(world)
+    left = {self, :left}
+    right = {self, :right}
 
     world
-    |> sound(self, "sfxEdgeOfCenter", {@edge / @tile, middle / @tile}, :left)
-    |> sound(self, "sfxEdgeOfCenter", {(width - @edge) / @tile, middle / @tile}, :right)
-    |> sound(self, "sfxWind", {:level, @wind, 0.0}, :wind)
+    |> loop(left, sound, {@edge, middle})
+    |> loop(right, sound, {Camera.room_width(world) - @edge, middle})
+    |> Gml.put(self, %{leftSound: left, rightSound: right})
   end
 
-  defp camera_center_y(%World{views: [%{view: {_x, y, _width, height}} | _]}), do: y + height / 2
-  defp camera_center_y(%World{}), do: 100
-
-  defp everywhere(recording, level),
-    do: fn world, self, _other -> sound(world, self, recording, {:level, level, 0.0}) end
-
-  defp placed(recording) do
-    fn world, self, _other ->
-      %Instance{x: x, y: y} = World.fetch(world, self)
-      sound(world, self, recording, {x / @tile, y / @tile})
+  defp loop(world, key, sound, {x, y}) do
+    case Enum.at(world.data.sounds, sound) do
+      nil -> world
+      %{name: name} -> World.emit(world, Audio.keyed(key, {:recording, name}, {x / @tile, y / @tile}, loop: true))
     end
   end
 
-  defp sound(world, self, recording, at, part \\ nil) do
-    name = World.object(world, World.fetch(world, self).object).name
-    object = if part, do: {name, part}, else: name
-    sounding = World.global(world, :ambience, MapSet.new())
-
-    if MapSet.member?(sounding, object) do
-      world
-    else
-      world
-      |> World.emit(
-        Audio.keyed({:ambience, object}, {:recording, recording}, at, loop: true, fade: @fade)
-      )
-      |> World.put_global(:ambience, MapSet.put(sounding, object))
-    end
+  defp hush(world, self, names) do
+    Enum.reduce(names, world, fn name, world ->
+      case Gml.var(world, self, name, nil) do
+        nil -> world
+        key -> Ear.detach(world, key)
+      end
+    end)
   end
 
-  defp present?(world, {object, _part}), do: present?(world, object)
+  defp follow(world, self, sound) do
+    {loop, world} = Ear.attach(world, self, sound)
 
-  defp present?(world, object) do
-    case World.object_index(world, object) do
-      nil -> false
-      index -> Enum.any?(world.order, &(world.instances[&1].object == index))
-    end
-  end
-
-  @doc "The world with chandelier `self`'s creak, one of `sfxChandelier1`–`3`, sounding round and round at it."
-  @spec creak(World.t(), non_neg_integer()) :: World.t()
-  def creak(%World{} = world, self) do
-    recording = Enum.at(@creaks, :erlang.phash2(self, length(@creaks)))
-    placed(recording).(world, self, nil)
+    world
+    |> Gml.put(self, %{z: 0, soundLoop: loop})
+    |> World.update(self, fn %Instance{} = instance -> %{instance | y: Camera.center_y(world)} end)
   end
 end

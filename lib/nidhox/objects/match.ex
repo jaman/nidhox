@@ -15,7 +15,8 @@ defmodule Nidhox.Objects.Match do
       (`inputMap`, `lastFramePolled` −1); `faceoffWinner` 0; `cleanHands`, `cleanFeet`,
       `cleanSword`, `perfect` 1; no comeback for either player. A demonstration
       (`System.flow` 1) has the computer play both players (`Brain`s for 1 and 2), a
-      single player game (2) player 2
+      single player game (2) player 2. In flows 1 to 4 (and 790474) it makes the music
+      (`LayeredMusic`)
     * room start: the camera at the room's left (unless in the tutorial); the right of
       way's arrow (`Arrow`) and the clash point (`ClashPosition`) made; the spawn timer
       from `spawnDelay`. In a room with entry points, a faceoff warps both players in
@@ -57,6 +58,7 @@ defmodule Nidhox.Objects.Match do
   @sword 2
   @demonstration 1
   @single_player 2
+  @music_flows [1, 2, 3, 4, 790_474]
   @font "fMenu"
   @text_at {160, 185}
   @red {255, 55, 55}
@@ -146,6 +148,7 @@ defmodule Nidhox.Objects.Match do
     })
     |> zero_frame()
     |> brains()
+    |> music()
   end
 
   defp kill_every(world, name), do: Enum.reduce(Gml.all(world, name), world, &World.destroy(&2, &1))
@@ -163,6 +166,10 @@ defmodule Nidhox.Objects.Match do
       @single_player -> brain(world, 2)
       _versus -> world
     end
+  end
+
+  defp music(world) do
+    if System.get(world, :flow) in @music_flows, do: make(world, "LayeredMusic"), else: world
   end
 
   defp brain(world, player) do

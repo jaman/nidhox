@@ -5,15 +5,17 @@ defmodule Nidhox.Music do
 
   Each piece, `"nidhox/<area>"`, has two sections:
 
-    * `:title` — the area's title track, for the title, the menus and the results
-    * `:bout` — the layers of the area's music, for the bout, mixed as `cue/3` says
+    * `:title` — the track the game's `MainMenuMusic` plays for the area, for the title,
+      the menus and the results
+    * `:bout` — the area's layers as the game's `LayeredMusic` lists them, each at the
+      level `Nidhox.Objects.LayeredMusic.levels/1` gives it
 
-  | area | stems (`music_<name>_…`) | title |
+  | area | layers (`music_<name>`) | title |
   | --- | --- | --- |
-  | Cemetery | `Cemetery_Melody`, `_Drums` | `Cemetery_Distant` |
+  | Cemetery | `Cemetery_Drums`, `Cemetery_Distant`, `Cemetery_Melody` | `Cemetery_Melody` |
   | Castle | `Castle_Drms1`, `_Drms2`, `_Synth1`, `_Synth2` | `CastleTitle` |
-  | Mines | `Mines_BasicDrums`, `_Drums4Part2`, `_MechanicalLayer`, `_Synth1`, `_Synth2`, `_Synth4Part2`, `_Synth4Part3` | `MinesTitle` |
-  | Sky | `Clouds_Drums`, `_SynthsPart1`–`4` | `CloudsTitle` |
+  | Mines | `Mines_Synth1`, `_Synth2`, `_Synth4Part2`, `_Synth4Part3`, `_BasicDrums`, `_Drums4Part2`, `_MechanicalLayer` | `CloudsTitle` |
+  | Sky | `Clouds_SynthsPart1`–`4`, `Clouds_Drums` | `CloudsTitle` |
   | Wilds | `Forest_Drums`, `_Synth1`–`3` | `WildsTitle` |
 
   Each recording is `Nidhox.Recordings`' of that name, decoded the first time its
@@ -26,26 +28,26 @@ defmodule Nidhox.Music do
   @rate 44_100
 
   @areas %{
-    "Cemetery" => {["Cemetery_Melody", "Cemetery_Drums"], "Cemetery_Distant"},
+    "Cemetery" => {["Cemetery_Drums", "Cemetery_Distant", "Cemetery_Melody"], "Cemetery_Melody"},
     "Castle" =>
       {["Castle_Drms1", "Castle_Drms2", "Castle_Synth1", "Castle_Synth2"], "CastleTitle"},
     "Mines" =>
       {[
-         "Mines_BasicDrums",
-         "Mines_Drums4Part2",
-         "Mines_MechanicalLayer",
          "Mines_Synth1",
          "Mines_Synth2",
          "Mines_Synth4Part2",
-         "Mines_Synth4Part3"
-       ], "MinesTitle"},
+         "Mines_Synth4Part3",
+         "Mines_BasicDrums",
+         "Mines_Drums4Part2",
+         "Mines_MechanicalLayer"
+       ], "CloudsTitle"},
     "Sky" =>
       {[
-         "Clouds_Drums",
          "Clouds_SynthsPart1",
          "Clouds_SynthsPart2",
          "Clouds_SynthsPart3",
-         "Clouds_SynthsPart4"
+         "Clouds_SynthsPart4",
+         "Clouds_Drums"
        ], "CloudsTitle"},
     "Wilds" => {["Forest_Drums", "Forest_Synth1", "Forest_Synth2", "Forest_Synth3"], "WildsTitle"}
   }
@@ -55,39 +57,28 @@ defmodule Nidhox.Music do
   def specs, do: Enum.map(@areas, fn {area, stems} -> {piece(area), spec(stems)} end)
 
   @doc """
-  The cue for a frame on `screen` in `area` with the bout `progress` from its centre
-  (`Nidhox.Bout.progress/1`, `0.0`–`1.0`): the area's `:bout` section while the bout is
-  being fought, paused or about to begin, its `:title` section otherwise. The tutorial
-  has none: its `Tutorial` plays its own music.
-
-  In the bout, the stems play in the table's order: the first alone in the centre, one
-  more joining with each step towards an end room, every one of them in the end rooms.
-  Each playing stem is at `1 / n` of the level for `n` playing, so together they never
-  go past full scale; the rest are silent.
+  The cue for a frame on `screen` in `area`, with `levels` the level of each playing
+  layer by the sound's name (`Nidhox.Objects.LayeredMusic.levels/1`, `nil` without
+  one): the area's `:bout` section while the bout is being fought, paused or about to
+  begin, each layer at its level and silent without one; its `:title` section
+  otherwise. The tutorial has none: its `Tutorial` plays its own music.
   """
-  @spec cue(String.t(), atom(), number()) :: Cauldron2D.Audio.Music.cue() | nil
-  def cue(area, screen, progress \\ 0.0)
+  @spec cue(String.t(), atom(), %{String.t() => number()} | nil) :: Cauldron2D.Audio.Music.cue() | nil
+  def cue(area, screen, levels \\ nil)
 
-  def cue(_area, :tutorial, _progress), do: nil
+  def cue(_area, :tutorial, _levels), do: nil
 
-  def cue(area, screen, progress) when is_map_key(@areas, area) do
+  def cue(area, screen, levels) when is_map_key(@areas, area) do
     if screen in [:en_garde, :bout, :paused],
-      do: %{piece: piece(area), section: :bout, layers: gains(area, progress)},
+      do: %{piece: piece(area), section: :bout, layers: gains(area, levels || %{})},
       else: %{piece: piece(area), section: :title}
   end
 
-  def cue(_area, _screen, _progress), do: nil
+  def cue(_area, _screen, _levels), do: nil
 
-  defp gains(area, progress) do
+  defp gains(area, levels) do
     {stems, _title} = Map.fetch!(@areas, area)
-    count = length(stems)
-    playing = min(count, 1 + floor(progress * (count - 1) + 1.0e-9))
-
-    stems
-    |> Enum.with_index()
-    |> Map.new(fn {stem, index} ->
-      {layer(stem), if(index < playing, do: 1 / playing, else: 0.0)}
-    end)
+    Map.new(stems, &{layer(&1), Map.get(levels, "music_" <> &1, 0.0)})
   end
 
   defp piece(area), do: "nidhox/" <> String.downcase(area)

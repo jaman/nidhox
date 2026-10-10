@@ -42,6 +42,10 @@ defmodule Nidhox.Bout.Camera do
   @spec height(World.t()) :: number()
   def height(%World{} = world), do: elem(view(world), 3)
 
+  @doc "The room's width (`room_width`)."
+  @spec room_width(World.t()) :: number()
+  def room_width(%World{} = world), do: world |> room_size() |> elem(0)
+
   @doc "The middle of the view across (`cameraCenterX`); the middle of the room without a view."
   @spec center_x(World.t()) :: number()
   def center_x(%World{views: [%{view: {x, _y, width, _height}} | _]}), do: x + width * 0.5
@@ -85,8 +89,6 @@ defmodule Nidhox.Bout.Camera do
 
   defp view(%World{views: [%{view: rectangle} | _]}), do: rectangle
   defp view(%World{} = world), do: {0, 0, room_width(world), 200}
-
-  defp room_width(world), do: world |> room_size() |> elem(0)
 
   defp room_size(world), do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size)
 end

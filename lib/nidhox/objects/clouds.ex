@@ -24,10 +24,12 @@ defmodule Nidhox.Objects.Clouds do
       untouched, an evaporating one comes back a quarter frame a step and at frame 0
       is a `sCloudPoof` again at a random frame, which drifts on 0.1 a step. It shows
       `frame`, dark (`{28, 28, 28}`) in level 25
-    * `FakeCloudPoof`: a `sCloudPoof` at a random frame, its frames running at 0.1 a step
+    * `FakeCloudPoof`: a `sCloudPoof` at a random frame, its frames running at 0.1 a step;
+      each match frame within 200 pixels of the camera's centre across it breathes as a
+      `CloudPoof` does
   """
 
-  alias Cauldron2D.GameMaker.{Instance, World}
+  alias Cauldron2D.GameMaker.{Draw, Instance, World}
   alias Nidhox.Bout.Camera
   alias Nidhox.Gml
   alias Nidhox.Objects.System
@@ -55,6 +57,8 @@ defmodule Nidhox.Objects.Clouds do
       {"gml_Object_DarkCloudPoofArea_Create_0", &lay_poofs/3},
       {"gml_Object_CloudPoof_Create_0", &poof/3},
       {"gml_Object_CloudPoof_Other_12", &breathe/3},
+      {"gml_Object_CloudPoof_Draw_0", fn world, self, _other -> Draw.self(world, self) end},
+      {"gml_Object_FakeCloudPoof_Other_12", &fake_breathe/3},
       {"gml_Object_FakeCloudPoof_Create_0", &fake/3},
       {"gml_Object_FakeCloudPoof_Step_0", fn world, self, _other -> World.update(world, self, &%{&1 | image_speed: 0.1}) end}
     ]
@@ -156,21 +160,32 @@ defmodule Nidhox.Objects.Clouds do
       world
     else
       frame = System.get(world, :frame)
-      start = Gml.var(world, self, :randomStart)
 
       world
-      |> World.update(self, fn poof ->
-        %{
-          poof
-          | image_xscale: Gml.var(world, self, :startXScale) + :math.sin(start + frame / 30) * 0.1,
-            image_yscale: Gml.var(world, self, :startYScale) + :math.cos(start + frame / 30) * 0.1
-        }
-      end)
+      |> swell(self)
       |> Gml.put(self, %{flash: 0})
       |> check_touch(self, frame)
       |> evaporate(self)
       |> show(self)
     end
+  end
+
+  defp fake_breathe(world, self, _other) do
+    %Instance{x: x} = World.fetch(world, self)
+    if abs(x - Camera.center_x(world)) > @reach, do: world, else: swell(world, self)
+  end
+
+  defp swell(world, self) do
+    frame = System.get(world, :frame)
+    start = Gml.var(world, self, :randomStart)
+
+    World.update(world, self, fn poof ->
+      %{
+        poof
+        | image_xscale: Gml.var(world, self, :startXScale) + :math.sin(start + frame / 30) * 0.1,
+          image_yscale: Gml.var(world, self, :startYScale) + :math.cos(start + frame / 30) * 0.1
+      }
+    end)
   end
 
   defp check_touch(world, self, frame) do

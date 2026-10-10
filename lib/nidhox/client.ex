@@ -94,7 +94,7 @@ defmodule Nidhox.Client do
 
   @impl true
   def cue(%{area: area, screen: screen} = frame, _client_screen),
-    do: Music.cue(area, screen, Map.get(frame, :progress, 0.0))
+    do: Music.cue(area, screen, Map.get(frame, :music))
 
   def cue(_frame, _client_screen), do: nil
 

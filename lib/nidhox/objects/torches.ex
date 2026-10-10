@@ -1,133 +1,114 @@
 defmodule Nidhox.Objects.Torches do
   @moduledoc """
-  The candles and torches (`Torch`, `TorchDark`, `WallTorch`): each step a flame burns
-  on every tip of the candle's sprite, as particles of the copy's `sTorch` — a flame
-  rises from a tip every `@flame_every` steps, playing its frames once as it goes — and
-  now and then an ember (`sEmber`) drifts up and away.
+  The candles and torches, as the game's code runs them, their flames from the torch
+  particles of the `Particles` object (`torchSystem`, `torchEmitter`, `torchParticle`).
+  Each step, within 170 pixels across of the camera's centre, each flame sets the
+  emitter on an ellipse 2 × 2 pixels about it and, on a `prob(15)`, bursts one
+  particle there.
 
-  A tip is a column of the candle's first frame whose topmost pixel stands higher than
-  or as high as every column within `@apart` pixels of it, the leftmost of a flat top,
-  found once per sprite and kept. Which tip
-  burns and how each flame and ember wanders is drawn from the instance id and the
-  step, so every machine sees the same fire.
+    * `Torch` (the tall candle): flames at `(x, y − 24)`, `(x − 6, y − 21)` and
+      `(x + 6, y − 20)`
+    * `WallTorch`: one flame at its place
+    * `TorchDark`: a `Torch` blended `{64, 64, 64}`
+    * `BallLight`, a lamp on a chain from the room's top: create, the parallax object's
+      create, shown at frame 0, its alarm in 3 steps; alarm 0, again in
+      `irandom_range(3, 4)` steps, at frame `irandom(image_number)`; step, it swings on
+      a chain `ystart` long, at `270 + sin(frame / 100 + xstart) × 2` degrees from
+      `(xstart, 0)`, and on a `prob(15)` bursts one flame particle about itself
+      (`flameAt`); draw, within 180 pixels across of the camera's centre, its chain of
+      `sMiniChain` up to the room's top (`Nidhox.Chain`), then itself
   """
 
-  alias Cauldron2D.GameMaker.Instance
-  alias Cauldron2D.GameMaker.Particles
-  alias Cauldron2D.GameMaker.World
-  alias Nidhox.Assets
+  alias Cauldron2D.GameMaker.{Draw, Instance, PartSystems, World}
+  alias Nidhox.Bout.Camera
+  alias Nidhox.{Chain, Gml}
+  alias Nidhox.Objects.System
 
-  @flame_every 3
-  @flame_rise -0.35
-  @flame_sway 0.15
-  @ember_one_in 24
-  @ember_rise -0.6
-  @ember_life 45
-  @apart 2
+  @reach 170
+  @flame_size 1
+  @flame_chance 15
+  @candle_flames [{0, -24}, {-6, -21}, {6, -20}]
+  @wall_flames [{0, 0}]
+  @dark {64, 64, 64}
+  @first_frame 3
+  @lamp_reach 180
 
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
   def handlers do
     [
-      {"gml_Object_Torch_Step_0", &burn/3},
-      {"gml_Object_WallTorch_Step_0", &burn/3}
+      {"gml_Object_Torch_Step_0", fn world, self, _other -> burn(world, self, @candle_flames) end},
+      {"gml_Object_WallTorch_Step_0", fn world, self, _other -> burn(world, self, @wall_flames) end},
+      {"gml_Object_TorchDark_Create_0", &dark/3},
+      {"gml_Object_BallLight_Create_0", &lamp/3},
+      {"gml_Object_BallLight_Alarm_0", &lamp_frame/3},
+      {"gml_Object_BallLight_Step_0", &swing/3},
+      {"gml_Object_BallLight_Draw_0", &lamp_draw/3}
     ]
   end
 
-  @doc "The tips of frame 0 of sprite `name`, `{dx, dy}` from its origin, left to right."
-  @spec tips(String.t()) :: [{integer(), integer()}]
-  def tips(name) do
-    key = {__MODULE__, :tips, name}
-
-    case :persistent_term.get(key, nil) do
-      nil ->
-        tips = find_tips(name)
-        :persistent_term.put(key, tips)
-        tips
-
-      tips ->
-        tips
-    end
+  defp lamp(world, self, _other) do
+    world
+    |> World.inherited(self, "BallLight", :create, 0)
+    |> World.update(self, &(%{&1 | image_index: 0.0, image_speed: 0.0} |> Instance.put_alarm(0, @first_frame)))
   end
 
-  defp burn(world, self, _other) do
-    %Instance{x: x, y: y, sprite_index: sprite, depth: depth} = World.fetch(world, self)
-    name = Enum.at(world.data.sprites, sprite).name
-    world |> flames(self, {x, y}, tips(name), depth) |> ember(self, {x, y}, tips(name), depth)
+  defp lamp_frame(world, self, _other) do
+    {again, world} = Gml.irandom_range(world, 3, 4)
+    world = World.update(world, self, &Instance.put_alarm(&1, 0, again))
+    %Instance{sprite_index: sprite} = World.fetch(world, self)
+    {frame, world} = Gml.irandom(world, length(World.sprite(world, sprite).frames))
+    World.update(world, self, &%{&1 | image_index: frame / 1, image_speed: 0.0})
   end
 
-  defp flames(world, self, {x, y}, tips, depth) do
-    if rem(world.steps + self, @flame_every) == 0 do
-      Enum.reduce(tips, world, fn {dx, dy}, world ->
-        {flame, sprite} = Assets.sprite!("sTorch")
-        frames = length(sprite.frames)
-        sway = (:erlang.phash2({self, dx, world.steps}, 21) - 10) / 10 * @flame_sway
-
-        Particles.create(world, %{
-          sprite: flame,
-          position: {x + dx, y + dy},
-          velocity: {sway, @flame_rise},
-          life: frames * 2,
-          frame_speed: 0.5,
-          depth: depth - 1
-        })
-      end)
-    else
-      world
-    end
+  defp swing(world, self, _other) do
+    %Instance{xstart: xstart, ystart: ystart} = World.fetch(world, self)
+    angle = 270 + :math.sin(System.get(world, :frame) / 100 + xstart) * 2
+    x = xstart + Gml.lengthdir_x(ystart, angle)
+    y = Gml.lengthdir_y(ystart, angle) + 0.0
+    world = World.update(world, self, &%{&1 | x: x, y: y})
+    {lit, world} = Gml.prob(world, @flame_chance)
+    if lit, do: world |> Gml.all("Particles") |> Enum.reduce(world, &flare(&2, &1, {x, y})), else: world
   end
 
-  defp ember(world, _self, _at, [], _depth), do: world
+  defp flare(world, particles, {x, y}) do
+    %{torchSystem: system, torchEmitter: emitter, torchParticle: particle} = World.fetch(world, particles).vars
+    region = {x - @flame_size, x + @flame_size, y - @flame_size, y + @flame_size}
 
-  defp ember(world, self, {x, y}, tips, depth) do
-    if :erlang.phash2({self, world.steps, :ember}, @ember_one_in) == 0 do
-      {dx, dy} = Enum.at(tips, :erlang.phash2({self, world.steps}, length(tips)))
-      {spark, sprite} = Assets.sprite!("sEmber")
-      sway = (:erlang.phash2({self, world.steps, :sway}, 21) - 10) / 20
-
-      Particles.create(world, %{
-        sprite: spark,
-        position: {x + dx, y + dy},
-        velocity: {sway, @ember_rise},
-        life: @ember_life,
-        frame_speed: length(sprite.frames) / @ember_life,
-        alpha: {1.0, 0.0},
-        depth: depth - 1
-      })
-    else
-      world
-    end
+    world
+    |> PartSystems.emitter_region(system, emitter, region, :ellipse, :linear)
+    |> PartSystems.emitter_burst(system, emitter, particle, 1)
   end
 
-  defp find_tips(name) do
-    {index, %{origin: {origin_x, origin_y}}} = Assets.sprite!(name)
-    raster = Map.fetch!(Assets.get().pictures, {:sprite, index, 0})
-    {width, _height} = FrenchCurve.Raster.dimensions(raster)
-    tops = tops(raster, width)
-
-    for {column, top} <- Enum.with_index(tops) |> Enum.map(fn {top, column} -> {column, top} end),
-        top != nil,
-        higher?(tops, column, top),
-        do: {column - origin_x, top - origin_y}
+  defp lamp_draw(world, self, _other) do
+    %Instance{x: x, y: y} = World.fetch(world, self)
+    world = if abs(x - Camera.center_x(world)) < @lamp_reach, do: Chain.draw(world, {x, y}, {x, 0}, true), else: world
+    Draw.self(world, self)
   end
 
-  defp tops(raster, width) do
-    raster
-    |> FrenchCurve.Raster.to_rgba_binary()
-    |> then(&for(<<_r, _g, _b, a <- &1>>, do: a > 0))
-    |> Enum.chunk_every(width)
-    |> Enum.zip_with(& &1)
-    |> Enum.map(&Enum.find_index(&1, fn opaque -> opaque end))
+  defp dark(world, self, _other) do
+    world
+    |> World.inherited(self, "TorchDark", :create, 0)
+    |> World.update(self, &%{&1 | image_blend: @dark})
   end
 
-  defp higher?(tops, column, top) do
-    neighbours =
-      for near <- (column - @apart)..(column + @apart),
-          near != column,
-          near >= 0,
-          do: Enum.at(tops, near)
+  defp burn(world, self, flames) do
+    %Instance{x: x} = World.fetch(world, self)
 
-    left = if column > 0, do: Enum.at(tops, column - 1)
-    Enum.all?(neighbours, &(&1 == nil or &1 >= top)) and (left == nil or left > top)
+    if abs(x - Camera.center_x(world)) < @reach,
+      do: world |> Gml.all("Particles") |> Enum.reduce(world, &light(&2, &1, self, flames)),
+      else: world
+  end
+
+  defp light(world, particles, self, flames) do
+    %Instance{x: x, y: y} = World.fetch(world, self)
+
+    Enum.reduce(flames, world, fn {dx, dy}, world ->
+      %{torchSystem: system, torchEmitter: emitter, torchParticle: particle} = World.fetch(world, particles).vars
+      region = {x + dx - @flame_size, x + dx + @flame_size, y + dy - @flame_size, y + dy + @flame_size}
+      world = PartSystems.emitter_region(world, system, emitter, region, :ellipse, :linear)
+      {lit, world} = Gml.prob(world, @flame_chance)
+      if lit, do: PartSystems.emitter_burst(world, system, emitter, particle, 1), else: world
+    end)
   end
 end

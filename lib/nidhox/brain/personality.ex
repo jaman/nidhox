@@ -3,7 +3,9 @@ defmodule Nidhox.Brain.Personality do
   The computer player's character: which personality a `Brain` plays, and how much more
   or less often that personality takes each action.
 
-    * `pick/2` (`pickPersonality`): one of the `Brain`'s `personalities`, at random
+    * `pick/2` (`pickPersonality`): in a single player run the level's personality
+      (`Nidhox.Objects.Arcade.personality/1`), else one of the `Brain`'s `personalities`
+      at random
     * `chance/4` (`charBasedProbActionDefault(action, chance)`): whether the `Brain`
       takes `action` this time — always for running to the goal (26) in a left end room
       (`roomCode` 4), else `prob(chance × multiplier)`, the multiplier being the
@@ -58,9 +60,16 @@ defmodule Nidhox.Brain.Personality do
     9 => %{29 => 0.25, 19 => 10, 2 => 10, 18 => 0.25, 15 => 0.25, 10 => 10}
   }
 
-  @doc "The world with `Brain` `self` playing one of its `personalities`, picked at random."
+  @doc "The world with `Brain` `self` playing the run's level's personality, or one of its `personalities` at random."
   @spec pick(World.t(), non_neg_integer()) :: World.t()
   def pick(%World{} = world, self) do
+    case Nidhox.Objects.Arcade.personality(world) do
+      nil -> pick_random(world, self)
+      personality -> Gml.put(world, self, %{personality: personality})
+    end
+  end
+
+  defp pick_random(world, self) do
     personalities = Gml.var(world, self, :personalities, [])
     {index, world} = Gml.irandom(world, length(personalities) - 1)
     Gml.put(world, self, %{personality: Enum.at(personalities, index)})

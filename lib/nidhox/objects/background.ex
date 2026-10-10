@@ -16,6 +16,8 @@ defmodule Nidhox.Objects.Background do
       `@square_alpha`, and the final surface is drawn at the view's top-left corner at
       alpha `@final_alpha`
 
+  Destroy and game end run its user event 15, which frees the surfaces.
+
   The random draws come from the world's generator in the game's order: for each copy,
   `prob(10)`, then `choose(add, add, subtract)` when it is not drawn over, then its x,
   y, x scale, y scale and angle; the timer is `choose(1, 2, 3)`.
@@ -39,8 +41,23 @@ defmodule Nidhox.Objects.Background do
     [
       {"gml_Object_BackgroundObject_Create_0", &start/3},
       {"gml_Object_BackgroundObject_Step_1", &begin_step/3},
-      {"gml_Object_BackgroundObject_Draw_0", &draw/3}
+      {"gml_Object_BackgroundObject_Draw_0", &draw/3},
+      {"gml_Object_BackgroundObject_Other_25", &free/3},
+      {"gml_Object_BackgroundObject_Destroy_0", &user_15/3},
+      {"gml_Object_BackgroundObject_Other_3", &user_15/3}
     ]
+  end
+
+  defp user_15(world, self, _other), do: World.perform(world, self, :other, 25)
+
+  defp free(world, self, _other) do
+    vars = World.fetch(world, self).vars
+
+    [vars.final | vars.squares]
+    |> Enum.reduce(world, fn surface, world ->
+      if surface != nil and Surfaces.exists?(world, surface), do: Surfaces.free(world, surface), else: world
+    end)
+    |> put_vars(self, %{final: nil, squares: List.duplicate(nil, @squares)})
   end
 
   defp start(world, self, _other) do

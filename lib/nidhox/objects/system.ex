@@ -17,8 +17,8 @@ defmodule Nidhox.Objects.System do
       `suddenDeathOnly`, `throwsOnly`, `babyMode`, `skippyMode`, `turboMode`,
       `slowMode`, `spineSwords`, `boomerangSwords` and `trails` 0
 
-  and makes the listener (`Ear`), the backdrop (`BackgroundObject`) and the particles
-  (`Particles`).
+  and makes the listener (`Ear`), the backdrop (`BackgroundObject`), the particles
+  (`Particles`) and the fencers' outlines (`PlayerOutlines`).
 
   Each begin step `metaFrame` counts and the match's frames run (`Nidhox.Bout.Frame.system_step/2`).
 
@@ -30,7 +30,7 @@ defmodule Nidhox.Objects.System do
   alias Nidhox.Gml
 
   @object "System"
-  @made ["Ear", "BackgroundObject", "Particles"]
+  @made ["Ear", "BackgroundObject", "Particles", "PlayerOutlines"]
 
   @start %{
     frame: 0,

@@ -3,7 +3,8 @@ defmodule Nidhox.Objects.RoomCodes do
   The rooms' creation code: each fighting room names where it stands in its area
   (`global.roomCode`), and most also hand out swords (`global.swords` 1); the tutorial
   takes them away (`global.swords` 0). The cemetery's rooms also turn their birds black
-  (`with (Bird) image_blend = 0`).
+  (`with (Bird) image_blend = 0`); the sky's centre sets its first background's alpha to
+  0.1 (`__background_set(14, 0, 0.1)`).
 
   | code | room |
   | --- | --- |
@@ -18,7 +19,7 @@ defmodule Nidhox.Objects.RoomCodes do
   """
 
   alias Cauldron2D.GameMaker.World
-  alias Nidhox.Gml
+  alias Nidhox.{Backgrounds, Gml}
 
   @rooms %{
     "rCaslteBRightA" => {5, 1},
@@ -94,7 +95,11 @@ defmodule Nidhox.Objects.RoomCodes do
     |> World.put_global(:roomCode, code)
     |> then(&if(swords == nil, do: &1, else: World.put_global(&1, :swords, swords)))
     |> blacken_birds(room)
+    |> fade_sky(room)
   end
+
+  defp fade_sky(world, "rSkyCenter"), do: Backgrounds.set(world, 14, 0, 0.1)
+  defp fade_sky(world, _room), do: world
 
   defp blacken_birds(world, "rCemetery" <> _part) do
     world

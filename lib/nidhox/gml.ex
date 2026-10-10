@@ -142,6 +142,13 @@ defmodule Nidhox.Gml do
     {value, %{world | random: random}}
   end
 
+  @doc "A whole number from `low` to `high` (`irandom_range`), and the world after the draw."
+  @spec irandom_range(World.t(), number(), number()) :: {integer(), World.t()}
+  def irandom_range(%World{random: random} = world, low, high) do
+    {value, random} = Random.irandom_range(random, low, high)
+    {value, %{world | random: random}}
+  end
+
   @doc "One of `values` (`choose`), and the world after the draw."
   @spec choose(World.t(), [term(), ...]) :: {term(), World.t()}
   def choose(%World{random: random} = world, values) do

@@ -14,6 +14,9 @@ defmodule Nidhox.Objects.Brain do
     * alarm 0: a new `beat` — the larger of 2 or 5 and 28, 30, 34 or 38 less
       `difficulty × 30` — and the alarm again in 30, 60, 80, 90 or 110 frames
     * room start: another personality picked
+    * step, in a single player run (`Nidhox.Objects.Arcade`): `difficulty` the run's
+      (`getArcadeModeDifficulty`); on a level against personality 5646466, every 60th
+      frame a new personality `choose(5, 6, 1, 4, 2, 9, 8)`
     * user event 0, once a match frame (`Nidhox.Bout.Frame`): its fencer (`player`) and
       the opponent's found; without a fencer, or while it is entering (23), collapsing,
       stabbed or in state 28, or once the match is finished, the next plan is to wait
@@ -31,13 +34,14 @@ defmodule Nidhox.Objects.Brain do
   alias Nidhox.Brain.{Act, Buttons, Intent, Personality, Plan, Sense}
   alias Nidhox.Gml
   alias Nidhox.Man.Query
-  alias Nidhox.Objects.Match
+  alias Nidhox.Objects.{Arcade, Match, System}
 
   @noone -4
   @personalities [10, 6, 5, 11, 4, 2, 1, 8, 9]
   @waiting 108
   @entering 23
   @far 10_000
+  @changing 5_646_466
   @tutorial_move 12
 
   @doc "The compiled names this module answers for, with their functions."
@@ -47,8 +51,28 @@ defmodule Nidhox.Objects.Brain do
       {"gml_Object_Brain_Create_0", &create/3},
       {"gml_Object_Brain_Alarm_0", &new_beat/3},
       {"gml_Object_Brain_Other_4", fn world, self, _other -> Personality.pick(world, self) end},
+      {"gml_Object_Brain_Step_0", &arcade_step/3},
       {"gml_Object_Brain_Other_10", &think/3}
     ]
+  end
+
+  defp arcade_step(world, self, _other) do
+    if Gml.exists?(world, "ArcadeMode") do
+      world = Gml.put(world, self, %{difficulty: Arcade.difficulty(world)})
+      if changing?(world), do: new_personality(world, self), else: world
+    else
+      world
+    end
+  end
+
+  defp changing?(world) do
+    level = Gml.var(world, Gml.first(world, "ArcadeMode"), :level)
+    Arcade.contains?(world, level, @changing) and Gml.eq?(:math.fmod(System.get(world, :frame), 60), 0)
+  end
+
+  defp new_personality(world, self) do
+    {personality, world} = Gml.choose(world, [5, 6, 1, 4, 2, 9, 8])
+    Gml.put(world, self, %{personality: personality})
   end
 
   @doc "The `Brain` playing `player`, `nil` for none (`findBrainWithPlayerIndex`)."

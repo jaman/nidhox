@@ -2,32 +2,45 @@ defmodule Nidhox.Objects.Chandelier do
   @moduledoc """
   The castle's chandeliers, as the game's code moves and draws them.
 
-  A swinging chandelier (`o_chandelier`) starts at `angle` −10° and still. Each step
-  its `spin_speed` falls by `@pull` while its angle is above 0 and rises by `@pull`
-  otherwise, and its angle moves by the spin; each time it passes to the other side its
-  chain squeaks (`sfxChainSqueak1`) 100 pixels below where it hangs. Its creak sounds
-  round and round at it (`Nidhox.Objects.Ambience.creak/2`) and it moves with the camera
-  as a parallax object at depth 20 (`overrideDepth`). Every 2 steps its alarm picks the
-  frame, 1–3, its candles' glow shows.
-
-  It is drawn as its sprite turned by its angle, and over that, added, its glow frame
-  tinted `make_color_hsv(random(40), 100, 255)` at alpha 0.35.
-
-  A still chandelier (`ChandelierStill`, the sudden death room) hangs straight, drawn
-  with its chain of `sMiniChain` links from where it hangs up to 5 pixels above the
-  room's top (`drawChainXYXY`).
+    * `o_chandelier` create: the parallax object's create, then `overrideDepth` 20,
+      `spin_speed` 0, `angle` −10; an `Empty` made 250 pixels from it at `270 + angle`
+      degrees (`bottom`), carrying one of the creaks `choose(52, 53, 54)` round and round
+      (`playSoundAtLoopEffect(…, 1, 1, bottom)`, `soundLoop`); `dir` and `foo` 0; `pv` the
+      view's angle; its alarm in 3 steps
+    * alarm 0: again in 2 steps; its glow frame `foo` `choose(1, 2, 3)`
+    * step: `spin_speed` falls by 0.01 while `angle` is above 0 and rises by 0.01
+      otherwise; each time it passes to the other side (`dir`) its chain squeaks (sound
+      55) 100 pixels below it; `angle` moves by `spin_speed`, `bottom` stays 250 pixels
+      from it at `270 + angle` and it is turned `angle`
+    * draw: its frame 0 turned by its angle in its blend, then added over it its glow
+      frame `foo` turned `image_angle + pv × 3.5` in `make_color_hsv(random(40), 100,
+      255)` at alpha 0.35
+    * room end: its creak stopped
+    * `ChandelierStill` create: the swinging chandelier's create, and the sudden death
+      backdrop (`SuddenDeathBG`) made 96 pixels above it. It swings as the other does, but each step it is set straight, its creak's
+      `Empty` is at the camera's centre, and the backdrop is turned by `−angle` instead;
+      drawn with its chain (`Nidhox.Chain`, of `sChainLink`) from 250 pixels below it up
+      to 5 pixels above the room's top, then as the other is drawn
   """
 
-  alias Cauldron2D.GameMaker.{Colour, Data, Draw, Instance, World}
-  alias Nidhox.Objects.Ambience
+  alias Cauldron2D.Audio
+  alias Cauldron2D.GameMaker.{Colour, Draw, Instance, World}
+  alias Nidhox.Bout.{Camera, Sound}
+  alias Nidhox.{Chain, Gml}
+  alias Nidhox.Objects.Ear
 
   @start_angle -10.0
   @pull 0.01
   @override_depth 20
+  @first_flicker 3
   @flicker_steps 2
   @glow_alpha 0.35
+  @squeak 55
   @squeak_drop 100
-  @tile 16
+  @creaks [52, 53, 54]
+  @hang 250
+  @down 270
+  @backdrop_lift 96
   @chain_top -5
 
   @doc "The compiled names this module answers for, with their functions."
@@ -38,105 +51,101 @@ defmodule Nidhox.Objects.Chandelier do
       {"gml_Object_o_chandelier_Alarm_0", &flicker/3},
       {"gml_Object_o_chandelier_Step_0", &swing/3},
       {"gml_Object_o_chandelier_Draw_0", &draw/3},
+      {"gml_Object_o_chandelier_Other_5", &hush/3},
+      {"gml_Object_ChandelierStill_Create_0", &hang_still/3},
       {"gml_Object_ChandelierStill_Step_0", &still/3},
       {"gml_Object_ChandelierStill_Draw_0", &draw_still/3}
     ]
   end
 
   defp hang(world, self, _other) do
+    world =
+      world
+      |> World.inherited(self, "o_chandelier", :create, 0)
+      |> Gml.put(self, %{overrideDepth: @override_depth, spin_speed: 0, angle: @start_angle})
+
+    {world, bottom} = World.create(world, World.object_index(world, "Empty"), hung(World.fetch(world, self), @start_angle))
+    {creak, world} = Gml.choose(world, @creaks)
+    {loop, world} = Ear.attach(world, bottom, creak)
+
     world
-    |> World.update(self, fn chandelier ->
-      %{
-        chandelier
-        | image_angle: @start_angle,
-          image_speed: 0.0,
-          vars:
-            Map.merge(chandelier.vars, %{
-              overrideDepth: @override_depth,
-              spin_speed: 0.0,
-              angle: @start_angle,
-              dir: 0,
-              foo: 1
-            })
-      }
-      |> Instance.put_alarm(0, @flicker_steps)
-    end)
-    |> Ambience.creak(self)
+    |> Gml.put(self, %{bottom: bottom, soundLoop: loop, dir: 0, foo: 0, pv: 0})
+    |> World.update(self, &Instance.put_alarm(&1, 0, @first_flicker))
   end
 
-  defp flicker(world, self, _other) do
-    frame = 1 + :erlang.phash2({world.steps, self, :foo}, 3)
+  defp hung(%Instance{x: x, y: y}, angle),
+    do: {x + Gml.lengthdir_x(@hang, @down + angle), y + Gml.lengthdir_y(@hang, @down + angle)}
 
-    World.update(world, self, fn chandelier ->
-      %{chandelier | vars: Map.put(chandelier.vars, :foo, frame)}
-      |> Instance.put_alarm(0, @flicker_steps)
-    end)
+  defp flicker(world, self, _other) do
+    world = World.update(world, self, &Instance.put_alarm(&1, 0, @flicker_steps))
+    {frame, world} = Gml.choose(world, [1, 2, 3])
+    Gml.put(world, self, %{foo: frame})
   end
 
   defp swing(world, self, _other) do
-    %Instance{vars: vars} = chandelier = World.fetch(world, self)
-
-    {spin, side} =
-      if vars.angle > 0, do: {vars.spin_speed - @pull, 1}, else: {vars.spin_speed + @pull, 0}
-
-    angle = vars.angle + spin
+    %Instance{x: x, y: y} = chandelier = World.fetch(world, self)
+    angle = Gml.var(world, self, :angle)
+    spin = Gml.var(world, self, :spin_speed)
+    dir = Gml.var(world, self, :dir)
+    {spin, side} = if Gml.gt?(angle, 0), do: {spin - @pull, 1}, else: {spin + @pull, 0}
+    world = if Gml.eq?(dir, side), do: world, else: Sound.play(world, @squeak, {x, y + @squeak_drop})
+    angle = angle + spin
 
     world
-    |> squeak(chandelier, vars.dir != side)
-    |> World.update(self, fn chandelier ->
-      %{
-        chandelier
-        | image_angle: angle,
-          vars: Map.merge(chandelier.vars, %{spin_speed: spin, angle: angle, dir: side})
-      }
-    end)
+    |> Gml.put(self, %{spin_speed: spin, dir: side, angle: angle})
+    |> move_bottom(Gml.var(world, self, :bottom), hung(chandelier, angle))
+    |> World.update(self, &%{&1 | image_angle: angle / 1})
   end
 
-  defp squeak(world, %Instance{x: x, y: y}, true),
-    do:
-      World.emit(
-        world,
-        {{:recording, "sfxChainSqueak1"}, {x / @tile, (y + @squeak_drop) / @tile}}
-      )
-
-  defp squeak(world, _chandelier, false), do: world
+  defp move_bottom(world, bottom, {x, y}) do
+    if World.fetch(world, bottom), do: World.update(world, bottom, &%{&1 | x: x, y: y}), else: world
+  end
 
   defp draw(world, self, _other) do
-    %Instance{x: x, y: y, image_angle: angle, sprite_index: sprite, vars: vars} =
-      World.fetch(world, self)
-
-    hue = :erlang.phash2({world.steps, self, :hue}, 40_000) / 1000
-    glow = Colour.hsv(hue, 100, 255)
+    %Instance{} = chandelier = World.fetch(world, self)
+    {hue, world} = Gml.random(world, 40)
 
     world
-    |> Draw.sprite(sprite, 0, {x, y}, angle: angle)
-    |> Draw.sprite(sprite, vars.foo, {x, y},
-      angle: angle,
-      blend: glow,
+    |> Draw.sprite(chandelier.sprite_index, 0, {chandelier.x, chandelier.y},
+      scale: {chandelier.image_xscale, chandelier.image_yscale},
+      angle: chandelier.image_angle,
+      blend: chandelier.image_blend
+    )
+    |> Draw.sprite(chandelier.sprite_index, Gml.var(world, self, :foo), {chandelier.x, chandelier.y},
+      scale: {chandelier.image_xscale, chandelier.image_yscale},
+      angle: chandelier.image_angle + Gml.var(world, self, :pv) * 3.5,
+      blend: Colour.hsv(hue, 100, 255),
       alpha: @glow_alpha,
       mode: :add
     )
   end
 
-  defp still(world, self, _other),
-    do: World.update(world, self, &%{&1 | image_angle: 0.0, image_speed: 0.0})
+  defp hush(world, self, _other), do: World.emit(world, Audio.stopped(Gml.var(world, self, :soundLoop, nil)))
 
-  defp draw_still(world, self, _other) do
-    %Instance{x: x, y: y, sprite_index: sprite} = World.fetch(world, self)
-
-    world
-    |> chain({x, y}, {x, @chain_top})
-    |> Draw.sprite(sprite, 0, {x, y})
+  defp hang_still(world, self, _other) do
+    world = World.inherited(world, self, "ChandelierStill", :create, 0)
+    %Instance{x: x, y: y} = World.fetch(world, self)
+    world |> World.create(World.object_index(world, "SuddenDeathBG"), {x, y - @backdrop_lift}) |> elem(0)
   end
 
-  defp chain(world, {x, from_y}, {_x, to_y}) do
-    case Data.index(world.data, :sprites, "sMiniChain") do
-      nil ->
-        world
+  defp still(world, self, _other) do
+    world = World.inherited(world, self, "ChandelierStill", :step, 0)
+    bottom = Gml.var(world, self, :bottom)
+    world = World.update(world, self, &%{&1 | image_angle: 0.0})
 
-      link ->
-        {_width, height} = Enum.at(world.data.sprites, link).size
-        Enum.reduce(to_y..trunc(from_y)//height, world, &Draw.sprite(&2, link, 0, {x, &1}))
-    end
+    if World.fetch(world, bottom),
+      do: World.update(world, bottom, &%{&1 | x: Camera.center_x(world), y: Camera.center_y(world)}),
+      else: world
+  end
+
+  defp draw_still(world, self, _other) do
+    %Instance{x: x, y: y} = World.fetch(world, self)
+    angle = Gml.var(world, self, :angle)
+
+    world
+    |> Gml.all("SuddenDeathBG")
+    |> Enum.reduce(world, &World.update(&2, &1, fn backdrop -> %{backdrop | image_angle: -angle / 1} end))
+    |> Chain.draw({x, y + @hang}, {x, @chain_top}, false)
+    |> World.inherited(self, "ChandelierStill", :draw, 0)
   end
 end
