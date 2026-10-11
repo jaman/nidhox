@@ -6,10 +6,17 @@ defmodule Nidhox.Client do
 
   The whole pane is the game's picture: exactly the room's view, at the largest scale
   that fits the pane, centred between black bars, with what the game draws on its GUI
-  over it in window pixels, and the game's options (`Nidhox.Options`) over that while
-  they are open. Keys and controller buttons are `Nidhox.Controls`'. A draw item's
+  over it in window pixels, and the game's options (`Nidhox.Options`), or the typing of a
+  host's address or join code (`Nidhox.Typing`, opened when the world asks with
+  `{:menu, {:typing, entry}}`), over that while open. Keys and controller buttons are `Nidhox.Controls`'; of the client's own
+  keys only `Ctrl+Q` and `Ctrl+C` (quit) remain, `q` and `p` doing nothing and `Esc`
+  being the game's pause. A draw item's
   picture `{:part, key, {left, top, width, height}}` shows that part of picture `key`, and
   a tile layer's picture is drawn once a room and kept (`Nidhox.TileLayerCache`).
+
+  The scene's `:native` is the room view's own size, so the client's picture options
+  (`Cauldron2D.Drafter.Client.Picture`) can draw the room at that size times a whole
+  number for the terminal to scale; the look's default is `native:2,png,swap`.
 
   The game's music is the world's own sound events — the title's `MainMenuMusic`, the
   match's `LayeredMusic`, the tutorial's — so the client cues no music of its own.
@@ -24,7 +31,7 @@ defmodule Nidhox.Client do
   @atlas :nidhox
   alias Cauldron2D.DrawList
   alias Cauldron2D.GameMaker.{Shapes, TileLayers}
-  alias Nidhox.{Assets, Controls, Options, TileLayerCache}
+  alias Nidhox.{Assets, Controls, Options, TileLayerCache, Typing}
 
   @impl true
   def title, do: %{name: "NidhOX", tagline: "Nidhogg Open-source eXperience"}
@@ -60,7 +67,8 @@ defmodule Nidhox.Client do
   def start, do: {:play, :nidhox}
 
   @impl true
-  def look, do: %{projection: :picture, projections: [:picture]}
+  def look,
+    do: %{projection: :picture, projections: [:picture], picture: [{:native, 2}, :png, :swap]}
 
   @impl true
   def chat?, do: false
@@ -72,7 +80,9 @@ defmodule Nidhox.Client do
   def client_keys do
     %{
       back: nil,
-      menu: :escape,
+      title: nil,
+      pause: nil,
+      menu: nil,
       settings: nil,
       settings_menu: nil,
       talk: nil,
@@ -119,12 +129,20 @@ defmodule Nidhox.Client do
     scene(Map.put(frame, :overlay, Options.items(menu, frame.window)))
   end
 
+  def scene(frame, %{menu: %Typing{} = typing}) do
+    scene(Map.put(frame, :overlay, Typing.items(typing, frame.window)))
+  end
+
   def scene(frame, _look), do: scene(frame)
 
   @impl true
   def open_menu(settings), do: Options.open(settings)
 
   @impl true
+  def open_menu(_settings, {:typing, entry}), do: Typing.open(entry)
+
+  @impl true
+  def menu_event(%Typing{} = typing, event, settings), do: Typing.event(typing, event, settings)
   def menu_event(menu, event, settings), do: Options.event(menu, event, settings)
 
   @impl true
@@ -134,9 +152,13 @@ defmodule Nidhox.Client do
       bounds: :unbounded,
       cell: fn _cell -> nil end,
       movers: [],
+      native: native(frame),
       picture: fn size, _aspect -> picture(frame, size) end
     }
   end
+
+  defp native(%{view: {_x, _y, width, height}}), do: {round(width), round(height)}
+  defp native(_frame), do: nil
 
   @doc """
   The pane's picture of `frame` at `size` `{width, height}` pixels: the room's view

@@ -38,7 +38,8 @@ defmodule Nidhox.Objects.FireClouds do
       {"gml_Object_oFireClouds_Create_0", &start/3},
       {"gml_Object_oFireClouds_Step_1", &keep_surfaces/3},
       {"gml_Object_oFireClouds_Step_0", &burn/3},
-      {"gml_Object_oFireClouds_Step_2", fn world, self, _other -> World.update(world, self, &%{&1 | y: Camera.top(world)}) end},
+      {"gml_Object_oFireClouds_Step_2",
+       fn world, self, _other -> World.update(world, self, &%{&1 | y: Camera.top(world)}) end},
       {"gml_Object_oFireClouds_Draw_0", &draw/3},
       {"gml_Object_oFireClouds_Other_25", &free/3},
       {"gml_Object_oFireClouds_Destroy_0", &user_15/3},
@@ -87,7 +88,9 @@ defmodule Nidhox.Objects.FireClouds do
     world =
       world
       |> Surfaces.clear(b, @white, 0)
-      |> Surfaces.draw(b, [Surfaces.item(world, a, {across, @rise}, scale: {@widen, 1}, blend: @white, alpha: 1.0)])
+      |> Surfaces.draw(b, [
+        Surfaces.item(world, a, {across, @rise}, scale: {@widen, 1}, blend: @white, alpha: 1.0)
+      ])
       |> Surfaces.clear(a, @white, 0)
       |> then(&Surfaces.draw(&1, a, [Surfaces.item(&1, b, {0, 0})]))
 
@@ -102,14 +105,22 @@ defmodule Nidhox.Objects.FireClouds do
     world = world |> Gml.random_range(0, 360) |> elem(1)
     origin = World.sprite(world, @puff).origin
 
-    {%{picture: {:sprite, @puff, 0}, position: {x, @height - @puff_lift}, origin: origin, blend: Colour.hsv(hue, 220, 200), alpha: 1.0},
-     world}
+    {%{
+       picture: {:sprite, @puff, 0},
+       position: {x, @height - @puff_lift},
+       origin: origin,
+       blend: Colour.hsv(hue, 220, 200),
+       alpha: 1.0
+     }, world}
   end
 
   defp draw(world, self, _other) do
     %Instance{x: x, y: y} = World.fetch(world, self)
     surface = Gml.var(world, self, :surfA, -1)
-    if Surfaces.exists?(world, surface), do: Draw.item(world, Surfaces.item(world, surface, {x, y})), else: world
+
+    if Surfaces.exists?(world, surface),
+      do: Draw.item(world, Surfaces.item(world, surface, {x, y})),
+      else: world
   end
 
   defp user_15(world, self, _other), do: World.perform(world, self, :other, 25)

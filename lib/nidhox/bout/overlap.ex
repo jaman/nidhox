@@ -35,7 +35,12 @@ defmodule Nidhox.Bout.Overlap do
   @spec held?(World.t(), non_neg_integer(), non_neg_integer()) :: boolean()
   def held?(%World{} = world, weapon, target) do
     %Instance{x: x, y: y, sprite_index: sprite} = blade = World.fetch(world, weapon)
-    width = if sprite in @stairs_swords, do: sprite_size(world, @level_sword), else: sprite_width(world, blade)
+
+    width =
+      if sprite in @stairs_swords,
+        do: sprite_size(world, @level_sword),
+        else: sprite_width(world, blade)
+
     mother = Gml.var(world, weapon, :mother, @noone)
 
     if on_stairs?(world, mother) do

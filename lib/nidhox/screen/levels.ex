@@ -18,7 +18,7 @@ defmodule Nidhox.Screen.Levels do
   Each area's point on both paths: Castle 0, Mines 1, Wilds 2, Clouds 3, Cemetery 4.
   """
 
-  alias Cauldron2D.GameMaker.World
+  alias Cauldron2D.GameMaker.{Data, World}
   alias Nidhox.Bout.Camera
 
   @enforce_keys [:selected]
@@ -48,7 +48,7 @@ defmodule Nidhox.Screen.Levels do
   @spec new() :: t()
   def new, do: %__MODULE__{selected: @first}
 
-  @doc "The game's name for `area` (`getLevelName`): `\"Clouds\"` for `\"Sky\"`, else the area's own."
+  @doc ~s{The game's name for `area` (`getLevelName`): `"Clouds"` for `"Sky"`, else the area's own.}
   @spec name(String.t()) :: String.t()
   def name("Sky"), do: "Clouds"
   def name(area), do: area
@@ -110,7 +110,7 @@ defmodule Nidhox.Screen.Levels do
   @doc "The level select's room items: the selected area's plate on the map (`drawLevelTitle`)."
   @spec items(t(), World.t()) :: [map()]
   def items(%__MODULE__{selected: area}, %World{} = world) do
-    sprite = Cauldron2D.GameMaker.Data.index(world.data, :sprites, Map.fetch!(@plates, area))
+    sprite = Data.index(world.data, :sprites, Map.fetch!(@plates, area))
     %{origin: origin} = World.sprite(world, sprite)
 
     [

@@ -46,7 +46,8 @@ defmodule Nidhox.Man.Push do
   end
 
   @doc "The world after `to` is drawn towards `dist` pixels ahead of `from` by `percent`."
-  @spec tween_dist(World.t(), non_neg_integer(), non_neg_integer(), number(), number()) :: World.t()
+  @spec tween_dist(World.t(), non_neg_integer(), non_neg_integer(), number(), number()) ::
+          World.t()
   def tween_dist(%World{} = world, from, to, dist, percent) do
     shift = shift_amount(world, from, to, dist, percent)
 

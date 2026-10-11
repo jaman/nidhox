@@ -50,7 +50,14 @@ defmodule Nidhox.Objects.Arrow do
         _nobody -> 0
       end
 
-    Gml.put(world, self, %{xPos: x_pos, yOffset: 0, xSpeed: 0, surf: -1, yellowKillStreak: 0, orangeKillStreak: 0})
+    Gml.put(world, self, %{
+      xPos: x_pos,
+      yOffset: 0,
+      xSpeed: 0,
+      surf: -1,
+      yellowKillStreak: 0,
+      orangeKillStreak: 0
+    })
   end
 
   defp end_step(world, self, _other) do
@@ -64,9 +71,14 @@ defmodule Nidhox.Objects.Arrow do
 
   defp follow_leader(world, self) do
     case Match.get(world, :leadingPlayerIndex) do
-      1 -> world |> Gml.put(self, %{xPos: 1}) |> World.update(self, &%{&1 | image_index: 1})
-      2 -> world |> Gml.put(self, %{xPos: -1}) |> World.update(self, &%{&1 | image_index: 2})
-      _nobody -> world |> Gml.put(self, %{xPos: 0}) |> World.update(self, &%{&1 | image_alpha: 0.0})
+      1 ->
+        world |> Gml.put(self, %{xPos: 1}) |> World.update(self, &%{&1 | image_index: 1})
+
+      2 ->
+        world |> Gml.put(self, %{xPos: -1}) |> World.update(self, &%{&1 | image_index: 2})
+
+      _nobody ->
+        world |> Gml.put(self, %{xPos: 0}) |> World.update(self, &%{&1 | image_alpha: 0.0})
     end
   end
 
@@ -77,14 +89,18 @@ defmodule Nidhox.Objects.Arrow do
 
     world
     |> Gml.put(self, %{yOffset: y_offset})
-    |> World.update(self, &%{&1 | y: y_offset + @top, x: @middle + Gml.var(world, self, :xPos) * @reach - width / 2})
+    |> World.update(
+      self,
+      &%{&1 | y: y_offset + @top, x: @middle + Gml.var(world, self, :xPos) * @reach - width / 2}
+    )
   end
 
   defp draw(world, self, _other) do
     leader = Match.get(world, :leadingPlayerIndex)
 
     if System.get(world, :flow) != @demonstration and Gml.exists?(world, "Match") and
-         not Gml.truthy?(Match.get(world, :sudden_death)) and not Gml.truthy?(Match.get(world, :finished)) and
+         not Gml.truthy?(Match.get(world, :sudden_death)) and
+         not Gml.truthy?(Match.get(world, :finished)) and
          leader in [1, 2] do
       {colour, world} = PlayerColour.get(world, self, colour_index(world, leader))
       arrow(world, self, leader, colour)
@@ -95,9 +111,14 @@ defmodule Nidhox.Objects.Arrow do
 
   defp colour_index(world, leader) do
     cond do
-      Gml.exists?(world, "ArcadeMode") and leader == 2 -> @computer
-      (tournament = Gml.first(world, "Tournament")) != nil -> Map.get(Gml.var(world, tournament, :currentPlayer, %{}), leader, 0) + 1
-      true -> leader
+      Gml.exists?(world, "ArcadeMode") and leader == 2 ->
+        @computer
+
+      (tournament = Gml.first(world, "Tournament")) != nil ->
+        Map.get(Gml.var(world, tournament, :currentPlayer, %{}), leader, 0) + 1
+
+      true ->
+        leader
     end
   end
 
@@ -110,21 +131,39 @@ defmodule Nidhox.Objects.Arrow do
     top = Camera.top(world)
 
     shadow =
-      part(sprite, leader, {0, 0, width, height}, {left + x - 1 + toward * :math.sin(frame / 30), top + y - 1 + :math.cos(frame / 50) / 2}, {0, 0, 0})
+      part(
+        sprite,
+        leader,
+        {0, 0, width, height},
+        {left + x - 1 + toward * :math.sin(frame / 30), top + y - 1 + :math.cos(frame / 50) / 2},
+        {0, 0, 0}
+      )
 
     darker = Colour.merge(colour, {0, 0, 0}, 0.05)
 
     bands =
       for band <- 0..(height - 1)//@band do
         shade = 0.5 + :math.sin(band * band / 10 + frame / 4) * 0.5
-        part(sprite, leader, {0, band, width, min(@band, height - band)}, {left + x, top + y + band}, Colour.merge(colour, darker, shade))
+
+        part(
+          sprite,
+          leader,
+          {0, band, width, min(@band, height - band)},
+          {left + x, top + y + band},
+          Colour.merge(colour, darker, shade)
+        )
       end
 
     Enum.reduce([shadow | bands], world, &Draw.item(&2, &1))
   end
 
   defp part(sprite, frame, rectangle, position, blend),
-    do: %{picture: {:part, {:sprite, sprite, frame}, rectangle}, position: position, blend: blend, depth: @gui_depth}
+    do: %{
+      picture: {:part, {:sprite, sprite, frame}, rectangle},
+      position: position,
+      blend: blend,
+      depth: @gui_depth
+    }
 
   defp sprite_width(world, sprite), do: world |> sprite_size(sprite) |> elem(0)
 

@@ -19,20 +19,30 @@ defmodule Nidhox.Flow do
       it, and on the main menu selects QUIT TO DESKTOP. On the menus before ONLINE
       VERSUS's choices, the machine neither hosts nor looks for hosts
     * `:hosting` — hosting (`Nidhox.Online`), the address and join code shown, until a
-      player on a client of their own takes a side, then the level select; `:jump`
-      goes back
+      player on a client of their own takes a side, then the level select; `:jump` or
+      `:pause` (`Esc`) goes back, hosting stopped
+    * `:ssh_hosting` — HOST OVER SSH: the client of the player who chose it is asked for
+      the port to serve on (`Nidhox.Typing`; empty, or not a port, for any free one,
+      started with `ssh_port` when set), then the game served over ssh there
+      (`Nidhox.Online`) and the command to connect with shown, until a player connecting that way takes a side,
+      then the level select; `:jump` or `:pause` (`Esc`) goes back, serving stopped
     * `:join` — the hosts heard on the local network; choosing one asks for its code
-    * `:address` — SET IP: the host's address typed (`Nidhox.Screen.Entry`), then its
-      code
-    * `:code` — the host's join code typed; finishing it joins, and the client of the
-      player who finished is asked to enter the host's world
+    * `:address` — SET IP: the client of the player who chose it is asked to type the
+      host's address (`Nidhox.Typing`, started with this machine's network part), then
+      the code
+    * `:code` — the client of the player joining is asked to type the host's join code;
+      what they type (`typed/4`) joins, and that client is asked to enter the host's
+      world. On both screens `:start` or `:attack` — pressed again once every player has
+      let go of both since the typing closed — asks for the typing again and
+      `:jump` or `:pause` (`Esc`) goes back
     * `:demo` — the title's attract mode (`MainMenu`'s `autoStartTimer`): after 1200
       steps on the title with no press, a match in one of the areas at random
       (`choose(20, 21, 22, 23, 25)`) played by the computer on both sides (`System.flow`
       1), with the logo and "press start" over it (`Nidhox.Objects.System`); any press,
       or the match ending, goes to the main menu
     * `:levels` — `Nidhox.Screen.Levels` over `rLevelSelect`: its chosen area begins a
-      versus bout under the variants chosen; with no move for 720 steps, the main menu
+      versus bout under the variants chosen; with no move for 720 steps, the main menu, except while
+      this machine hosts ONLINE VERSUS
     * `:tournament` — the tournament's own rooms, run by the game's objects
       (`Nidhox.Objects.Tournament`, `Nidhox.Objects.CountDowns`): the ladder
       (`rShowLadder`), the warm-up before each match (`rPreMatch`, where `:start`
@@ -45,10 +55,14 @@ defmodule Nidhox.Flow do
     * `:credits` — `Nidhox.Screen.Credits` over `rCredits`, until `:attack` or `:start`
     * `:bout` — the match (`Nidhox.Bout`), run by the game's own objects from its
       faceoff on under the rules chosen on the level select (`Nidhox.Rules`), until its
-      `Match` is gone; `:start` pauses it
+      `Match` is gone; `:start` or `:pause` (`Esc`) pauses it
     * `:paused` — `Nidhox.Screen.Pause`; UNPAUSE GAME goes back to the bout, CHANGE LEVEL
       ends the match (its music with it) for the level select, and QUIT TO TITLE SCREEN
-      ends the match and any tournament for the title
+      ends the match and any tournament for the title — except when chosen by the
+      player from another machine while this machine hosts: then a bout in progress is
+      the host's by forfeit, the match ends, that player's client is asked to quit
+      (`ask/3`), and the hosting screen comes back, still hosting, saying "the other
+      player quit"
     * `:results` — `Nidhox.Screen.Results` over `rMatchStats`: a press goes on to the
       level select, or with "watch replay" turned up, to the replay. In a single player
       run the run's own step moves on at a press
@@ -78,11 +92,11 @@ defmodule Nidhox.Flow do
   alias Cauldron2D.GameMaker.Step
   alias Cauldron2D.GameMaker.World
   alias Nidhox.{Assets, Bout, Online}
+  alias Nidhox.Bout.Sound
   alias Nidhox.Gml
   alias Nidhox.Objects.Grass
-  alias Nidhox.Bout.Sound
   alias Nidhox.Rules
-  alias Nidhox.Screen.{Credits, Entry, Levels, Logos, MenuList, Pause, Results, Title}
+  alias Nidhox.Screen.{Credits, Levels, Logos, MenuList, Pause, Results, Title}
 
   @no_keys %{held: MapSet.new(), pressed: MapSet.new(), released: MapSet.new()}
   @areas ["Cemetery", "Castle", "Mines", "Sky", "Wilds"]
@@ -95,6 +109,7 @@ defmodule Nidhox.Flow do
   @attract_levels [20, 21, 22, 23, 25]
   @choose_sound 22
   @fewest_entrants 3
+  @played_online [:levels, :bout, :paused, :results, :replay]
   @most_entrants 8
   @rooms %{
     logos: "rLogos",
@@ -134,9 +149,28 @@ defmodule Nidhox.Flow do
 
     case Levels.input(state.levels, players) do
       {:choose, area} -> chosen(state, area)
-      :given_up -> main_menu(state)
+      :given_up -> given_up(state)
       {:moved, levels} -> %{state | levels: levels, world: Levels.pan(levels, state.world)}
       {:stay, levels} -> %{state | levels: levels, world: Levels.pan(levels, state.world)}
+    end
+  end
+
+  def step(%{screen: :ssh_hosting} = state, players) do
+    state = state |> scenery(players) |> armed(players)
+    again = Enum.find([1, 2], &(:start in players[&1].pressed or :attack in players[&1].pressed))
+
+    cond do
+      ssh_joined?(state) ->
+        met(state)
+
+      backing_out?(players) ->
+        online_menu(state)
+
+      again != nil and state.typing_armed and state.online.ssh == nil ->
+        typing(%{state | typer: again})
+
+      true ->
+        state
     end
   end
 
@@ -144,8 +178,8 @@ defmodule Nidhox.Flow do
     state = scenery(state, players)
 
     cond do
-      joined?(state) -> levels(state)
-      Enum.any?(Map.values(players), &(:jump in &1.pressed)) -> online_menu(state)
+      joined?(state) -> met(state)
+      backing_out?(players) -> online_menu(state)
       true -> state
     end
   end
@@ -154,7 +188,7 @@ defmodule Nidhox.Flow do
     state = scenery(state, players)
 
     case MenuList.input(found_menu(state), players) do
-      {:choose, {:host, address}, _side} -> code_entry(state, address)
+      {:choose, {:host, address}, side} -> code_entry(state, address, side)
       {:choose, :disabled, _side} -> state
       {:back, _side} -> online_menu(state)
       {:moved, menu} -> sound(%{state | menu: menu}, @move_sound)
@@ -163,32 +197,21 @@ defmodule Nidhox.Flow do
     end
   end
 
-  def step(%{screen: :address} = state, players) do
-    state = scenery(state, players)
+  def step(%{screen: screen} = state, players) when screen in [:address, :code] do
+    state = state |> scenery(players) |> armed(players)
+    again = Enum.find([1, 2], &(:start in players[&1].pressed or :attack in players[&1].pressed))
 
-    case Entry.input(state.entry, players) do
-      {:done, "", _side} -> state
-      {:done, address, _side} -> code_entry(state, address)
-      {:back, _side} -> online_menu(state)
-      {:stay, entry} -> %{state | entry: entry}
-    end
-  end
-
-  def step(%{screen: :code, address: address} = state, players) do
-    state = scenery(state, players)
-
-    case Entry.input(state.entry, players) do
-      {:done, code, side} -> %{state | effects: [{:join, address, code, side} | state.effects]}
-      {:back, _side} -> online_menu(state)
-      {:stay, entry} -> %{state | entry: entry}
+    cond do
+      backing_out?(players) -> online_menu(state)
+      again != nil and state.typing_armed -> typing(%{state | typer: again})
+      true -> state
     end
   end
 
   def step(%{screen: :tournament} = state, players) do
-    if in_room?(state.world, "rPreMatch") and
-         Enum.any?(Map.values(players), &(:start in &1.pressed)),
-       do: %{state | screen: :paused, menu: Pause.menu(:tournament, false)},
-       else: state |> scenery(players) |> followed()
+    if in_room?(state.world, "rPreMatch") and pausing?(players),
+      do: %{state | screen: :paused, menu: Pause.menu(:tournament, false)},
+      else: state |> scenery(players) |> followed()
   end
 
   def step(%{screen: :credits} = state, players) do
@@ -198,20 +221,20 @@ defmodule Nidhox.Flow do
   end
 
   def step(%{screen: :bout} = state, players) do
-    if Enum.any?(Map.values(players), &(:start in &1.pressed)),
+    if pausing?(players),
       do: %{state | screen: :paused, menu: Pause.menu(state.mode, Online.hosting?(state))},
       else: bout(state, players)
   end
 
   def step(%{screen: :challenge} = state, players) do
-    if Enum.any?(Map.values(players), &(:start in &1.pressed)),
+    if pausing?(players),
       do: %{state | screen: :paused, menu: Pause.menu(:challenge, false)},
       else: advance(state, players)
   end
 
   def step(%{screen: :tutorial} = state, players) do
     cond do
-      Enum.any?(Map.values(players), &(:start in &1.pressed)) ->
+      pausing?(players) ->
         %{state | screen: :paused, menu: Pause.menu(:tutorial, false)}
 
       Gml.exists?(state.world, "Tutorial") ->
@@ -224,9 +247,10 @@ defmodule Nidhox.Flow do
 
   def step(%{screen: :paused} = state, players) do
     case Pause.input(state.menu, players) do
-      {:choose, :unpause} -> %{state | screen: resumed(state), menu: nil}
-      {:choose, :change_level} -> state |> killed(["Match"]) |> levels()
-      {:choose, :title} -> state |> killed(["Match", "Tournament"]) |> title()
+      {:choose, :unpause, _side} -> %{state | screen: resumed(state), menu: nil}
+      {:choose, :change_level, _side} -> state |> killed(["Match"]) |> levels()
+      {:choose, :title, side} -> quit_to_title(state, side)
+      {:choose, :options, side} -> ask(state, side, :menu)
       {:stay, menu} -> %{state | menu: menu}
     end
   end
@@ -278,7 +302,7 @@ defmodule Nidhox.Flow do
   The state with `ask` (`:menu` or `:quit`) put to the client of the player on `side`,
   for the next `@ask_steps` steps, under a number no earlier ask had.
   """
-  @spec ask(map(), 1 | 2, :menu | :quit | {:enter, map()}) :: map()
+  @spec ask(map(), 1 | 2, :menu | {:menu, term()} | :quit | {:enter, map()}) :: map()
   def ask(state, side, ask) do
     number = state.ask_number + 1
 
@@ -290,7 +314,50 @@ defmodule Nidhox.Flow do
     %{state | ask_number: number, asks: asks}
   end
 
+  @doc """
+  The state after the player on `side` typed `text` for an entry of `kind` (`:address`
+  or `:code`), or went back from it (`text` `:back`); typing for a screen no longer
+  shown changes nothing.
+  """
+  @spec typed(map(), 1 | 2, :address | :code, String.t() | :back) :: map()
+  def typed(%{screen: kind} = state, _side, kind, :back) when kind in [:address, :code],
+    do: online_menu(state)
+
+  def typed(%{screen: :ssh_hosting} = state, _side, :ssh_port, :back), do: online_menu(state)
+
+  def typed(%{screen: :ssh_hosting} = state, _side, :ssh_port, port),
+    do: %{state | typing_armed: false, effects: [{:ssh_host, ssh_port(port)} | state.effects]}
+
+  def typed(%{screen: :address} = state, side, :address, ""), do: typing(%{state | typer: side})
+
+  def typed(%{screen: :address} = state, side, :address, address),
+    do: code_entry(state, address, side)
+
+  def typed(%{screen: :code, address: address} = state, side, :code, code),
+    do: %{state | typing_armed: false, effects: [{:join, address, code, side} | state.effects]}
+
+  def typed(state, _side, _kind, _text), do: state
+
+  @doc """
+  The state after the player from another machine left the ONLINE VERSUS game this
+  machine hosts, while on the level select, in a bout, its pause, the results or the
+  replay: a bout in progress won by forfeit by the hosting player (a `{:result, row}`
+  event with `won?` `true`), the match ended, and the hosting screen it was hosted from
+  (`:hosting` or `:ssh_hosting`) shown again with the status "the other player left",
+  still hosting, so the next player connects as the first did. Any other state is
+  returned unchanged.
+  """
+  @spec opponent_gone(map()) :: map()
+  def opponent_gone(state), do: state |> departed() |> forfeited()
+
+  defp forfeited(%{screen: screen} = state) when screen in @played_online do
+    if Online.hosting?(state) and not opponent?(state), do: forfeit(state), else: state
+  end
+
+  defp forfeited(state), do: state
+
   @doc "The state at the logos, the first screen."
+
   @spec logos(map()) :: map()
   def logos(state), do: enter(%{state | screen: :logos, menu: nil, timer: 0}, :logos)
 
@@ -332,6 +399,19 @@ defmodule Nidhox.Flow do
         back(state, state.menu.key)
     end
   end
+
+  defp ssh_port(typed) do
+    case Integer.parse(typed) do
+      {port, ""} when port in 1..65_535 -> port
+      _any -> 0
+    end
+  end
+
+  defp backing_out?(players),
+    do: Enum.any?(Map.values(players), &(:jump in &1.pressed or :pause in &1.pressed))
+
+  defp pausing?(players),
+    do: Enum.any?(Map.values(players), &(:start in &1.pressed or :pause in &1.pressed))
 
   defp idled(state, players),
     do: %{state | idle: if(any_press?(players), do: 0, else: state.idle + 1)}
@@ -385,7 +465,7 @@ defmodule Nidhox.Flow do
       MenuList.new(
         :online,
         "ONLINE VERSUS",
-        [{"HOST", :host}, {"JOIN", :join}, {"SET IP", :set_ip}],
+        [{"HOST", :host}, {"HOST OVER SSH", :ssh}, {"JOIN", :join}, {"SET IP", :set_ip}],
         selected
       )
 
@@ -425,8 +505,9 @@ defmodule Nidhox.Flow do
   defp chose(state, :multi, :online, _side), do: online_menu(state)
   defp chose(state, :multi, :variants, _side), do: menu(state, {:variants, :multi}, nil)
   defp chose(state, :online, :host, side), do: hosting(state, side)
+  defp chose(state, :online, :ssh, side), do: ssh_hosting(state, side)
   defp chose(state, :online, :join, _side), do: joining(state)
-  defp chose(state, :online, :set_ip, _side), do: address_entry(state)
+  defp chose(state, :online, :set_ip, side), do: address_entry(state, side)
   defp chose(state, :tournament, :variants, _side), do: menu(state, {:variants, :tournament}, nil)
   defp chose(state, :tournament, :start, _side), do: tournament(state)
   defp chose(state, :tournament, option, _side), do: changed(state, :tournament, option, 1)
@@ -480,6 +561,12 @@ defmodule Nidhox.Flow do
     end
   end
 
+  defp given_up(state) do
+    if Online.hosting?(state),
+      do: %{state | levels: %{state.levels | idle: 0}},
+      else: main_menu(state)
+  end
+
   defp levels(state) do
     levels = Levels.new()
     enter(%{state | screen: :levels, menu: nil, levels: levels, timer: 0}, :levels)
@@ -498,10 +585,89 @@ defmodule Nidhox.Flow do
     %{state | screen: :hosting, menu: nil, online: online, effects: [:host | state.effects]}
   end
 
-  defp joined?(%{online: %{host: host, owner: owner}, players: players}) when host != nil,
-    do: Enum.any?(players, fn {_id, player} -> player.side != nil and player.owner != owner end)
+  defp joined?(%{online: %{host: host}} = state), do: host != nil and opponent?(state)
 
-  defp joined?(_state), do: false
+  defp ssh_joined?(%{online: %{ssh: ssh}} = state), do: ssh != nil and opponent?(state)
+
+  defp opponent?(%{online: %{owner: owner, quitting: quitting}, players: players}),
+    do:
+      Enum.any?(players, fn {_id, player} ->
+        player.side != nil and player.owner != owner and player.owner not in quitting
+      end)
+
+  defp quit_to_title(state, side) do
+    case remote_owner(state, side) do
+      nil ->
+        state |> killed(["Match", "Tournament"]) |> title()
+
+      owner ->
+        state = state |> forfeit_result() |> killed(["Match"]) |> ask(side, :quit) |> waiting()
+        online = state.online
+
+        %{
+          state
+          | online: %{
+              online
+              | quitting: [owner | online.quitting],
+                status: "the other player quit"
+            }
+        }
+    end
+  end
+
+  defp remote_owner(state, side) do
+    Enum.find_value(state.players, fn {_id, player} ->
+      player.side == side and Online.remote_player?(state, player) and player.owner
+    end)
+  end
+
+  defp departed(%{online: %{quitting: []}} = state), do: state
+
+  defp departed(%{online: online, players: players} = state) do
+    present = for {_id, %{owner: owner}} <- players, into: MapSet.new(), do: owner
+    %{state | online: %{online | quitting: Enum.filter(online.quitting, &(&1 in present))}}
+  end
+
+  defp forfeit(state) do
+    state = state |> forfeit_result() |> killed(["Match"]) |> waiting()
+    %{state | online: %{state.online | status: "the other player left"}}
+  end
+
+  defp waiting(%{online: %{ssh: ssh}} = state) when ssh != nil,
+    do: enter(%{state | screen: :ssh_hosting, menu: nil, entry: nil, timer: 0}, :online)
+
+  defp waiting(state),
+    do: enter(%{state | screen: :hosting, menu: nil, entry: nil, timer: 0}, :online)
+
+  defp met(state), do: levels(%{state | online: %{state.online | status: nil}})
+
+  defp forfeit_result(%{online: %{owner: owner}} = state) do
+    if Bout.running?(state.world) and Map.has_key?(state.players, owner),
+      do: %{state | events: [forfeit_event(state, owner) | state.events]},
+      else: state
+  end
+
+  defp forfeit_event(state, owner),
+    do:
+      {:result,
+       %{id: owner, name: to_string(owner), won?: true, area: state.area, mode: state.mode}}
+
+  defp ssh_hosting(state, side) do
+    owner =
+      Enum.find_value(state.players, fn {_id, player} -> player.side == side && player.owner end)
+
+    online = %{state.online | owner: owner, status: nil}
+    offered = if state.online.ssh_port, do: Integer.to_string(state.online.ssh_port), else: ""
+
+    typing(%{
+      state
+      | screen: :ssh_hosting,
+        menu: nil,
+        online: online,
+        entry: {:ssh_port, "SSH PORT, EMPTY FOR ANY", ~c"0123456789", 5, offered},
+        typer: side
+    })
+  end
 
   defp joining(state) do
     state = %{state | screen: :join, effects: [:listen | state.effects]}
@@ -518,33 +684,40 @@ defmodule Nidhox.Flow do
     end
   end
 
-  defp address_entry(state) do
-    entry = Entry.new("SET IP", ~c"0123456789. ", 15)
-
-    %{
+  defp address_entry(state, side),
+    do: %{
       state
       | screen: :address,
         menu: nil,
-        entry: entry,
+        entry: {:address, "SET IP", ~c"0123456789.", 15, ""},
+        typer: side,
         effects: [:prefill_address | state.effects]
     }
-  end
 
-  defp code_entry(state, address) do
-    entry = Entry.new("CODE", Distribution.alphabet(), Distribution.code_length())
-
-    %{
+  defp code_entry(state, address, side) do
+    typing(%{
       state
       | screen: :code,
         menu: nil,
-        entry: entry,
+        entry: {:code, "CODE", Distribution.alphabet(), Distribution.code_length(), ""},
         address: address,
+        typer: side,
         online: %{state.online | status: nil},
         effects: [:unlisten | state.effects]
-    }
+    })
   end
 
-  defp offline(state), do: %{state | effects: [:unhost, :unlisten | state.effects]}
+  defp typing(state),
+    do: ask(%{state | typing_armed: false}, state.typer, {:menu, {:typing, state.entry}})
+
+  defp armed(%{typing_armed: true} = state, _players), do: state
+
+  defp armed(state, players) do
+    held? = Enum.any?(Map.values(players), &(:start in &1.held or :attack in &1.held))
+    %{state | typing_armed: not held?}
+  end
+
+  defp offline(state), do: %{state | effects: [:unhost, :ssh_unhost, :unlisten | state.effects]}
 
   defp tournament(state) do
     world = Bout.start_tournament(state.world, state.area, state.rules, state.entrants)

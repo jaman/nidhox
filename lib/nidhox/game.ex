@@ -41,21 +41,24 @@ defmodule Nidhox.Game do
   alias Cauldron2D.Audio
   alias Cauldron2D.GameMaker.Data
   alias Cauldron2D.GameMaker.Draw
+  alias Cauldron2D.GameMaker.Surfaces
   alias Cauldron2D.GameMaker.World
   alias Nidhox.{Assets, Flow, Online, Screen}
   alias Nidhox.Objects.System
+  alias Nidhox.Screen.Pause
 
   @sides [1, 2]
 
   @impl true
   def init(opts) do
-    %Assets{data: data} = Assets.get()
+    %Assets{data: data, object_depths: object_depths} = Assets.get()
 
     %{
       world:
         World.new(data, Nidhox.Code,
           room: Data.index(data, :rooms, "rLogos"),
           pictures: &Map.get(Assets.get().pictures, &1),
+          object_depths: object_depths,
           seed: Keyword.get_lazy(opts, :seed, fn -> :os.system_time(:millisecond) end)
         )
         |> System.create(),
@@ -72,8 +75,12 @@ defmodule Nidhox.Game do
       entrants: 3,
       idle: 0,
       tutorial: nil,
-      online: Online.new(Keyword.get(opts, :port)),
+      online:
+        Online.new(Keyword.get(opts, :port), Keyword.get(opts, :ssh_port) || env_ssh_port()),
       entry: nil,
+      typer: nil,
+      typing_armed: false,
+      requests: %{},
       address: nil,
       effects: [],
       credits: "",
@@ -140,7 +147,32 @@ defmodule Nidhox.Game do
     state
     |> held_by(id, held)
     |> preferred(id, Map.get(input, :options, %{}))
+    |> requested(id, Map.get(input, :request))
   end
+
+  defp env_ssh_port do
+    case Integer.parse(Elixir.System.get_env("NIDHOX_SSH_PORT", "")) do
+      {port, ""} when port in 1..65_535 -> port
+      _unset -> nil
+    end
+  end
+
+  defp requested(state, _id, nil), do: state
+
+  defp requested(state, id, {number, request}) do
+    if Map.get(state.requests, id, 0) >= number,
+      do: state,
+      else: state |> put_in([:requests, id], number) |> act_on(id, request)
+  end
+
+  defp act_on(state, id, {:typed, kind, text}) do
+    case state.players[id] do
+      %{side: side} when side != nil -> Flow.typed(state, side, kind, text)
+      _watching -> state
+    end
+  end
+
+  defp act_on(state, _id, _request), do: state
 
   defp held_by(state, id, held) do
     case Map.fetch(state.players, id) do
@@ -168,6 +200,7 @@ defmodule Nidhox.Game do
 
     state
     |> Online.pending()
+    |> Flow.opponent_gone()
     |> Flow.step(players)
     |> Online.perform()
     |> muted_since(paused?(state))
@@ -185,11 +218,13 @@ defmodule Nidhox.Game do
 
   @impl true
   def view(state, id) do
-    side = with %{side: side} <- state.players[id], do: side
+    player = state.players[id]
+    side = with %{side: side} <- player, do: side
 
     state.frame
     |> Map.put(:side, side)
     |> Map.put(:ask, ask(state, id))
+    |> remote_pause(state, player)
   end
 
   @impl true
@@ -197,6 +232,14 @@ defmodule Nidhox.Game do
     {outbox, world} = World.take_outbox(state.world)
     {outbox ++ Enum.reverse(state.events), %{state | world: world, events: []}}
   end
+
+  defp remote_pause(frame, %{screen: :paused} = state, %{} = player) do
+    if Online.remote_player?(state, player),
+      do: %{frame | overlay: Pause.items(state.menu, frame.window, :remote)},
+      else: frame
+  end
+
+  defp remote_pause(frame, _state, _player), do: frame
 
   defp ask(state, id) do
     case Map.get(state.asks, id) do
@@ -271,7 +314,7 @@ defmodule Nidhox.Game do
           window: window,
           screen: state.screen,
           area: state.area,
-          surfaces: world.surfaces
+          surfaces: Surfaces.rasters(world)
         }
     }
   end

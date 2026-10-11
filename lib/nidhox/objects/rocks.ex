@@ -19,7 +19,8 @@ defmodule Nidhox.Objects.Rocks do
   def handlers do
     [
       {"gml_Object_FallingRock_Create_0", &hang/3},
-      {"gml_Object_FallingRock_Alarm_0", fn world, self, _other -> World.update(world, self, &%{&1 | gravity: @gravity}) end},
+      {"gml_Object_FallingRock_Alarm_0",
+       fn world, self, _other -> World.update(world, self, &%{&1 | gravity: @gravity}) end},
       {"gml_Object_FallingRock_Other_0", fn world, self, _other -> World.destroy(world, self) end}
     ]
   end

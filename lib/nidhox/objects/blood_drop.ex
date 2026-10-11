@@ -82,7 +82,9 @@ defmodule Nidhox.Objects.BloodDrop do
   end
 
   defp step(world, self, _other) do
-    World.update(world, self, fn drop -> if drop.vspeed > 8, do: %{drop | vspeed: 8}, else: drop end)
+    World.update(world, self, fn drop ->
+      if drop.vspeed > 8, do: %{drop | vspeed: 8}, else: drop
+    end)
   end
 
   defp gone(world, self, _other), do: World.destroy(world, self)
@@ -97,13 +99,18 @@ defmodule Nidhox.Objects.BloodDrop do
   end
 
   defp stain(world, self, surface) do
-    %Instance{x: x, y: y, xprevious: px, yprevious: py, image_blend: colour} = World.fetch(world, self)
+    %Instance{x: x, y: y, xprevious: px, yprevious: py, image_blend: colour} =
+      World.fetch(world, self)
+
     %Instance{x: sx, y: sy} = World.fetch(world, surface)
     blood = Gml.var(world, surface, :blood, -1)
 
     world =
       if Surfaces.exists?(world, blood),
-        do: Surfaces.draw(world, blood, [Draw.line_item({px - sx, py - sy}, {x - sx, y - 4 - sy}, @width, colour)]),
+        do:
+          Surfaces.draw(world, blood, [
+            Draw.line_item({px - sx, py - sy}, {x - sx, y - 4 - sy}, @width, colour)
+          ]),
         else: world
 
     life = Gml.var(world, self, :life) - 1

@@ -24,7 +24,8 @@ defmodule Nidhox.Objects.Waterfall do
       {"gml_Object_ParticleWaterfall_Create_0", &start/3},
       {"gml_Object_ParticleWaterfall_Step_0", &spray/3},
       {"gml_Object_ParticleWaterfall_Destroy_0", &finish/3},
-      {"gml_Object_ParticleWaterfall_Other_5", fn world, self, _other -> World.perform(world, self, :destroy, 0) end}
+      {"gml_Object_ParticleWaterfall_Other_5",
+       fn world, self, _other -> World.perform(world, self, :destroy, 0) end}
     ]
   end
 
@@ -53,7 +54,8 @@ defmodule Nidhox.Objects.Waterfall do
   end
 
   defp spray(world, self, _other) do
-    %Instance{x: x, y: y, depth: depth, vars: %{pSys: system, pEmit: emitter, pWater: water}} = World.fetch(world, self)
+    %Instance{x: x, y: y, depth: depth, vars: %{pSys: system, pEmit: emitter, pWater: water}} =
+      World.fetch(world, self)
 
     world
     |> PartSystems.system_update(system)

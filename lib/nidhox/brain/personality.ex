@@ -4,7 +4,7 @@ defmodule Nidhox.Brain.Personality do
   or less often that personality takes each action.
 
     * `pick/2` (`pickPersonality`): in a single player run the level's personality
-      (`Nidhox.Objects.Arcade.personality/1`), else one of the `Brain`'s `personalities`
+      (`Arcade.personality/1`), else one of the `Brain`'s `personalities`
       at random
     * `chance/4` (`charBasedProbActionDefault(action, chance)`): whether the `Brain`
       takes `action` this time — always for running to the goal (26) in a left end room
@@ -28,12 +28,24 @@ defmodule Nidhox.Brain.Personality do
 
   alias Cauldron2D.GameMaker.World
   alias Nidhox.Gml
-  alias Nidhox.Objects.RoomCodes
+  alias Nidhox.Objects.{Arcade, RoomCodes}
 
   @run_to_goal 26
   @left_end 4
   @multipliers %{
-    4_890_894 => %{29 => 0, 10 => 0, 19 => 0, 7 => 0.25, 9 => 0, 11 => 0, 21 => 0, 28 => 0, 26 => 0, 2 => 5, 4 => 4},
+    4_890_894 => %{
+      29 => 0,
+      10 => 0,
+      19 => 0,
+      7 => 0.25,
+      9 => 0,
+      11 => 0,
+      21 => 0,
+      28 => 0,
+      26 => 0,
+      2 => 5,
+      4 => 4
+    },
     38_968_458 => %{
       29 => 1.0e8,
       10 => 1000,
@@ -63,7 +75,7 @@ defmodule Nidhox.Brain.Personality do
   @doc "The world with `Brain` `self` playing the run's level's personality, or one of its `personalities` at random."
   @spec pick(World.t(), non_neg_integer()) :: World.t()
   def pick(%World{} = world, self) do
-    case Nidhox.Objects.Arcade.personality(world) do
+    case Arcade.personality(world) do
       nil -> pick_random(world, self)
       personality -> Gml.put(world, self, %{personality: personality})
     end
@@ -81,7 +93,9 @@ defmodule Nidhox.Brain.Personality do
     if Gml.eq?(action, @run_to_goal) and Gml.eq?(RoomCodes.room_code(world), @left_end) do
       {true, world}
     else
-      multiplier = @multipliers |> Map.get(Gml.var(world, self, :personality), %{}) |> Map.get(action, 1)
+      multiplier =
+        @multipliers |> Map.get(Gml.var(world, self, :personality), %{}) |> Map.get(action, 1)
+
       Gml.prob(world, chance * multiplier)
     end
   end

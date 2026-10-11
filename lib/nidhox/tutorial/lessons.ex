@@ -75,7 +75,12 @@ defmodule Nidhox.Tutorial.Lessons do
   @spec check(World.t(), non_neg_integer(), number(), number()) :: World.t()
   def check(%World{} = world, self, yellow, orange) do
     move = Gml.var(world, self, :currentMove)
-    world = if move in [1, 6], do: world, else: partner(world, if(move == @block_lesson, do: @thrower, else: @standing))
+
+    world =
+      if move in [1, 6],
+        do: world,
+        else: partner(world, if(move == @block_lesson, do: @thrower, else: @standing))
+
     lesson(world, self, move, yellow, orange)
   end
 
@@ -129,8 +134,11 @@ defmodule Nidhox.Tutorial.Lessons do
     complete_if(world, self, marked?(world, self, [0, 1]))
   end
 
-  defp lesson(world, self, 8, yellow, _orange), do: complete_if(world, self, state(world, yellow) == 18)
-  defp lesson(world, self, 4, yellow, _orange), do: complete_if(world, self, state(world, yellow) == 9)
+  defp lesson(world, self, 8, yellow, _orange),
+    do: complete_if(world, self, state(world, yellow) == 18)
+
+  defp lesson(world, self, 4, yellow, _orange),
+    do: complete_if(world, self, state(world, yellow) == 9)
 
   defp lesson(world, self, 11, yellow, _orange) do
     stance = Gml.var(world, yellow, :stance)
@@ -143,14 +151,19 @@ defmodule Nidhox.Tutorial.Lessons do
   end
 
   defp lesson(world, self, 10, yellow, orange) do
-    complete_if(world, self, present?(orange) and state(world, yellow) == 48 and state(world, orange) == 65)
+    complete_if(
+      world,
+      self,
+      present?(orange) and state(world, yellow) == 48 and state(world, orange) == 65
+    )
   end
 
   defp lesson(world, self, 12, _yellow, orange),
     do: complete_if(world, self, present?(orange) and state(world, orange) == 13)
 
   defp lesson(world, self, 13, yellow, orange) do
-    world = if state(world, yellow) == 23, do: world |> unmark(self, 0) |> unmark(self, 1), else: world
+    world =
+      if state(world, yellow) == 23, do: world |> unmark(self, 0) |> unmark(self, 1), else: world
 
     world =
       case Sense.weapon_type(world, yellow) do
@@ -163,7 +176,8 @@ defmodule Nidhox.Tutorial.Lessons do
     if present?(orange), do: drop(world, orange), else: world
   end
 
-  defp lesson(world, self, 18, yellow, _orange), do: complete_if(world, self, state(world, yellow) in [72, 73])
+  defp lesson(world, self, 18, yellow, _orange),
+    do: complete_if(world, self, state(world, yellow) in [72, 73])
 
   defp lesson(world, self, 2, yellow, orange) do
     world = throw_at_learner(world, orange)
@@ -184,7 +198,8 @@ defmodule Nidhox.Tutorial.Lessons do
     |> then(&complete_if(&1, self, marked?(&1, self, [0, 1])))
   end
 
-  defp lesson(world, self, 15, yellow, _orange), do: complete_if(world, self, state(world, yellow) == 69)
+  defp lesson(world, self, 15, yellow, _orange),
+    do: complete_if(world, self, state(world, yellow) == 69)
 
   defp lesson(world, self, 16, yellow, orange) do
     world

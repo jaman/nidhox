@@ -41,7 +41,8 @@ defmodule Nidhox.Objects.Scenery do
       {"gml_Object_Empty_Create_0", fn world, self, _other -> Gml.put(world, self, %{z: 0}) end},
       {"gml_Object_BackgroundParallaxReference_Create_0", &reference/3},
       {"gml_Object_BackgroundParallaxReference_Step_0", &follow_reference/3},
-      {"gml_Object_BGFolliageWarper_Create_0", fn world, self, _other -> Gml.put(world, self, %{xStart: Backgrounds.get(world, 3, 0)}) end},
+      {"gml_Object_BGFolliageWarper_Create_0",
+       fn world, self, _other -> Gml.put(world, self, %{xStart: Backgrounds.get(world, 3, 0)}) end},
       {"gml_Object_BGFolliageWarper_Step_0", &warp/3}
     ]
   end
@@ -54,7 +55,10 @@ defmodule Nidhox.Objects.Scenery do
 
   defp follow_reference(world, self, _other) do
     index = Gml.var(world, self, :backgroundIndex, -1)
-    if index >= 0, do: Backgrounds.set(world, 3, round(index), World.fetch(world, self).x), else: world
+
+    if index >= 0,
+      do: Backgrounds.set(world, 3, round(index), World.fetch(world, self).x),
+      else: world
   end
 
   defp warp(world, _self, _other) do

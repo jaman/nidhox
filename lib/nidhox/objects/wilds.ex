@@ -30,7 +30,10 @@ defmodule Nidhox.Objects.Wilds do
   def handlers do
     [
       {"gml_Object_Mistletoe_Create_0", &leaves/3},
-      {"gml_Object_Mistletoe_Step_0", fn world, self, _other -> World.update(world, self, &%{&1 | image_speed: Gml.var(world, self, :imageSpeed) / 1}) end},
+      {"gml_Object_Mistletoe_Step_0",
+       fn world, self, _other ->
+         World.update(world, self, &%{&1 | image_speed: Gml.var(world, self, :imageSpeed) / 1})
+       end},
       {"gml_Object_Rain_Create_0", &rain_start/3},
       {"gml_Object_Rain_Step_0", &rain_step/3},
       {"gml_Object_Rain_Draw_0", &rain_draw/3},
@@ -65,7 +68,12 @@ defmodule Nidhox.Objects.Wilds do
     |> PartSystems.type_colour_hsv(drop, {0, 0}, {0, 0}, {50, 255})
     |> PartSystems.system_automatic_draw(system, false)
     |> PartSystems.system_automatic_update(system, false)
-    |> Gml.put(self, %{particleSystem: system, particleEmitter: emitter, particleType: drop, intensity: 1})
+    |> Gml.put(self, %{
+      particleSystem: system,
+      particleEmitter: emitter,
+      particleType: drop,
+      intensity: 1
+    })
   end
 
   defp rain_step(world, self, _other) do
@@ -74,7 +82,11 @@ defmodule Nidhox.Objects.Wilds do
 
     frame = System.get(world, :frame)
     angle = 270 + 5 * :math.sin(frame / 190)
-    region = {Camera.left(world) - @margin, Camera.right(world) + @margin, Camera.top(world) - @above, Camera.top(world) - @above}
+
+    region =
+      {Camera.left(world) - @margin, Camera.right(world) + @margin, Camera.top(world) - @above,
+       Camera.top(world) - @above}
+
     count = trunc(intensity * 15 * abs(:math.sin(frame / 60)) + intensity * 20)
 
     world

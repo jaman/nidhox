@@ -23,7 +23,8 @@ defmodule Nidhox.Objects.Ear do
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
   def handlers do
     [
-      {"gml_Object_Ear_Create_0", fn world, self, _other -> Gml.put(world, self, %{z: 0, specialSounds: []}) end},
+      {"gml_Object_Ear_Create_0",
+       fn world, self, _other -> Gml.put(world, self, %{z: 0, specialSounds: []}) end},
       {"gml_Object_Ear_Step_1", &follow/3}
     ]
   end
@@ -45,13 +46,22 @@ defmodule Nidhox.Objects.Ear do
 
     world =
       case Enum.at(world.data.sounds, sound) do
-        nil -> world
-        %{name: name} -> World.emit(world, Audio.keyed(key, {:recording, name}, at(x, y), loop: true))
+        nil ->
+          world
+
+        %{name: name} ->
+          World.emit(world, Audio.keyed(key, {:recording, name}, at(x, y), loop: true))
       end
 
     case Gml.first(world, "Ear") do
-      nil -> {key, world}
-      ear -> {key, Gml.put(world, ear, %{specialSounds: Gml.var(world, ear, :specialSounds, []) ++ [{key, owner}]})}
+      nil ->
+        {key, world}
+
+      ear ->
+        {key,
+         Gml.put(world, ear, %{
+           specialSounds: Gml.var(world, ear, :specialSounds, []) ++ [{key, owner}]
+         })}
     end
   end
 
@@ -61,14 +71,24 @@ defmodule Nidhox.Objects.Ear do
     world = World.emit(world, Audio.stopped(key))
 
     case Gml.first(world, "Ear") do
-      nil -> world
-      ear -> Gml.put(world, ear, %{specialSounds: Enum.reject(Gml.var(world, ear, :specialSounds, []), &match?({^key, _owner}, &1))})
+      nil ->
+        world
+
+      ear ->
+        Gml.put(world, ear, %{
+          specialSounds:
+            Enum.reject(Gml.var(world, ear, :specialSounds, []), &match?({^key, _owner}, &1))
+        })
     end
   end
 
   defp follow(world, self, _other) do
-    world = World.update(world, self, &%{&1 | x: Camera.center_x(world), y: Camera.center_y(world)})
-    {kept, world} = Enum.flat_map_reduce(Gml.var(world, self, :specialSounds, []), world, &keep_following/2)
+    world =
+      World.update(world, self, &%{&1 | x: Camera.center_x(world), y: Camera.center_y(world)})
+
+    {kept, world} =
+      Enum.flat_map_reduce(Gml.var(world, self, :specialSounds, []), world, &keep_following/2)
+
     Gml.put(world, self, %{specialSounds: kept})
   end
 

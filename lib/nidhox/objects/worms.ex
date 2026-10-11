@@ -44,7 +44,8 @@ defmodule Nidhox.Objects.Worms do
       {"gml_Object_MiniWorm_Step_0", &crawl/3},
       {"gml_Object_MiniWorm_Other_10", &follow/3},
       {"gml_Object_MiniWormDark_Create_0", &dark_start/3},
-      {"gml_Object_WormPiece_Create_0", fn world, self, _other -> World.update(world, self, &%{&1 | image_speed: 0.1}) end},
+      {"gml_Object_WormPiece_Create_0",
+       fn world, self, _other -> World.update(world, self, &%{&1 | image_speed: 0.1}) end},
       {"gml_Object_WormSurface_Create_0", &surface_start/3},
       {"gml_Object_WormSurface_Step_0", &stamp/3},
       {"gml_Object_WormSurface_Draw_0", &surface_draw/3},
@@ -83,14 +84,20 @@ defmodule Nidhox.Objects.Worms do
 
     world
     |> Gml.var(self, :pieces, [])
-    |> Enum.reduce(world, fn piece, world -> World.update(world, piece, &%{&1 | sprite_index: sprite}) end)
+    |> Enum.reduce(world, fn piece, world ->
+      World.update(world, piece, &%{&1 | sprite_index: sprite})
+    end)
   end
 
   defp crawl(world, self, _other) do
     world
     |> give_back_speed(self)
     |> steer(self)
-    |> then(&World.update(&1, self, fn worm -> Instance.put_motion(worm, %{direction: worm.image_angle, speed: @crawl}) end))
+    |> then(
+      &World.update(&1, self, fn worm ->
+        Instance.put_motion(worm, %{direction: worm.image_angle, speed: @crawl})
+      end)
+    )
     |> new_beat(self)
     |> World.perform(self, :other, 10)
   end
@@ -99,7 +106,10 @@ defmodule Nidhox.Objects.Worms do
     held = Gml.var(world, self, :holdSpeed)
 
     if held > 0,
-      do: world |> World.update(self, &Instance.put_motion(&1, %{speed: held})) |> Gml.put(self, %{holdSpeed: 0}),
+      do:
+        world
+        |> World.update(self, &Instance.put_motion(&1, %{speed: held}))
+        |> Gml.put(self, %{holdSpeed: 0}),
       else: world
   end
 
@@ -116,10 +126,17 @@ defmodule Nidhox.Objects.Worms do
 
   defp wall?(world, self, block, direction) do
     %Instance{x: x, y: y} = World.fetch(world, self)
-    Collide.meeting?(world, self, {x + Gml.lengthdir_x(@look, direction), y + Gml.lengthdir_y(@look, direction)}, block)
+
+    Collide.meeting?(
+      world,
+      self,
+      {x + Gml.lengthdir_x(@look, direction), y + Gml.lengthdir_y(@look, direction)},
+      block
+    )
   end
 
-  defp turn(world, self, by), do: World.update(world, self, &%{&1 | image_angle: &1.image_angle + by})
+  defp turn(world, self, by),
+    do: World.update(world, self, &%{&1 | image_angle: &1.image_angle + by})
 
   defp wander(world, self) do
     frame = System.get(world, :frame)
@@ -156,7 +173,14 @@ defmodule Nidhox.Objects.Worms do
       direction = Gml.point_direction({px, py}, {lx, ly})
 
       world
-      |> World.update(piece, &%{&1 | x: lx - Gml.lengthdir_x(@gap, direction), y: ly - Gml.lengthdir_y(@gap, direction)})
+      |> World.update(
+        piece,
+        &%{
+          &1
+          | x: lx - Gml.lengthdir_x(@gap, direction),
+            y: ly - Gml.lengthdir_y(@gap, direction)
+        }
+      )
       |> step_frame(self, 1)
     else
       step_frame(world, self, -1)
@@ -166,11 +190,18 @@ defmodule Nidhox.Objects.Worms do
   defp step_frame(world, self, by) do
     %Instance{image_index: index, sprite_index: sprite} = World.fetch(world, self)
     frames = length(World.sprite(world, sprite).frames)
-    World.update(world, self, &%{&1 | image_index: Gml.clamp(index + by, 0, frames) / 1, image_speed: 0.0})
+
+    World.update(
+      world,
+      self,
+      &%{&1 | image_index: Gml.clamp(index + by, 0, frames) / 1, image_speed: 0.0}
+    )
   end
 
   defp settle_frame(world, _self, 0), do: world
-  defp settle_frame(world, self, _index), do: World.update(world, self, &%{&1 | image_index: 0.0, image_speed: 0.0})
+
+  defp settle_frame(world, self, _index),
+    do: World.update(world, self, &%{&1 | image_index: 0.0, image_speed: 0.0})
 
   defp surface_start(world, self, _other) do
     {world, surface} = new_surface(world)
@@ -215,7 +246,10 @@ defmodule Nidhox.Objects.Worms do
 
   defp surface_draw(world, self, _other) do
     surface = Gml.var(world, self, :wormSurface, -1)
-    if Surfaces.exists?(world, surface), do: Draw.item(world, Surfaces.item(world, surface, {0, 0})), else: world
+
+    if Surfaces.exists?(world, surface),
+      do: Draw.item(world, Surfaces.item(world, surface, {0, 0})),
+      else: world
   end
 
   defp surface_free(world, self, _other) do
@@ -223,5 +257,6 @@ defmodule Nidhox.Objects.Worms do
     if Surfaces.exists?(world, surface), do: Surfaces.free(world, surface), else: world
   end
 
-  defp room_height(world), do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(1)
+  defp room_height(world),
+    do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(1)
 end

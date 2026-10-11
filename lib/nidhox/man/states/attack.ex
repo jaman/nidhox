@@ -43,7 +43,9 @@ defmodule Nidhox.Man.States.Attack do
   def behave(world, self, 48) do
     world = State.pose(world, self, Map.get(@thrusts, State.get(world, self, :stance), 172))
     {_stomped, world} = Actions.try_stomp(world, self)
-    world = if State.on_ground?(world, self), do: world, else: Physics.grab_ledge_or_fall(world, self)
+
+    world =
+      if State.on_ground?(world, self), do: world, else: Physics.grab_ledge_or_fall(world, self)
 
     if State.combo?(world, self) do
       State.go(world, self, 72)
@@ -149,13 +151,15 @@ defmodule Nidhox.Man.States.Attack do
         State.stand(world, self)
 
       {false, world} ->
-        if State.get(world, self, :frame) > 4 + 1.0e-5 and State.type(world, self) == 1 do
-          {_stomped, world} = Actions.try_stomp(world, self)
-          if State.pressed?(world, self, @attack), do: State.go(world, self, 55), else: world
-        else
-          world
-        end
+        if State.get(world, self, :frame) > 4 + 1.0e-5 and State.type(world, self) == 1,
+          do: punch_again(world, self),
+          else: world
     end
+  end
+
+  defp punch_again(world, self) do
+    {_stomped, world} = Actions.try_stomp(world, self)
+    if State.pressed?(world, self, @attack), do: State.go(world, self, 55), else: world
   end
 
   defp once_then_unarmed(world, self, speed) do

@@ -4,7 +4,9 @@ defmodule Nidhox.Objects.RoomCodes do
   (`global.roomCode`), and most also hand out swords (`global.swords` 1); the tutorial
   takes them away (`global.swords` 0). The cemetery's rooms also turn their birds black
   (`with (Bird) image_blend = 0`); the sky's centre sets its first background's alpha to
-  0.1 (`__background_set(14, 0, 0.1)`).
+  0.1 (`__background_set(14, 0, 0.1)`). The left B and right B rooms of the castle,
+  the cemetery and the wilds make a `LastScreenText` ("Final Screen"); the mines' and
+  the sky's last rooms place theirs themselves.
 
   | code | room |
   | --- | --- |
@@ -74,6 +76,8 @@ defmodule Nidhox.Objects.RoomCodes do
     "rWildsSuddenDeath" => {8, 1}
   }
 
+  @final_screens ~w(rCastleLeftB rCastleRightB rCemeteryLeftB rCemeteryRightB rWildsLeftB rWildsRightB)
+
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
   def handlers do
@@ -96,7 +100,13 @@ defmodule Nidhox.Objects.RoomCodes do
     |> then(&if(swords == nil, do: &1, else: World.put_global(&1, :swords, swords)))
     |> blacken_birds(room)
     |> fade_sky(room)
+    |> final_screen(room)
   end
+
+  defp final_screen(world, room) when room in @final_screens,
+    do: world |> World.create(World.object_index(world, "LastScreenText"), {0, 0}) |> elem(0)
+
+  defp final_screen(world, _room), do: world
 
   defp fade_sky(world, "rSkyCenter"), do: Backgrounds.set(world, 14, 0, 0.1)
   defp fade_sky(world, _room), do: world

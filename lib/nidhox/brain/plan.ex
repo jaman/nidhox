@@ -86,7 +86,8 @@ defmodule Nidhox.Brain.Plan do
     if Clock.on?(count, Clock.period(world, self, times)), do: fun.(world, self), else: world
   end
 
-  defp outside_challenge(world, fun), do: if(Gml.exists?(world, "ChallengeMode"), do: world, else: fun.(world))
+  defp outside_challenge(world, fun),
+    do: if(Gml.exists?(world, "ChallengeMode"), do: world, else: fun.(world))
 
   defp step_off_cloud(world, self) do
     %Instance{x: x, y: y} = World.fetch(world, player(world, self))
@@ -101,7 +102,9 @@ defmodule Nidhox.Brain.Plan do
   end
 
   defp take_high_ground(world, self) do
-    if Sense.holding_high_ground?(world, player(world, self)), do: Intent.next_state(world, self, 104), else: world
+    if Sense.holding_high_ground?(world, player(world, self)),
+      do: Intent.next_state(world, self, 104),
+      else: world
   end
 
   defp low_ground_or_log(world, self) do
@@ -109,7 +112,10 @@ defmodule Nidhox.Brain.Plan do
     other = opponent(world, self)
 
     if Sense.present?(other) do
-      world = if Sense.stuck_in_low_ground?(world, man), do: Intent.next_state(world, self, 107), else: world
+      world =
+        if Sense.stuck_in_low_ground?(world, man),
+          do: Intent.next_state(world, self, 107),
+          else: world
 
       if leading?(world, self) and Sense.separated_by_log?(world, man, other),
         do: Intent.next_state(world, self, 105),
@@ -120,11 +126,15 @@ defmodule Nidhox.Brain.Plan do
   end
 
   defp knocked_down(world, self) do
-    if Gml.var(world, player(world, self), :state) == @knocked_down, do: Intent.set(world, self, 14), else: world
+    if Gml.var(world, player(world, self), :state) == @knocked_down,
+      do: Intent.set(world, self, 14),
+      else: world
   end
 
   defp thrown_sword(world, self) do
-    if Gml.eq?(Gml.var(world, self, :flyingSword, @noone), @noone), do: world, else: Intent.set(world, self, 6)
+    if Gml.eq?(Gml.var(world, self, :flyingSword, @noone), @noone),
+      do: world,
+      else: Intent.set(world, self, 6)
   end
 
   defp wall(world, self) do
@@ -179,9 +189,10 @@ defmodule Nidhox.Brain.Plan do
   end
 
   defp chased(world, self) do
-    if Gml.eq?(Match.get(world, :leadingPlayerIndex), other_player(world, self)) and runaway?(world, self),
-      do: throw_or_die(world, self),
-      else: world
+    if Gml.eq?(Match.get(world, :leadingPlayerIndex), other_player(world, self)) and
+         runaway?(world, self),
+       do: throw_or_die(world, self),
+       else: world
   end
 
   defp throw_or_die(world, self) do
@@ -195,7 +206,9 @@ defmodule Nidhox.Brain.Plan do
   end
 
   defp overtaken(world, self) do
-    nobody = Gml.eq?(Match.get(world, :leadingPlayerIndex), 0) and not Gml.truthy?(Match.get(world, :sudden_death))
+    nobody =
+      Gml.eq?(Match.get(world, :leadingPlayerIndex), 0) and
+        not Gml.truthy?(Match.get(world, :sudden_death))
 
     if not nobody and not leading?(world, self) and runaway?(world, self) and
          Sense.weapon_type(world, player(world, self)) == @sword,
@@ -221,7 +234,9 @@ defmodule Nidhox.Brain.Plan do
   end
 
   defp throw_now_and_then(world, self) do
-    if Sense.weapon_type(world, player(world, self)) == @sword, do: chance_set(world, self, 29, 0.001), else: world
+    if Sense.weapon_type(world, player(world, self)) == @sword,
+      do: chance_set(world, self, 29, 0.001),
+      else: world
   end
 
   defp leave_log(world, self) do
@@ -229,7 +244,8 @@ defmodule Nidhox.Brain.Plan do
     other = opponent(world, self)
 
     if Sense.present?(man) and Sense.present?(other) and
-         (Gml.truthy?(Gml.var(world, self, :actionCompleted)) or Gml.truthy?(Gml.var(world, self, :actionFailed))) and
+         (Gml.truthy?(Gml.var(world, self, :actionCompleted)) or
+            Gml.truthy?(Gml.var(world, self, :actionFailed))) and
          Gml.truthy?(Gml.var(world, man, :inLog)) and Gml.truthy?(Gml.var(world, other, :onLog)) and
          not leading?(world, self),
        do: Intent.set(world, self, 24),
@@ -253,7 +269,9 @@ defmodule Nidhox.Brain.Plan do
     world =
       if Clock.on?(System.get(world, :frame), 120), do: Buttons.press(world, self, 4), else: world
 
-    if standing?(world, opponent(world, self)), do: Intent.next_state(world, self, 102), else: world
+    if standing?(world, opponent(world, self)),
+      do: Intent.next_state(world, self, 102),
+      else: world
   end
 
   defp plan(world, self, 108) do
@@ -281,9 +299,14 @@ defmodule Nidhox.Brain.Plan do
 
   defp plan(world, self, 106) do
     cond do
-      Gml.exists?(world, "ChallengeMode") -> Intent.next_state(world, self, 102)
-      not Gml.eq?(Match.get(world, :leadingPlayerIndex), other_player(world, self)) -> Intent.next_state(world, self, 102)
-      true -> when_free(world, self, &suicide/3)
+      Gml.exists?(world, "ChallengeMode") ->
+        Intent.next_state(world, self, 102)
+
+      not Gml.eq?(Match.get(world, :leadingPlayerIndex), other_player(world, self)) ->
+        Intent.next_state(world, self, 102)
+
+      true ->
+        when_free(world, self, &suicide/3)
     end
   end
 
@@ -313,12 +336,19 @@ defmodule Nidhox.Brain.Plan do
     else
       {action, world} = Gml.choose(world, [20, 4, 3])
       world = Intent.set(world, self, action)
-      if Sense.on_wall?(world, opponent(world, self)), do: chance_set(world, self, 28, 100), else: world
+
+      if Sense.on_wall?(world, opponent(world, self)),
+        do: chance_set(world, self, 28, 100),
+        else: world
     end
   end
 
   defp high_ground(world, self, _action) do
-    choices = if Sense.weapon_type(world, player(world, self)) == @fists, do: [9, 1, 10], else: [20, 1, 3, 4]
+    choices =
+      if Sense.weapon_type(world, player(world, self)) == @fists,
+        do: [9, 1, 10],
+        else: [20, 1, 3, 4]
+
     {action, world} = Gml.choose(world, choices)
     chance_set(world, self, action, 100)
   end
@@ -360,9 +390,10 @@ defmodule Nidhox.Brain.Plan do
   end
 
   defp low_ground(world, self, 9) do
-    if Gml.truthy?(Gml.var(world, self, :actionFailed)) or Gml.truthy?(Gml.var(world, self, :actionCompleted)),
-      do: Intent.set(world, self, 2),
-      else: world
+    if Gml.truthy?(Gml.var(world, self, :actionFailed)) or
+         Gml.truthy?(Gml.var(world, self, :actionCompleted)),
+       do: Intent.set(world, self, 2),
+       else: world
   end
 
   defp low_ground(world, self, _action) do
@@ -428,7 +459,8 @@ defmodule Nidhox.Brain.Plan do
   defp fence_on_beat(world, self) do
     other = opponent(world, self)
 
-    with {:no, world} <- beat_action(world, self, 0.5, 15, 60, Gml.var(world, other, :state) == @lunging),
+    with {:no, world} <-
+           beat_action(world, self, 0.5, 15, 60, Gml.var(world, other, :state) == @lunging),
          {:no, world} <- beat_throw(world, self),
          {:no, world} <- beat_action(world, self, 1, 9, 4, true),
          {:no, world} <- beat_action(world, self, 1, 28, 4, true) do
@@ -474,26 +506,27 @@ defmodule Nidhox.Brain.Plan do
   end
 
   defp fencing(world, self, 18) do
-    if Gml.truthy?(Gml.var(world, self, :actionCompleted)) do
-      case Personality.chance(world, self, 19, 90) do
-        {true, world} ->
-          if Gml.lt?(distance(world, self), 64),
-            do: Intent.set(world, self, 19),
-            else: first_taken(world, self, [{15, 30}], 4)
-
-        {false, world} ->
-          first_taken(world, self, [{15, 30}], 4)
-      end
-    else
-      world
-    end
+    if Gml.truthy?(Gml.var(world, self, :actionCompleted)),
+      do: world |> Personality.chance(self, 19, 90) |> follow_up(self),
+      else: world
   end
 
   defp fencing(world, self, 19) do
-    if Gml.truthy?(Gml.var(world, self, :actionCompleted)), do: Intent.clear(world, self), else: world
+    if Gml.truthy?(Gml.var(world, self, :actionCompleted)),
+      do: Intent.clear(world, self),
+      else: world
   end
 
-  defp fencing(world, self, _action), do: first_taken(world, self, [{15, 40}, {18, 60}, {4, 70}, {20, 85}], 16)
+  defp fencing(world, self, _action),
+    do: first_taken(world, self, [{15, 40}, {18, 60}, {4, 70}, {20, 85}], 16)
+
+  defp follow_up({true, world}, self) do
+    if Gml.lt?(distance(world, self), 64),
+      do: Intent.set(world, self, 19),
+      else: first_taken(world, self, [{15, 30}], 4)
+  end
+
+  defp follow_up({false, world}, self), do: first_taken(world, self, [{15, 30}], 4)
 
   defp brawl(world, self, action) when action in [2, 4, 20] do
     world =
@@ -508,7 +541,9 @@ defmodule Nidhox.Brain.Plan do
   defp brawl(world, self, 21), do: Intent.random_melee(world, self)
 
   defp brawl(world, self, 10) do
-    if Gml.truthy?(Gml.var(world, self, :actionFailed)), do: Intent.set(world, self, 13), else: world
+    if Gml.truthy?(Gml.var(world, self, :actionFailed)),
+      do: Intent.set(world, self, 13),
+      else: world
   end
 
   defp brawl(world, self, 13), do: Intent.random_melee(world, self)
@@ -536,10 +571,17 @@ defmodule Nidhox.Brain.Plan do
       other = opponent(world, self)
 
       cond do
-        not standing?(world, other) -> when_free(world, self, &goal/3)
-        Sense.in_front?(world, other, man) and not Sense.separated_by_log?(world, other, man) -> face(world, self)
-        not leading?(world, self) -> Intent.next_state(world, self, 102)
-        true -> when_free(world, self, &goal/3)
+        not standing?(world, other) ->
+          when_free(world, self, &goal/3)
+
+        Sense.in_front?(world, other, man) and not Sense.separated_by_log?(world, other, man) ->
+          face(world, self)
+
+        not leading?(world, self) ->
+          Intent.next_state(world, self, 102)
+
+        true ->
+          when_free(world, self, &goal/3)
       end
     end
   end
@@ -571,9 +613,11 @@ defmodule Nidhox.Brain.Plan do
   end
 
   defp standing?(world, man),
-    do: Sense.present?(man) and not Query.stabbed?(world, man) and not Query.collapsing?(world, man)
+    do:
+      Sense.present?(man) and not Query.stabbed?(world, man) and not Query.collapsing?(world, man)
 
-  defp leading?(world, self), do: Gml.eq?(Match.get(world, :leadingPlayerIndex), Gml.var(world, self, :playerIndex))
+  defp leading?(world, self),
+    do: Gml.eq?(Match.get(world, :leadingPlayerIndex), Gml.var(world, self, :playerIndex))
 
   defp other_player(world, self), do: Query.other_player(Gml.var(world, self, :playerIndex))
   defp player(world, self), do: Gml.var(world, self, :player, @noone)

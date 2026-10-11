@@ -8,11 +8,13 @@ defmodule Nidhox.Objects.DarkenClouds do
       tints
     * step: with `amount` `0.4 + sin(frame / 60) × 0.25` and `cool`
       `make_color_hsv(200 + cos(frame / 80) × 20, 100, 255)`, every `CloudPoof`,
-      `FakeCloudPoof`, `NewCloudBlock` and `DefensiveBlock` is blended with
-      `merge_color(cool, background, amount)`, and the layer's tiles with
-      `merge_color(cool, merge_color(background, warm, 0.5), amount)`, where `warm` is
-      `make_color_hsv(40 + sin(frame / 70) × 20, 120, 255)` and `background` the room's
-      background colour (`__background_get_colour`)
+      `FakeCloudPoof`, `NewCloudBlock` and `DefensiveBlock`, and the layer's tiles, are
+      blended with `merge_color(cool, background, amount)`; every `WindSurface` whose
+      `type` is `"swirly"` is blended with `merge_color(cool, merge_color(background,
+      warm, 0.5), amount)` at alpha 0.1, and backgrounds 0 and 1 take that blend too
+      (`__background_set(13, …)`) — `warm` being `make_color_hsv(40 + sin(frame / 70) ×
+      20, 120, 255)` and `background` the room's background colour
+      (`__background_get_colour`)
   """
 
   alias Cauldron2D.GameMaker.{Colour, World}
@@ -20,6 +22,7 @@ defmodule Nidhox.Objects.DarkenClouds do
   alias Nidhox.Objects.System
 
   @tile_depth 100
+  @swirl_alpha 0.1
   @tinted ["CloudPoof", "FakeCloudPoof", "NewCloudBlock", "DefensiveBlock"]
 
   @doc "The compiled names this module answers for, with their functions."
@@ -43,12 +46,29 @@ defmodule Nidhox.Objects.DarkenClouds do
     background = Backgrounds.colour(world)
     warm = Colour.hsv(40 + :math.sin(frame / 70) * 20, 120, 255)
     clouds = Colour.merge(cool, background, amount)
-    tiles = Colour.merge(cool, Colour.merge(background, warm, 0.5), amount)
+    swirl = Colour.merge(cool, Colour.merge(background, warm, 0.5), amount)
 
     @tinted
     |> Enum.flat_map(&Gml.all(world, &1))
-    |> Enum.reduce(world, fn cloud, world -> World.update(world, cloud, &%{&1 | image_blend: clouds}) end)
-    |> blend_tiles(Gml.var(world, self, :layer, nil), tiles)
+    |> Enum.reduce(world, fn cloud, world ->
+      World.update(world, cloud, &%{&1 | image_blend: clouds})
+    end)
+    |> blend_tiles(Gml.var(world, self, :layer, nil), clouds)
+    |> swirl_wind(swirl)
+    |> Backgrounds.set(13, 0, swirl)
+    |> Backgrounds.set(13, 1, swirl)
+  end
+
+  defp swirl_wind(world, colour) do
+    world
+    |> Gml.all("WindSurface")
+    |> Enum.filter(&(Gml.var(world, &1, :type) == "swirly"))
+    |> Enum.reduce(
+      world,
+      &World.update(&2, &1, fn wind ->
+        %{wind | image_blend: colour, image_alpha: @swirl_alpha}
+      end)
+    )
   end
 
   defp blend_tiles(world, nil, _colour), do: world

@@ -60,7 +60,13 @@ defmodule Nidhox.Objects.Transition do
 
     world
     |> Surfaces.clear(canvas, @white, 1)
-    |> Gml.put(self, %{counter: 0, canvas: canvas, canvasCopy: copy, WIPE_TIME: @wipe_time, wipeTo: 2})
+    |> Gml.put(self, %{
+      counter: 0,
+      canvas: canvas,
+      canvasCopy: copy,
+      WIPE_TIME: @wipe_time,
+      wipeTo: 2
+    })
     |> Sound.play(@sound, Ear.position(world))
   end
 
@@ -82,7 +88,12 @@ defmodule Nidhox.Objects.Transition do
       world = Surfaces.clear(world, copy, @black, 0)
       world = Surfaces.draw(world, copy, [Surfaces.item(world, canvas, {0, 0})])
       {strips, world} = strips(world, copy, wipe_to)
-      Surfaces.draw(world, canvas, strips ++ rising(wipe_to, counter, Gml.var(world, self, :WIPE_TIME)))
+
+      Surfaces.draw(
+        world,
+        canvas,
+        strips ++ rising(wipe_to, counter, Gml.var(world, self, :WIPE_TIME))
+      )
     else
       world
     end
@@ -98,7 +109,11 @@ defmodule Nidhox.Objects.Transition do
 
   defp strip(world, copy, 2, column, _row) do
     slid = Surfaces.part_item(world, copy, {column, 0, @strip, @height}, {column - 1, -@slide})
-    Enum.reject([slid, rectangle({column, @height - @slide, column + @strip, @height})], &is_nil/1)
+
+    Enum.reject(
+      [slid, rectangle({column, @height - @slide, column + @strip, @height})],
+      &is_nil/1
+    )
   end
 
   defp strip(world, copy, 0, _column, row) do
@@ -121,13 +136,22 @@ defmodule Nidhox.Objects.Transition do
   defp rising(_wipe_to, _counter, _wipe_time), do: []
 
   defp rectangle({left, top, right, bottom}),
-    do: %{picture: :pixel, position: {left, top}, scale: {right - left + 1, bottom - top + 1}, blend: @black}
+    do: %{
+      picture: :pixel,
+      position: {left, top},
+      scale: {right - left + 1, bottom - top + 1},
+      blend: @black
+    }
 
   defp draw(world, self, _other) do
     canvas = Gml.var(world, self, :canvas)
 
     if Surfaces.exists?(world, canvas),
-      do: Draw.item(world, Surfaces.item(world, canvas, {Camera.left(world), Camera.top(world)}, mode: :add)),
+      do:
+        Draw.item(
+          world,
+          Surfaces.item(world, canvas, {Camera.left(world), Camera.top(world)}, mode: :add)
+        ),
       else: world
   end
 

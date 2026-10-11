@@ -47,7 +47,8 @@ defmodule Nidhox.Objects.Doors do
       {"gml_Object_Doorway_Collision_HeldWeapon", &touched_by_sword/3},
       {"gml_Object_Doorway_Collision_FlyingWeapon", &touched_by_sword/3},
       {"gml_Object_Doorway_Other_12", &update/3},
-      {"gml_Object_HideFacade_Create_0", fn world, self, _other -> Gml.put(world, self, %{touchTimer: 0}) end},
+      {"gml_Object_HideFacade_Create_0",
+       fn world, self, _other -> Gml.put(world, self, %{touchTimer: 0}) end},
       {"gml_Object_HideFacade_Step_0", &facade_step/3},
       {"gml_Object_HideFacade_Collision_Man", &facade_touched/3},
       {"gml_Object_HideFacade_Collision_Doorway", &facade_by_door/3}
@@ -56,7 +57,13 @@ defmodule Nidhox.Objects.Doors do
 
   defp start(world, self, _other) do
     world
-    |> Gml.put(self, %{center: @centre, frame: @centre, opening: @shut, maxTimer: @max_timer, timer: @max_timer})
+    |> Gml.put(self, %{
+      center: @centre,
+      frame: @centre,
+      opening: @shut,
+      maxTimer: @max_timer,
+      timer: @max_timer
+    })
     |> World.update(self, &%{&1 | image_speed: 0.0, image_index: @centre / 1})
   end
 
@@ -91,17 +98,33 @@ defmodule Nidhox.Objects.Doors do
     opening = Gml.var(world, self, :opening)
 
     cond do
-      not (Gml.eq?(frame, 0) or Gml.eq?(frame, last)) -> show(world, self)
-      opening not in [0, 1] -> show(world, self)
-      Gml.truthy?(Gml.var(world, self, :timer)) -> world |> Gml.put(self, %{timer: Gml.var(world, self, :timer) - 1}) |> show(self)
-      held_open?(world, self) -> world
-      true -> world |> Gml.put(self, %{timer: Gml.var(world, self, :maxTimer), opening: -1}) |> show(self)
+      not (Gml.eq?(frame, 0) or Gml.eq?(frame, last)) ->
+        show(world, self)
+
+      opening not in [0, 1] ->
+        show(world, self)
+
+      Gml.truthy?(Gml.var(world, self, :timer)) ->
+        world |> Gml.put(self, %{timer: Gml.var(world, self, :timer) - 1}) |> show(self)
+
+      held_open?(world, self) ->
+        world
+
+      true ->
+        world
+        |> Gml.put(self, %{timer: Gml.var(world, self, :maxTimer), opening: -1})
+        |> show(self)
     end
   end
 
-  defp swing(world, self, 0), do: Gml.put(world, self, %{frame: Gml.var(world, self, :frame) - @swing})
-  defp swing(world, self, 1), do: Gml.put(world, self, %{frame: Gml.var(world, self, :frame) + @swing})
-  defp swing(world, self, @shut), do: Gml.put(world, self, %{frame: Gml.var(world, self, :center)})
+  defp swing(world, self, 0),
+    do: Gml.put(world, self, %{frame: Gml.var(world, self, :frame) - @swing})
+
+  defp swing(world, self, 1),
+    do: Gml.put(world, self, %{frame: Gml.var(world, self, :frame) + @swing})
+
+  defp swing(world, self, @shut),
+    do: Gml.put(world, self, %{frame: Gml.var(world, self, :center)})
 
   defp swing(world, self, _closing) do
     gap = Gml.var(world, self, :center) - Gml.var(world, self, :frame)
@@ -129,12 +152,17 @@ defmodule Nidhox.Objects.Doors do
 
   defp near_sword?(world, {x, y}) do
     case Gml.nearest(world, {x, y}, "HeldWeapon") do
-      nil -> false
-      sword -> World.fetch(world, sword).visible and Gml.lt?(abs(x - World.fetch(world, sword).x), @sword_clear)
+      nil ->
+        false
+
+      sword ->
+        World.fetch(world, sword).visible and
+          Gml.lt?(abs(x - World.fetch(world, sword).x), @sword_clear)
     end
   end
 
-  defp show(world, self), do: World.update(world, self, &%{&1 | image_index: Gml.var(world, self, :frame) / 1})
+  defp show(world, self),
+    do: World.update(world, self, &%{&1 | image_index: Gml.var(world, self, :frame) / 1})
 
   defp frames(world, self) do
     case World.sprite(world, World.fetch(world, self).sprite_index) do

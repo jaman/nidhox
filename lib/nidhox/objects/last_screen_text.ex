@@ -29,7 +29,8 @@ defmodule Nidhox.Objects.LastScreenText do
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
   def handlers do
     [
-      {"gml_Object_LastScreenText_Create_0", fn world, self, _other -> Gml.put(world, self, %{timer: @life}) end},
+      {"gml_Object_LastScreenText_Create_0",
+       fn world, self, _other -> Gml.put(world, self, %{timer: @life}) end},
       {"gml_Object_LastScreenText_Step_0", &count_down/3},
       {"gml_Object_LastScreenText_Draw_0", &draw/3}
     ]

@@ -57,7 +57,16 @@ defmodule Nidhox.Objects.NidhoggHead do
     lowerLip: "NidhoggLowerLip",
     innerMouth: "NidhoggInnerMouth"
   ]
-  @drawn_in_order [:innerMouth, :tongue, :lowerJaw, :upperSkull, :eyeball, :eyebrow, :upperLip, :lowerLip]
+  @drawn_in_order [
+    :innerMouth,
+    :tongue,
+    :lowerJaw,
+    :upperSkull,
+    :eyeball,
+    :eyebrow,
+    :upperLip,
+    :lowerLip
+  ]
   @surface_size 128
   @anchor {40, 50}
   @segment_sprite 12
@@ -83,18 +92,24 @@ defmodule Nidhox.Objects.NidhoggHead do
       {"gml_Object_NidhoggEyebrow_Other_10", &draw_eyebrow/3},
       {"gml_Object_NidhoggLowerJaw_Create_0", &swinging(&1, &2, &3, nil)},
       {"gml_Object_NidhoggLowerJaw_Step_0", &jaw/3},
-      {"gml_Object_NidhoggLowerJaw_Other_10", fn world, self, _other -> Draw.self(world, self) end},
+      {"gml_Object_NidhoggLowerJaw_Other_10",
+       fn world, self, _other -> Draw.self(world, self) end},
       {"gml_Object_NidhoggTongue_Create_0", &swinging(&1, &2, &3, 0.1)},
       {"gml_Object_NidhoggTongue_Step_0", &tongue/3},
       {"gml_Object_NidhoggTongue_Other_10", fn world, self, _other -> Draw.self(world, self) end},
       {"gml_Object_NidhoggInnerMouth_Create_0", &swinging(&1, &2, &3, nil)},
       {"gml_Object_NidhoggInnerMouth_Other_10", &as_jaw/3},
-      {"gml_Object_NidhoggLowerLip_Create_0", fn world, self, _other -> World.update(world, self, &%{&1 | image_speed: 0.2}) end},
+      {"gml_Object_NidhoggLowerLip_Create_0",
+       fn world, self, _other -> World.update(world, self, &%{&1 | image_speed: 0.2}) end},
       {"gml_Object_NidhoggLowerLip_Other_10", &as_jaw/3},
-      {"gml_Object_NidhoggUpperLip_Create_0", fn world, self, _other -> World.update(world, self, &%{&1 | image_speed: 0.2}) end},
-      {"gml_Object_NidhoggUpperLip_Other_10", fn world, self, _other -> Draw.self(world, self) end},
-      {"gml_Object_NidhoggUpperSkull_Other_10", fn world, self, _other -> Draw.self(world, self) end},
-      {"gml_Object_NidhoggFur_Create_0", fn world, self, _other -> World.update(world, self, &%{&1 | image_speed: 0.0}) end}
+      {"gml_Object_NidhoggUpperLip_Create_0",
+       fn world, self, _other -> World.update(world, self, &%{&1 | image_speed: 0.2}) end},
+      {"gml_Object_NidhoggUpperLip_Other_10",
+       fn world, self, _other -> Draw.self(world, self) end},
+      {"gml_Object_NidhoggUpperSkull_Other_10",
+       fn world, self, _other -> Draw.self(world, self) end},
+      {"gml_Object_NidhoggFur_Create_0",
+       fn world, self, _other -> World.update(world, self, &%{&1 | image_speed: 0.0}) end}
     ]
   end
 
@@ -129,20 +144,24 @@ defmodule Nidhox.Objects.NidhoggHead do
 
       body ->
         segment = Gml.var(world, body, :head, -4)
-
-        case segment > 0 && World.fetch(world, segment) do
-          %Instance{x: x, y: y, image_angle: angle} ->
-            behind = elem(World.sprite(world, @segment_sprite).size, 0) * -0.25
-
-            World.update(world, self, fn head ->
-              %{head | x: x + Gml.lengthdir_x(behind, angle), y: y + Gml.lengthdir_y(behind, angle), image_angle: angle}
-            end)
-
-          _none ->
-            world
-        end
+        sit_on(world, self, segment > 0 && World.fetch(world, segment))
     end
   end
+
+  defp sit_on(world, self, %Instance{x: x, y: y, image_angle: angle}) do
+    behind = elem(World.sprite(world, @segment_sprite).size, 0) * -0.25
+
+    World.update(world, self, fn head ->
+      %{
+        head
+        | x: x + Gml.lengthdir_x(behind, angle),
+          y: y + Gml.lengthdir_y(behind, angle),
+          image_angle: angle
+      }
+    end)
+  end
+
+  defp sit_on(world, _self, _none), do: world
 
   defp place_parts(world, self) do
     %Instance{x: x, y: y} = World.fetch(world, self)
@@ -159,7 +178,10 @@ defmodule Nidhox.Objects.NidhoggHead do
     ]
     |> Enum.reduce(world, fn {name, {px, py}}, world ->
       part = Gml.var(world, self, name, -4)
-      if World.fetch(world, part), do: World.update(world, part, &%{&1 | x: px, y: py}), else: world
+
+      if World.fetch(world, part),
+        do: World.update(world, part, &%{&1 | x: px, y: py}),
+        else: world
     end)
   end
 
@@ -167,7 +189,13 @@ defmodule Nidhox.Objects.NidhoggHead do
     {world, surface} = head_surface(world, self)
     world = Surfaces.clear(world, surface, {0, 0, 0}, 0)
     head = World.fetch(world, self)
-    world = Enum.reduce(@drawn_in_order, world, &draw_part(&2, Gml.var(&2, self, &1, -4), head, surface))
+
+    world =
+      Enum.reduce(
+        @drawn_in_order,
+        world,
+        &draw_part(&2, Gml.var(&2, self, &1, -4), head, surface)
+      )
 
     if Gml.var(world, self, :eaten) != -1,
       do: draw_eaten(world, self, head, surface),
@@ -262,7 +290,15 @@ defmodule Nidhox.Objects.NidhoggHead do
   defp eyeball(world, self, _other) do
     world
     |> World.update(self, &%{&1 | image_index: 0.0, image_speed: 0.0})
-    |> Gml.put(self, %{currentDist: 0, currentAngle: 0, targetDist: 1, targetAngle: 360, lidPos: 0, lidOpening: 0, lidCleared: 0})
+    |> Gml.put(self, %{
+      currentDist: 0,
+      currentAngle: 0,
+      targetDist: 1,
+      targetAngle: 360,
+      lidPos: 0,
+      lidOpening: 0,
+      lidCleared: 0
+    })
   end
 
   defp look(world, self, _other) do
@@ -274,14 +310,22 @@ defmodule Nidhox.Objects.NidhoggHead do
     world = Gml.put(world, self, %{currentDist: distance, currentAngle: current_angle})
 
     world =
-      if Gml.lt?(abs(distance - Gml.var(world, self, :targetDist)) - 0.2, 0) and Gml.lt?(abs(turn) - 0.2, 0),
-        do: settle(world, self),
-        else: world
+      if Gml.lt?(abs(distance - Gml.var(world, self, :targetDist)) - 0.2, 0) and
+           Gml.lt?(abs(turn) - 0.2, 0),
+         do: settle(world, self),
+         else: world
 
     frames = frames(world, self)
 
     world
-    |> World.update(self, &%{&1 | image_index: Gml.var(world, self, :currentDist) * frames, image_angle: Gml.var(world, self, :currentAngle)})
+    |> World.update(
+      self,
+      &%{
+        &1
+        | image_index: Gml.var(world, self, :currentDist) * frames,
+          image_angle: Gml.var(world, self, :currentAngle)
+      }
+    )
     |> blink(self)
   end
 
@@ -292,10 +336,16 @@ defmodule Nidhox.Objects.NidhoggHead do
   end
 
   defp look_elsewhere(world, self) do
-    if Gml.lt?(abs(Gml.var(world, self, :currentDist) - Gml.var(world, self, :targetDist)) - 0.4, 0) do
+    if Gml.lt?(
+         abs(Gml.var(world, self, :currentDist) - Gml.var(world, self, :targetDist)) - 0.4,
+         0
+       ) do
       {distance, world} = Gml.random(world, 1)
       {angle, world} = Gml.random_range(world, 0, 180)
-      world = Gml.put(world, self, %{targetDist: distance, targetAngle: :math.fmod(angle + 270, 360)})
+
+      world =
+        Gml.put(world, self, %{targetDist: distance, targetAngle: :math.fmod(angle + 270, 360)})
+
       {opens, world} = Gml.prob(world, 30)
       world = if opens, do: Gml.put(world, self, %{lidCleared: 0, lidOpening: 1}), else: world
       look_elsewhere(world, self)
@@ -308,20 +358,25 @@ defmodule Nidhox.Objects.NidhoggHead do
     lid = Gml.var(world, self, :lidPos)
 
     world =
-      if Gml.truthy?(Gml.var(world, self, :lidOpening)) do
-        if Gml.eq?(lid, 1) do
-          {starts, world} = Gml.prob(world, 10)
-          if starts, do: Gml.put(world, self, %{lidPos: lid - 0.1}), else: world
-        else
-          Gml.put(world, self, %{lidPos: lid - 0.1})
-        end
-      else
-        lid = lid + 0.1
-        world = Gml.put(world, self, %{lidPos: lid})
-        if lid >= 1, do: Gml.put(world, self, %{lidCleared: 1}), else: world
-      end
+      if Gml.truthy?(Gml.var(world, self, :lidOpening)),
+        do: lid_opening(world, self, lid),
+        else: lid_closing(world, self, lid + 0.1)
 
     Gml.put(world, self, %{lidPos: Gml.clamp(Gml.var(world, self, :lidPos), 0, 1)})
+  end
+
+  defp lid_opening(world, self, lid) do
+    if Gml.eq?(lid, 1) do
+      {starts, world} = Gml.prob(world, 10)
+      if starts, do: Gml.put(world, self, %{lidPos: lid - 0.1}), else: world
+    else
+      Gml.put(world, self, %{lidPos: lid - 0.1})
+    end
+  end
+
+  defp lid_closing(world, self, lid) do
+    world = Gml.put(world, self, %{lidPos: lid})
+    if lid >= 1, do: Gml.put(world, self, %{lidCleared: 1}), else: world
   end
 
   defp draw_eyeball(world, self, _other) do
@@ -404,7 +459,9 @@ defmodule Nidhox.Objects.NidhoggHead do
   defp swing(world, self) do
     current = Gml.var(world, self, :currentAngle)
     turn = tween(current, Gml.var(world, self, :targetAngle))
-    {turn, Gml.put(world, self, %{currentAngle: current - turn * Gml.var(world, self, :angleSpeed)})}
+
+    {turn,
+     Gml.put(world, self, %{currentAngle: current - turn * Gml.var(world, self, :angleSpeed)})}
   end
 
   defp jaw_angle(world) do

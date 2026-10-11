@@ -15,7 +15,9 @@ defmodule Nidhox.Objects.SpawnArea do
   def handlers, do: [{"gml_Object_SpawnArea_Create_0", &start/3}]
 
   defp start(world, self, _other) do
-    %Instance{x: x, y: y, sprite_index: sprite, image_xscale: xscale, image_yscale: yscale} = World.fetch(world, self)
+    %Instance{x: x, y: y, sprite_index: sprite, image_xscale: xscale, image_yscale: yscale} =
+      World.fetch(world, self)
+
     {width, height} = size(world, sprite)
     point = World.object_index(world, "RespawnPoint")
 

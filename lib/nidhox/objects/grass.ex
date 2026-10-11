@@ -78,7 +78,9 @@ defmodule Nidhox.Objects.Grass do
     object = World.object_index(world, "Grass")
 
     Enum.reduce(0..(trunc(width * xscale / @spacing) - 1)//1, world, fn i, world ->
-      {world, blade} = World.create(world, object, {x + i * @spacing, y + height * yscale - raise_by})
+      {world, blade} =
+        World.create(world, object, {x + i * @spacing, y + height * yscale - raise_by})
+
       Gml.put(world, blade, %{dark: dark})
     end)
   end
@@ -151,9 +153,10 @@ defmodule Nidhox.Objects.Grass do
         else: world
 
     world =
-      if Query.collapsing?(world, man) or Query.stabbed?(world, man) or Query.knocked_down?(world, man),
-        do: Gml.put(world, self, %{flattened: 1, touchTimer: 30}),
-        else: world
+      if Query.collapsing?(world, man) or Query.stabbed?(world, man) or
+           Query.knocked_down?(world, man),
+         do: Gml.put(world, self, %{flattened: 1, touchTimer: 30}),
+         else: world
 
     if Map.get(vars, :state) in @lying or Map.get(vars, :vspd, 0) > 0,
       do: Gml.put(world, self, %{flattened: 1}),
@@ -184,7 +187,8 @@ defmodule Nidhox.Objects.Grass do
     %Instance{x: x, y: y} = blade = World.fetch(world, self)
     held = World.fetch(world, sword)
 
-    if not flat_at_least?(blade, 10) and Map.get(held.vars, :type) == 2 and held.visible and moved?(held) and
+    if not flat_at_least?(blade, 10) and Map.get(held.vars, :type) == 2 and held.visible and
+         moved?(held) and
          Gml.lt?(abs(held.y - y) - height(world, blade), 0) and
          Gml.lt?(abs(held.x + facing(world, held) * 9 - x + 8) - (width(world, blade) / 2 + 5), 0),
        do: Gml.put(world, self, %{touchTimer: 10}),
@@ -194,7 +198,8 @@ defmodule Nidhox.Objects.Grass do
   defp moved?(%Instance{x: x, y: y, xprevious: px, yprevious: py}),
     do: not Gml.eq?(x, px) or not Gml.eq?(y, py)
 
-  defp facing(world, %Instance{vars: vars}), do: Gml.var(world, Map.get(vars, :mother, -4), :facingXScale, 1)
+  defp facing(world, %Instance{vars: vars}),
+    do: Gml.var(world, Map.get(vars, :mother, -4), :facingXScale, 1)
 
   defp flat_at_least?(%Instance{vars: vars}, timer),
     do: Gml.truthy?(Map.get(vars, :flattened, 0)) and Map.get(vars, :touchTimer, 0) >= timer

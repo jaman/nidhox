@@ -22,7 +22,12 @@ defmodule Nidhox.Chain do
     |> Stream.iterate(&(&1 + height))
     |> Enum.take_while(&(&1 < length))
     |> Enum.reduce(world, fn along, world ->
-      Draw.sprite(world, link, 0, {x1 + Gml.lengthdir_x(along, direction), y1 + Gml.lengthdir_y(along, direction)})
+      Draw.sprite(
+        world,
+        link,
+        0,
+        {x1 + Gml.lengthdir_x(along, direction), y1 + Gml.lengthdir_y(along, direction)}
+      )
     end)
   end
 end

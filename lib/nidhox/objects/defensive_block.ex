@@ -44,7 +44,8 @@ defmodule Nidhox.Objects.DefensiveBlock do
   def handlers do
     [
       {"gml_Object_DefensiveBlock_Create_0", &start/3},
-      {"gml_Object_DefensiveBlock_Alarm_2", fn world, self, _other -> World.perform(world, self, :other, 12) end},
+      {"gml_Object_DefensiveBlock_Alarm_2",
+       fn world, self, _other -> World.perform(world, self, :other, 12) end},
       {"gml_Object_DefensiveBlock_Alarm_0", &random_frame/3},
       {"gml_Object_DefensiveBlock_Step_0", &step/3},
       {"gml_Object_DefensiveBlock_Other_12", &take_points/3},
@@ -115,7 +116,10 @@ defmodule Nidhox.Objects.DefensiveBlock do
 
       found ->
         world
-        |> Gml.put(self, %{BLOCK_Y: World.fetch(world, found).y, spawns: Gml.var(world, self, :spawns, []) ++ [found]})
+        |> Gml.put(self, %{
+          BLOCK_Y: World.fetch(world, found).y,
+          spawns: Gml.var(world, self, :spawns, []) ++ [found]
+        })
         |> World.update(found, &%{&1 | y: y - @point_lift})
         |> take_next_point(self, point)
     end
@@ -137,7 +141,10 @@ defmodule Nidhox.Objects.DefensiveBlock do
     {world, right} = World.create(world, ledge, {x + width, y})
 
     world
-    |> World.update(block, &%{&1 | image_xscale: width / block_width, image_yscale: height / block_height})
+    |> World.update(
+      block,
+      &%{&1 | image_xscale: width / block_width, image_yscale: height / block_height}
+    )
     |> Gml.put(self, %{block: block, ledgeLeft: left, ledgeRight: right})
     |> set_points(self, y)
     |> drop_pickups(self, World.object_index(world, "PickupContainer"))
@@ -154,7 +161,10 @@ defmodule Nidhox.Objects.DefensiveBlock do
 
       found ->
         world
-        |> World.create(World.object_index(world, "DroppedWeapon"), {World.fetch(world, found).x, y - @weapon_lift})
+        |> World.create(
+          World.object_index(world, "DroppedWeapon"),
+          {World.fetch(world, found).x, y - @weapon_lift}
+        )
         |> elem(0)
         |> World.destroy(found)
         |> drop_pickups(self, pickup)
@@ -190,7 +200,8 @@ defmodule Nidhox.Objects.DefensiveBlock do
     |> Gml.put(self, %{clouds: [], on: 0})
   end
 
-  defp steps(from, below), do: from |> Stream.iterate(&(&1 + @spacing)) |> Enum.take_while(&(&1 < below))
+  defp steps(from, below),
+    do: from |> Stream.iterate(&(&1 + @spacing)) |> Enum.take_while(&(&1 < below))
 
   defp mask_height(world, self), do: world |> mask_size(self) |> elem(1)
 

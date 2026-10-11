@@ -45,8 +45,8 @@ defmodule Nidhox.Bout.Hits do
   alias Cauldron2D.GameMaker.{Instance, World}
   alias Nidhox.Bout.Overlap
   alias Nidhox.Gml
-  alias Nidhox.Objects.Challenge
   alias Nidhox.Man.{Push, Query, State}
+  alias Nidhox.Objects.Challenge
 
   @noone -4
   @stab_offset %{1 => 1.0, 3 => 0.3333333333333333, 2 => -1.0}

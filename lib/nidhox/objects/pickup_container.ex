@@ -12,13 +12,14 @@ defmodule Nidhox.Objects.PickupContainer do
       conveyor it rides it half a pixel a step (left on `ConveyorLeft`, right on
       `ConveyorRight`); on a cloud it waits; on anything but a `DefensiveBlock` it stops
       moving with the ground
+    * draw: itself (`draw_self`)
     * leaving the room: gone; destroyed: dropped from the match's list
   """
 
-  alias Cauldron2D.GameMaker.{Collide, Instance, World}
+  alias Cauldron2D.GameMaker.{Collide, Draw, Instance, World}
+  alias Nidhox.Bout.Sound
   alias Nidhox.Gml
   alias Nidhox.Man.Physics
-  alias Nidhox.Bout.Sound
 
   @lying_mask 156
   @clatter [60, 61, 62, 63]
@@ -29,13 +30,16 @@ defmodule Nidhox.Objects.PickupContainer do
     [
       {"gml_Object_PickupContainer_Create_0", &start/3},
       {"gml_Object_PickupContainer_Other_12", &update/3},
+      {"gml_Object_PickupContainer_Draw_0", fn world, self, _other -> Draw.self(world, self) end},
       {"gml_Object_PickupContainer_Other_0", &gone/3},
       {"gml_Object_PickupContainer_Destroy_0", &finish/3}
     ]
   end
 
   defp start(world, self, _other) do
-    world = world |> World.inherited(self, "PickupContainer", :create, 0) |> Gml.put(self, %{type: 2})
+    world =
+      world |> World.inherited(self, "PickupContainer", :create, 0) |> Gml.put(self, %{type: 2})
+
     {clatter, world} = Gml.choose(world, @clatter)
     %Instance{x: x, y: y, mask_index: mask} = World.fetch(world, self)
 
@@ -59,8 +63,13 @@ defmodule Nidhox.Objects.PickupContainer do
 
   defp listed(world, self) do
     case match(world) do
-      nil -> world
-      match -> Gml.put(world, match, %{pickupContainers: Gml.var(world, match, :pickupContainers, []) ++ [self]})
+      nil ->
+        world
+
+      match ->
+        Gml.put(world, match, %{
+          pickupContainers: Gml.var(world, match, :pickupContainers, []) ++ [self]
+        })
     end
   end
 
@@ -99,8 +108,13 @@ defmodule Nidhox.Objects.PickupContainer do
 
   defp finish(world, self, _other) do
     case match(world) do
-      nil -> world
-      match -> Gml.put(world, match, %{pickupContainers: List.delete(Gml.var(world, match, :pickupContainers, []), self)})
+      nil ->
+        world
+
+      match ->
+        Gml.put(world, match, %{
+          pickupContainers: List.delete(Gml.var(world, match, :pickupContainers, []), self)
+        })
     end
   end
 
@@ -127,5 +141,6 @@ defmodule Nidhox.Objects.PickupContainer do
     end
   end
 
-  defp room_height(world), do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(1)
+  defp room_height(world),
+    do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(1)
 end

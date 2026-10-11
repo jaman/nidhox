@@ -30,11 +30,13 @@ defmodule Nidhox.Objects.MinesCenterCamera do
 
   defp pan(world, self, _other) do
     if Gml.truthy?(Gml.var(world, self, :pan)) and Camera.bottom(world) < room_height(world),
-      do: Camera.put_center_y(world, min(bottom_centre(world), Camera.center_y(world) + @pan_step)),
+      do:
+        Camera.put_center_y(world, min(bottom_centre(world), Camera.center_y(world) + @pan_step)),
       else: world
   end
 
   defp bottom_centre(world), do: room_height(world) - Camera.height(world) / 2
 
-  defp room_height(world), do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(1)
+  defp room_height(world),
+    do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(1)
 end

@@ -97,14 +97,16 @@ defmodule Nidhox.Brain.Moves do
   end
 
   @doc "`{opening, world}`: `Brain` `self` looking for a way past `other` with `man` (`playerLookForOpeningAgainst`)."
-  @spec look_for_opening(World.t(), non_neg_integer(), number(), number()) :: {boolean(), World.t()}
+  @spec look_for_opening(World.t(), non_neg_integer(), number(), number()) ::
+          {boolean(), World.t()}
   def look_for_opening(%World{} = world, self, man, other) do
     mine = sword_y(world, man)
     theirs = sword_y(world, other)
 
-    if not Gml.eq?(mine, theirs) and not Query.ducking?(world, man) and not Query.ducking?(world, other),
-      do: heights_apart(world, self, man, abs(theirs - mine)),
-      else: {false, against_ducking(world, self, man, other)}
+    if not Gml.eq?(mine, theirs) and not Query.ducking?(world, man) and
+         not Query.ducking?(world, other),
+       do: heights_apart(world, self, man, abs(theirs - mine)),
+       else: {false, against_ducking(world, self, man, other)}
   end
 
   @doc "`{stepped, world}`: `Brain` `self` stepping back and forth on the half beat (`footwork`)."
@@ -164,7 +166,8 @@ defmodule Nidhox.Brain.Moves do
 
   defp run_over(world, self, man, way) do
     cond do
-      Physics.check_below?(world, man, @wall_ahead * way, @wall_height) or log_ahead?(world, man, way) ->
+      Physics.check_below?(world, man, @wall_ahead * way, @wall_height) or
+          log_ahead?(world, man, way) ->
         Buttons.press(world, self, @jump)
 
       Physics.check_below?(world, man, @gap_ahead * way, @gap_depth) ->
@@ -176,7 +179,9 @@ defmodule Nidhox.Brain.Moves do
   end
 
   defp log_ahead?(world, man, way) do
-    other = Query.by_player(world, Query.other_player(Gml.var(world, man, :playerIndex))) || @noone
+    other =
+      Query.by_player(world, Query.other_player(Gml.var(world, man, :playerIndex))) || @noone
+
     %Instance{x: x, y: y} = World.fetch(world, man)
 
     Sense.present?(other) and Sense.separated_by_log?(world, man, other) and
@@ -193,8 +198,13 @@ defmodule Nidhox.Brain.Moves do
 
   defp towards(world, self, @high, @middle), do: Buttons.press(world, self, @down)
   defp towards(world, self, @low, @middle), do: Buttons.press(world, self, @up)
-  defp towards(world, self, stance, @low) when stance in [@high, @middle], do: Buttons.press(world, self, @down)
-  defp towards(world, self, stance, @high) when stance in [@low, @middle], do: Buttons.press(world, self, @up)
+
+  defp towards(world, self, stance, @low) when stance in [@high, @middle],
+    do: Buttons.press(world, self, @down)
+
+  defp towards(world, self, stance, @high) when stance in [@low, @middle],
+    do: Buttons.press(world, self, @up)
+
   defp towards(world, _self, _stance, _target), do: world
 
   defp sword_y(world, man) do
@@ -220,10 +230,17 @@ defmodule Nidhox.Brain.Moves do
 
   defp against_ducking(world, self, man, other) do
     cond do
-      Query.ducking?(world, other) and Query.ducking?(world, man) -> Buttons.release(world, self, @down)
-      Query.ducking?(world, other) -> keep_pressing_down(world, self, man)
-      Query.ducking?(world, man) -> Buttons.release(world, self, @down)
-      true -> change_height(world, self, Gml.var(world, man, :stance))
+      Query.ducking?(world, other) and Query.ducking?(world, man) ->
+        Buttons.release(world, self, @down)
+
+      Query.ducking?(world, other) ->
+        keep_pressing_down(world, self, man)
+
+      Query.ducking?(world, man) ->
+        Buttons.release(world, self, @down)
+
+      true ->
+        change_height(world, self, Gml.var(world, man, :stance))
     end
   end
 
@@ -268,7 +285,8 @@ defmodule Nidhox.Brain.Moves do
     {room_width, _height} = Enum.at(world.data.rooms, world.room).size
     width = Camera.width(world)
 
-    Gml.gt?(abs(Camera.left(world) - x) - width, 0) or Gml.gt?(abs(Camera.right(world) - x) - width, 0) or
+    Gml.gt?(abs(Camera.left(world) - x) - width, 0) or
+      Gml.gt?(abs(Camera.right(world) - x) - width, 0) or
       Gml.lt?(x, 0) or Gml.gt?(x, room_width) or at_sword_point?(world, {x, y}, b)
   end
 
@@ -278,7 +296,11 @@ defmodule Nidhox.Brain.Moves do
     with @sword <- Sense.weapon_type(world, b),
          %Instance{x: wx, y: wy} <- World.fetch(world, weapon) do
       facing = Gml.var(world, b, :facingXScale)
-      Gml.lt?(Sense.distance(point, {wx + facing * @sword_point, wy + facing * @sword_point}), @point_close)
+
+      Gml.lt?(
+        Sense.distance(point, {wx + facing * @sword_point, wy + facing * @sword_point}),
+        @point_close
+      )
     else
       _ -> false
     end

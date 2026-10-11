@@ -38,7 +38,7 @@ defmodule Nidhox.Man.States.Stand do
       speeds by 10 that way
   """
 
-  alias Cauldron2D.GameMaker.{Instance, World}
+  alias Cauldron2D.GameMaker.{Collide, Instance, World}
   alias Nidhox.Bout.Camera
   alias Nidhox.Gml
   alias Nidhox.Man.{Actions, Physics, Query, State}
@@ -105,7 +105,8 @@ defmodule Nidhox.Man.States.Stand do
     end
   end
 
-  def behave(world, self, state) when state in [30, 31], do: grounded(world, self, &stairs(&1, &2, state))
+  def behave(world, self, state) when state in [30, 31],
+    do: grounded(world, self, &stairs(&1, &2, state))
 
   def behave(world, self, 23) do
     sprite = if abs(State.hspd(world, self)) - 2.25 <= 1.0e-5, do: 257, else: 255
@@ -126,7 +127,12 @@ defmodule Nidhox.Man.States.Stand do
 
   defp onto_stairs(world, self) do
     if meeting_below?(world, self, @stairs),
-      do: State.go(world, self, if(Gml.eq?(State.get(world, self, :facingXScale), 1), do: 31, else: 30)),
+      do:
+        State.go(
+          world,
+          self,
+          if(Gml.eq?(State.get(world, self, :facingXScale), 1), do: 31, else: 30)
+        ),
       else: world
   end
 
@@ -179,19 +185,21 @@ defmodule Nidhox.Man.States.Stand do
           else: world
 
       State.down?(world, self, @down) ->
-        world = count_held(world, self)
-
-        if State.get(world, self, :buttonHeldCounter) > @held_counts do
-          case Actions.slide_or_crawl(world, self) do
-            {true, world} -> {:done, world}
-            {false, world} -> world
-          end
-        else
-          world
-        end
+        world |> count_held(self) |> slide_when_held(self)
 
       true ->
         State.put(world, self, %{buttonHeldCounter: 0})
+    end
+  end
+
+  defp slide_when_held(world, self) do
+    if State.get(world, self, :buttonHeldCounter) > @held_counts do
+      case Actions.slide_or_crawl(world, self) do
+        {true, world} -> {:done, world}
+        {false, world} -> world
+      end
+    else
+      world
     end
   end
 
@@ -208,9 +216,14 @@ defmodule Nidhox.Man.States.Stand do
         world = count_held(world, self)
 
         cond do
-          State.get(world, self, :buttonHeldCounter) > @held_counts -> State.go(world, self, 9)
-          State.get(world, self, :stance) != 2 -> world |> Actions.shift_stance(self, 3) |> step(self)
-          true -> State.go(world, self, 9)
+          State.get(world, self, :buttonHeldCounter) > @held_counts ->
+            State.go(world, self, 9)
+
+          State.get(world, self, :stance) != 2 ->
+            world |> Actions.shift_stance(self, 3) |> step(self)
+
+          true ->
+            State.go(world, self, 9)
         end
 
       true ->
@@ -262,10 +275,17 @@ defmodule Nidhox.Man.States.Stand do
       world = world |> Actions.footwork(self, 4, 0.035) |> count_run(self)
 
       cond do
-        State.get(world, self, :runButtonHeldCounter) > @unarmed_to_run -> State.go(world, self, 52)
-        State.pressed?(world, self, @jump) -> State.go(world, self, 43)
-        State.pressed?(world, self, @attack) -> punch(world, self)
-        true -> world
+        State.get(world, self, :runButtonHeldCounter) > @unarmed_to_run ->
+          State.go(world, self, 52)
+
+        State.pressed?(world, self, @jump) ->
+          State.go(world, self, 43)
+
+        State.pressed?(world, self, @attack) ->
+          punch(world, self)
+
+        true ->
+          world
       end
     end
   end
@@ -283,17 +303,17 @@ defmodule Nidhox.Man.States.Stand do
       |> State.put(self, %{hspd: Gml.clamp(State.hspd(world, self), -2, 2)})
       |> Actions.turn_around_timer(self)
 
-    if State.down?(world, self, @up) do
-      world = world |> Actions.footwork(self, 2, 0.1) |> count_run(self)
+    if State.down?(world, self, @up),
+      do: world |> Actions.footwork(self, 2, 0.1) |> count_run(self) |> run_or_jump(self),
+      else: State.go(world, self, 29)
+  end
 
-      if State.get(world, self, :runButtonHeldCounter) > @to_run do
-        State.go(world, self, 54)
-      else
-        world = jump(world, self, 44)
-        if State.pressed?(world, self, @attack), do: State.go(world, self, 72), else: world
-      end
+  defp run_or_jump(world, self) do
+    if State.get(world, self, :runButtonHeldCounter) > @to_run do
+      State.go(world, self, 54)
     else
-      State.go(world, self, 29)
+      world = jump(world, self, 44)
+      if State.pressed?(world, self, @attack), do: State.go(world, self, 72), else: world
     end
   end
 
@@ -323,7 +343,10 @@ defmodule Nidhox.Man.States.Stand do
       State.go(world, self, 43)
     else
       world = stair_stepping(world, self)
-      world = if State.pressed?(world, self, @up), do: Actions.shift_stance(world, self, 2), else: world
+
+      world =
+        if State.pressed?(world, self, @up), do: Actions.shift_stance(world, self, 2), else: world
+
       if State.pressed?(world, self, @down), do: Actions.shift_stance(world, self, 3), else: world
     end
   end
@@ -386,11 +409,14 @@ defmodule Nidhox.Man.States.Stand do
         true -> world
       end
 
-    State.put(world, self, %{hspd: State.hspd(world, self) + State.get(world, self, :facingXScale) * 10})
+    State.put(world, self, %{
+      hspd: State.hspd(world, self) + State.get(world, self, :facingXScale) * 10
+    })
   end
 
   defp count_held(world, self),
-    do: State.put(world, self, %{buttonHeldCounter: State.get(world, self, :buttonHeldCounter) + 1})
+    do:
+      State.put(world, self, %{buttonHeldCounter: State.get(world, self, :buttonHeldCounter) + 1})
 
   defp count_run(world, self) do
     if State.down?(world, self, @left) or State.down?(world, self, @right),
@@ -407,7 +433,7 @@ defmodule Nidhox.Man.States.Stand do
 
     case World.object_index(world, name) do
       nil -> false
-      object -> Cauldron2D.GameMaker.Collide.meeting?(world, self, {x, y + 1}, object)
+      object -> Collide.meeting?(world, self, {x, y + 1}, object)
     end
   end
 

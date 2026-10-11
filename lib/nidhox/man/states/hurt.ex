@@ -181,10 +181,7 @@ defmodule Nidhox.Man.States.Hurt do
           collapse_or_fall(world, self)
 
         {:held, world} ->
-          case State.animate(world, self, 0.6, false) do
-            {true, world} -> collapse_or_fall(world, self)
-            {false, world} -> world
-          end
+          collapse_when_played(world, self)
       end
     end
   end
@@ -195,12 +192,17 @@ defmodule Nidhox.Man.States.Hurt do
       |> State.pose(self, State.get(world, self, :collapseAnimation))
       |> State.put(self, %{hspd: 0})
 
-    if State.on_ground?(world, self), do: once(world, self, 0.6, 24), else: State.go(world, self, 26)
+    if State.on_ground?(world, self),
+      do: once(world, self, 0.6, 24),
+      else: State.go(world, self, 26)
   end
 
   def behave(world, self, 20) do
     world = world |> State.put(self, %{hspd: 0}) |> State.pose(self, 211)
-    if State.on_ground?(world, self), do: once(world, self, 0.6, 24), else: State.go(world, self, 26)
+
+    if State.on_ground?(world, self),
+      do: once(world, self, 0.6, 24),
+      else: State.go(world, self, 26)
   end
 
   def behave(world, self, 26) do
@@ -235,15 +237,8 @@ defmodule Nidhox.Man.States.Hurt do
       world |> turn_around(self) |> State.go(self, 24)
     else
       case State.animate(world, self, 0.6, false) do
-        {true, world} ->
-          world = sword_falls(world, self)
-
-          if State.on_ground?(world, self),
-            do: world |> turn_around(self) |> State.go(self, 24),
-            else: State.go(world, self, 26)
-
-        {false, world} ->
-          world
+        {true, world} -> world |> sword_falls(self) |> land_or_fall(self)
+        {false, world} -> world
       end
     end
   end
@@ -360,18 +355,35 @@ defmodule Nidhox.Man.States.Hurt do
 
   defp bleed(world, self, y, drops) do
     Enum.reduce(List.duplicate(nil, max(drops, 0)), world, fn _drop, world ->
-      if State.get(world, self, :stateCounter) > 10 do
-        flesh = World.fetch(world, State.get(world, self, :flesh))
-        %Instance{x: x} = World.fetch(world, self)
-
-        case BloodDrop.bleed(world, {x, y}, flesh.image_blend) do
-          {nil, world} -> world
-          {_drop, world} -> State.put(world, self, %{bloodVol: 0.7})
-        end
-      else
-        world
-      end
+      drip(world, self, y)
     end)
+  end
+
+  defp drip(world, self, y) do
+    if State.get(world, self, :stateCounter) > 10 do
+      flesh = World.fetch(world, State.get(world, self, :flesh))
+      %Instance{x: x} = World.fetch(world, self)
+
+      case BloodDrop.bleed(world, {x, y}, flesh.image_blend) do
+        {nil, world} -> world
+        {_drop, world} -> State.put(world, self, %{bloodVol: 0.7})
+      end
+    else
+      world
+    end
+  end
+
+  defp collapse_when_played(world, self) do
+    case State.animate(world, self, 0.6, false) do
+      {true, world} -> collapse_or_fall(world, self)
+      {false, world} -> world
+    end
+  end
+
+  defp land_or_fall(world, self) do
+    if State.on_ground?(world, self),
+      do: world |> turn_around(self) |> State.go(self, 24),
+      else: State.go(world, self, 26)
   end
 
   defp spray(world, self) do
@@ -395,7 +407,10 @@ defmodule Nidhox.Man.States.Hurt do
 
   defp sword_falls(world, self) do
     %Instance{x: x, y: y} = World.fetch(world, self)
-    {world, _dropped} = Weapon.spawn_dropped(world, {x, y}, 0, 0, State.get(world, self, :facingXScale))
+
+    {world, _dropped} =
+      Weapon.spawn_dropped(world, {x, y}, 0, 0, State.get(world, self, :facingXScale))
+
     world
   end
 

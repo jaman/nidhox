@@ -65,7 +65,12 @@ defmodule Nidhox.Bout.RightOfWay do
   @spec manage(World.t(), non_neg_integer()) :: World.t()
   def manage(%World{} = world, match) do
     world = world |> changed_hands(match) |> wrong_way(match)
-    Enum.reduce(Gml.all(world, "Man"), world, &if(World.fetch(&2, &1), do: hold(&2, &1, match), else: &2))
+
+    Enum.reduce(
+      Gml.all(world, "Man"),
+      world,
+      &if(World.fetch(&2, &1), do: hold(&2, &1, match), else: &2)
+    )
   end
 
   @doc "The world with fencer `man` held to the screen unless it is entering (`stayInView`)."
@@ -119,7 +124,12 @@ defmodule Nidhox.Bout.RightOfWay do
 
     world =
       if Gml.var(world, match, :previouslyLeadingPlayerIndex) != leader,
-        do: Gml.put(world, match, %{change_animation: @change_animation, wrongWay: 0, wrongWayCounter: 0}),
+        do:
+          Gml.put(world, match, %{
+            change_animation: @change_animation,
+            wrongWay: 0,
+            wrongWayCounter: 0
+          }),
         else: world
 
     world = Gml.put(world, match, %{previouslyLeadingPlayerIndex: leader})
@@ -146,9 +156,14 @@ defmodule Nidhox.Bout.RightOfWay do
         moved = x - Map.get(vars, :previousX, x)
 
         cond do
-          moved * forward < 0 -> Gml.put(world, match, %{wrongWayCounter: Gml.var(world, match, :wrongWayCounter) + 1})
-          moved * forward > 0 -> Gml.put(world, match, %{wrongWayCounter: 0, wrongWay: 0})
-          true -> world
+          moved * forward < 0 ->
+            Gml.put(world, match, %{wrongWayCounter: Gml.var(world, match, :wrongWayCounter) + 1})
+
+          moved * forward > 0 ->
+            Gml.put(world, match, %{wrongWayCounter: 0, wrongWay: 0})
+
+          true ->
+            world
         end
 
       _gone ->
@@ -215,14 +230,21 @@ defmodule Nidhox.Bout.RightOfWay do
   defp past?(world, x, :left), do: x < Camera.left(world) - @killzone_margin
   defp past?(_world, _x, :neither), do: false
 
-  defp left_edge(world, 1, 1), do: if(alone?(world), do: Camera.left(world) - @far, else: Camera.left(world) + @inside)
+  defp left_edge(world, 1, 1),
+    do: if(alone?(world), do: Camera.left(world) - @far, else: Camera.left(world) + @inside)
+
   defp left_edge(world, _player, 1), do: max(@inside, Camera.left(world) - @far)
   defp left_edge(world, 2, 2), do: Camera.left(world) - @far
   defp left_edge(world, _player, _leader), do: Camera.left(world) + @inside
 
   defp right_edge(world, 1, 1), do: Camera.right(world) + @far
-  defp right_edge(world, 2, 2), do: if(alone?(world), do: Camera.right(world) + @far, else: Camera.right(world) - @inside)
-  defp right_edge(world, _player, 2), do: min(room_width(world) - @inside, Camera.right(world) + @far)
+
+  defp right_edge(world, 2, 2),
+    do: if(alone?(world), do: Camera.right(world) + @far, else: Camera.right(world) - @inside)
+
+  defp right_edge(world, _player, 2),
+    do: min(room_width(world) - @inside, Camera.right(world) + @far)
+
   defp right_edge(world, _player, _leader), do: Camera.right(world) - @inside
 
   defp left_barrier(world, man, barrier) do
@@ -256,6 +278,9 @@ defmodule Nidhox.Bout.RightOfWay do
 
   defp while_here(world, man, fun), do: if(World.fetch(world, man), do: fun.(world), else: world)
 
-  defp room_width(world), do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(0)
-  defp room_height(world), do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(1)
+  defp room_width(world),
+    do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(0)
+
+  defp room_height(world),
+    do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(1)
 end

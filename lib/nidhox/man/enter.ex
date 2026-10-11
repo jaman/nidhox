@@ -21,7 +21,7 @@ defmodule Nidhox.Man.Enter do
   alias Cauldron2D.GameMaker.{Instance, World}
   alias Nidhox.Bout.Overlap
   alias Nidhox.Gml
-  alias Nidhox.Man.{Query, State, Weapon}
+  alias Nidhox.Man.{Physics, Query, State, Weapon}
   alias Nidhox.Objects.{BloodDrop, Challenge, MatchStats, Particles, System}
 
   @noone -4
@@ -54,7 +54,11 @@ defmodule Nidhox.Man.Enter do
   defp changed(world, self, previous) do
     world =
       if Gml.truthy?(State.get(world, self, :hitFlag)),
-        do: State.put(world, self, %{hitFlag: 0, knockDowns: State.get(world, self, :knockDowns) + 1}),
+        do:
+          State.put(world, self, %{
+            hitFlag: 0,
+            knockDowns: State.get(world, self, :knockDowns) + 1
+          }),
         else: world
 
     world =
@@ -69,7 +73,8 @@ defmodule Nidhox.Man.Enter do
   defp stand_on_stab(world, self) do
     with 29 <- State.get(world, self, :state),
          true <- Gml.truthy?(State.get(world, self, :lastCrouched)),
-         other when other != nil <- Query.by_player(world, Query.other_player(State.get(world, self, :playerIndex))),
+         other when other != nil <-
+           Query.by_player(world, Query.other_player(State.get(world, self, :playerIndex))),
          false <- Query.stabbed?(world, other),
          false <- Query.collapsing?(world, other),
          false <- Query.knocked_down?(world, other),
@@ -158,7 +163,8 @@ defmodule Nidhox.Man.Enter do
     State.put(world, self, %{recoveryTimer: 10})
   end
 
-  defp enter(world, self, state, _previous) when state in [18, 19, 25], do: State.put(world, self, %{stance: 3})
+  defp enter(world, self, state, _previous) when state in [18, 19, 25],
+    do: State.put(world, self, %{stance: 3})
 
   defp enter(world, self, 22, _previous) do
     world
@@ -177,9 +183,14 @@ defmodule Nidhox.Man.Enter do
     do: State.put(world, self, %{hspd: 0, vspd: max(State.get(world, self, :vspd), 0)})
 
   defp enter(world, self, state, _previous) when state in [27, 28, 77] do
-    world = if state == 77, do: world |> drop(self) |> sound(self, 25) |> sound(self, 11), else: world
+    world =
+      if state == 77, do: world |> drop(self) |> sound(self, 25) |> sound(self, 11), else: world
+
     world = face_motion(world, self)
-    if state == 77, do: State.put(world, self, %{hspd: State.hspd(world, self) * 1.25}), else: world
+
+    if state == 77,
+      do: State.put(world, self, %{hspd: State.hspd(world, self) * 1.25}),
+      else: world
   end
 
   defp enter(world, self, 29, previous) do
@@ -192,9 +203,11 @@ defmodule Nidhox.Man.Enter do
     |> Query.face_opponent(self)
   end
 
-  defp enter(world, self, state, _previous) when state in [30, 31], do: show_weapon(world, self, true)
+  defp enter(world, self, state, _previous) when state in [30, 31],
+    do: show_weapon(world, self, true)
 
-  defp enter(world, self, 32, _previous), do: world |> show_weapon(self, false) |> Query.face_opponent(self)
+  defp enter(world, self, 32, _previous),
+    do: world |> show_weapon(self, false) |> Query.face_opponent(self)
 
   defp enter(world, self, 35, _previous) do
     hspd = Gml.clamp(State.hspd(world, self) * 0.7, -2, 2)
@@ -295,7 +308,7 @@ defmodule Nidhox.Man.Enter do
       |> State.put(self, %{vspd: 0})
       |> show_weapon(self, true)
       |> Query.face_opponent(self)
-      |> Nidhox.Man.Physics.apply_horizontal_friction(self, 1)
+      |> Physics.apply_horizontal_friction(self, 1)
 
     world =
       world
@@ -389,7 +402,8 @@ defmodule Nidhox.Man.Enter do
 
   defp enter(world, self, 72, _previous), do: Query.face_opponent(world, self)
 
-  defp enter(world, self, 73, _previous), do: world |> Query.face_opponent(self) |> sound(self, 59)
+  defp enter(world, self, 73, _previous),
+    do: world |> Query.face_opponent(self) |> sound(self, 59)
 
   defp enter(world, self, 76, _previous) do
     world =

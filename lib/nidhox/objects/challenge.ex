@@ -59,7 +59,7 @@ defmodule Nidhox.Objects.Challenge do
   @cyan {0, 255, 255}
   @dead 23
   @margin 35
-  @clock 36000
+  @clock 36_000
   @container_life 360
   @recovery_every 20
   @tween_up 3
@@ -239,19 +239,23 @@ defmodule Nidhox.Objects.Challenge do
 
   defp worth(value), do: value |> Gml.clamp(1, @full_worth) |> round()
 
+  defp reworth(worths, move) do
+    worths
+    |> Enum.with_index()
+    |> Enum.map(fn {value, index} -> worth(value * worth_change(index, move)) end)
+  end
+
+  defp worth_change(move, move), do: 0.5
+  defp worth_change(_index, _move), do: 1.1
+
   defp scored(world, challenge, player, move, at) do
     if Gml.var(world, challenge, :playerIndex) == player do
       worths = Gml.var(world, challenge, :pointValues)
       earned = Enum.at(worths, move)
 
-      changed =
-        worths
-        |> Enum.with_index()
-        |> Enum.map(fn {value, index} -> worth(value * if(index == move, do: 0.5, else: 1.1)) end)
-
       world
       |> Gml.put(challenge, %{
-        pointValues: changed,
+        pointValues: reworth(worths, move),
         points: Gml.var(world, challenge, :points) + earned
       })
       |> popup(at, Enum.at(@moves, move), Integer.to_string(earned), player_colour(world, player))

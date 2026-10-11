@@ -80,7 +80,10 @@ defmodule Nidhox.Objects.Crowd do
     for row <- rows, place <- places, reduce: world do
       world ->
         {shift, world} = Gml.random_range(world, -@spread, @spread)
-        world |> World.create(crowd, {x + 5 + place * @seat + shift, y + 8 + row * @seat}) |> elem(0)
+
+        world
+        |> World.create(crowd, {x + 5 + place * @seat + shift, y + 8 + row * @seat})
+        |> elem(0)
     end
   end
 
@@ -97,15 +100,32 @@ defmodule Nidhox.Objects.Crowd do
 
     world =
       for row <- upto(0, height / @tile), column <- upto(0, width / @tile), reduce: world do
-        world -> World.add_tile(world, @stands, {0, 0, @tile, @tile}, {x + column * @tile, y + row * @tile}, depth + 1)
+        world ->
+          World.add_tile(
+            world,
+            @stands,
+            {0, 0, @tile, @tile},
+            {x + column * @tile, y + row * @tile},
+            depth + 1
+          )
       end
 
     world =
       for column <- through(-0.5, width / @tile), reduce: world do
         world ->
           world
-          |> World.add_tile(@front, {0, 0, @tile, 2 * @tile}, {x + column * @tile, y + height - 8}, depth - 1)
-          |> World.add_tile(@back, {0, 0, @tile, @tile}, {x + column * @tile, y - @tile}, depth + 2)
+          |> World.add_tile(
+            @front,
+            {0, 0, @tile, 2 * @tile},
+            {x + column * @tile, y + height - 8},
+            depth - 1
+          )
+          |> World.add_tile(
+            @back,
+            {0, 0, @tile, @tile},
+            {x + column * @tile, y - @tile},
+            depth + 2
+          )
       end
 
     for row <- upto(-1, height / @side), reduce: world do
@@ -117,16 +137,23 @@ defmodule Nidhox.Objects.Crowd do
   end
 
   defp upto(from, below), do: from |> Stream.iterate(&(&1 + 1)) |> Enum.take_while(&(&1 < below))
-  defp through(from, last), do: from |> Stream.iterate(&(&1 + 1)) |> Enum.take_while(&(&1 <= last))
+
+  defp through(from, last),
+    do: from |> Stream.iterate(&(&1 + 1)) |> Enum.take_while(&(&1 <= last))
 
   defp cheer(world, self) do
     %Instance{x: x, y: y} = World.fetch(world, self)
     {width, height} = scaled(world, self)
-    world |> World.create(World.object_index(world, "CheerControl"), {x + width / 2, y + height / 2}) |> elem(0)
+
+    world
+    |> World.create(World.object_index(world, "CheerControl"), {x + width / 2, y + height / 2})
+    |> elem(0)
   end
 
   defp scaled(world, self) do
-    %Instance{sprite_index: sprite, image_xscale: xscale, image_yscale: yscale} = World.fetch(world, self)
+    %Instance{sprite_index: sprite, image_xscale: xscale, image_yscale: yscale} =
+      World.fetch(world, self)
+
     {width, height} = World.sprite(world, sprite).size
     {width * xscale, height * yscale}
   end
@@ -138,8 +165,17 @@ defmodule Nidhox.Objects.Crowd do
     {value, world} = Gml.random_range(world, 190, 220)
 
     world
-    |> Gml.put(self, %{xOffset: origin_x, yOffset: origin_y, state: -1, nextState: @sitting, frame: 0})
-    |> World.update(self, &%{&1 | image_index: 0.0, image_speed: 0.0, image_blend: Colour.hsv(hue, 100, value)})
+    |> Gml.put(self, %{
+      xOffset: origin_x,
+      yOffset: origin_y,
+      state: -1,
+      nextState: @sitting,
+      frame: 0
+    })
+    |> World.update(
+      self,
+      &%{&1 | image_index: 0.0, image_speed: 0.0, image_blend: Colour.hsv(hue, 100, value)}
+    )
   end
 
   defp watch(world, self, _other) do
@@ -153,9 +189,16 @@ defmodule Nidhox.Objects.Crowd do
     next = Gml.var(world, self, :nextState)
 
     cond do
-      not Gml.truthy?(next) -> world
-      Gml.eq?(next, Gml.var(world, self, :state)) -> Gml.put(world, self, %{nextState: -1})
-      true -> world |> Gml.put(self, %{state: next, nextState: -1, frame: 0}) |> dress(self, round(next))
+      not Gml.truthy?(next) ->
+        world
+
+      Gml.eq?(next, Gml.var(world, self, :state)) ->
+        Gml.put(world, self, %{nextState: -1})
+
+      true ->
+        world
+        |> Gml.put(self, %{state: next, nextState: -1, frame: 0})
+        |> dress(self, round(next))
     end
   end
 
@@ -164,20 +207,30 @@ defmodule Nidhox.Objects.Crowd do
     World.update(world, self, &%{&1 | sprite_index: sprite})
   end
 
-  defp dress(world, self, @cheering), do: World.update(world, self, &%{&1 | sprite_index: @cheer_sprite})
+  defp dress(world, self, @cheering),
+    do: World.update(world, self, &%{&1 | sprite_index: @cheer_sprite})
+
   defp dress(world, _self, _state), do: world
 
   defp act(world, self, @sitting) do
     case Gml.first(world, "Man") do
-      nil -> world
-      man -> if noticed?(world, self, World.fetch(world, man).x), do: Gml.put(world, self, %{nextState: @standing}), else: world
+      nil ->
+        world
+
+      man ->
+        if noticed?(world, self, World.fetch(world, man).x),
+          do: Gml.put(world, self, %{nextState: @standing}),
+          else: world
     end
   end
 
   defp act(world, self, @standing) do
     frame = Gml.var(world, self, :frame) + @rate
     world = Gml.put(world, self, %{frame: frame})
-    if Gml.gt?(frame, frames(world, self)), do: Gml.put(world, self, %{nextState: @cheering}), else: world
+
+    if Gml.gt?(frame, frames(world, self)),
+      do: Gml.put(world, self, %{nextState: @cheering}),
+      else: world
   end
 
   defp act(world, self, @cheering) do
@@ -209,5 +262,6 @@ defmodule Nidhox.Objects.Crowd do
     World.update(world, self, &%{&1 | image_index: frame / 1, image_speed: 0.0})
   end
 
-  defp frames(world, self), do: length(World.sprite(world, World.fetch(world, self).sprite_index).frames)
+  defp frames(world, self),
+    do: length(World.sprite(world, World.fetch(world, self).sprite_index).frames)
 end

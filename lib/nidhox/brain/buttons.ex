@@ -63,7 +63,11 @@ defmodule Nidhox.Brain.Buttons do
   @spec held(World.t(), non_neg_integer()) :: MapSet.t()
   def held(%World{} = world, brain) do
     grid = Gml.var(world, brain, :grid, @empty)
-    for {action, index} <- Enum.with_index(@actions), elem(grid, index) == 1, into: MapSet.new(), do: action
+
+    for {action, index} <- Enum.with_index(@actions),
+        elem(grid, index) == 1,
+        into: MapSet.new(),
+        do: action
   end
 
   defp let_go_of_opposite(world, self, button) when is_map_key(@opposite, button),

@@ -42,13 +42,21 @@ defmodule Nidhox.Objects.Animals do
   these animals do not use, so they go on past the edge.
   """
 
-  alias Cauldron2D.GameMaker.{Instance, World}
+  alias Cauldron2D.GameMaker.{Colour, Instance, World}
   alias Nidhox.Gml
   alias Nidhox.Man.Physics
   alias Nidhox.Objects.Ear
 
   @walkers %{
-    "Squirrel" => %{hop: {2, 0.2, 2.25}, wait: 0.5, walk: 23, run: 24, stand: 25, jump: 26, pace: 0.25},
+    "Squirrel" => %{
+      hop: {2, 0.2, 2.25},
+      wait: 0.5,
+      walk: 23,
+      run: 24,
+      stand: 25,
+      jump: 26,
+      pace: 0.25
+    },
     "Cat" => %{hop: {0.5, 0.8, 9}, wait: 2, walk: 360, run: 360, stand: 373, jump: 366, pace: 1.5}
   }
   @near 64
@@ -89,7 +97,8 @@ defmodule Nidhox.Objects.Animals do
     ]
   end
 
-  defp inherit(world, self, _other), do: World.inherited(world, self, "GrassDisturbingAnimal", :create, 0)
+  defp inherit(world, self, _other),
+    do: World.inherited(world, self, "GrassDisturbingAnimal", :create, 0)
 
   defp squirrel(world, self, _other) do
     world = World.inherited(world, self, "Squirrel", :create, 0)
@@ -271,13 +280,20 @@ defmodule Nidhox.Objects.Animals do
 
   defp flap_frame(world, self) do
     frames = frames(world, self)
-    World.update(world, self, &%{&1 | image_index: frames / 2 + Gml.var(world, self, :vspd) * frames * 2, image_speed: 0})
+
+    World.update(
+      world,
+      self,
+      &%{&1 | image_index: frames / 2 + Gml.var(world, self, :vspd) * frames * 2, image_speed: 0}
+    )
   end
 
   defp airborne(world, self) do
     cond do
       Gml.truthy?(Gml.var(world, self, :flying)) ->
-        world |> Gml.put(self, %{vspd: Gml.var(world, self, :vspd) + 0.03}) |> head_for_perch(self)
+        world
+        |> Gml.put(self, %{vspd: Gml.var(world, self, :vspd) + 0.03})
+        |> head_for_perch(self)
 
       Gml.truthy?(Gml.var(world, self, :onGround)) ->
         world
@@ -308,7 +324,11 @@ defmodule Nidhox.Objects.Animals do
       case Gml.prob(world, 60) do
         {true, world} ->
           lean = 0.02 * World.fetch(world, self).image_xscale
-          Gml.put(world, self, %{vspd: Gml.var(world, self, :vspd) - 0.1, hspd: Gml.var(world, self, :hspd) + lean})
+
+          Gml.put(world, self, %{
+            vspd: Gml.var(world, self, :vspd) - 0.1,
+            hspd: Gml.var(world, self, :hspd) + lean
+          })
 
         {false, world} ->
           world
@@ -332,13 +352,19 @@ defmodule Nidhox.Objects.Animals do
 
   defp glide(world, self) do
     if Gml.gt?(Gml.var(world, self, :vspd), 0),
-      do: Gml.put(world, self, %{hspd: Gml.var(world, self, :hspd) + 0.01 * World.fetch(world, self).image_xscale}),
+      do:
+        Gml.put(world, self, %{
+          hspd: Gml.var(world, self, :hspd) + 0.01 * World.fetch(world, self).image_xscale
+        }),
       else: world
   end
 
   defp land_or_fly(world, self) do
     if Gml.truthy?(Gml.var(world, self, :onGround)) do
-      world = world |> Gml.put(self, %{flying: 0, hspd: Gml.var(world, self, :hspd) * 0.2}) |> sprite(self, @stand)
+      world =
+        world
+        |> Gml.put(self, %{flying: 0, hspd: Gml.var(world, self, :hspd) * 0.2})
+        |> sprite(self, @stand)
 
       case Gml.prob(world, 2) do
         {true, world} -> Gml.put(world, self, %{flying: 1, vspd: -2})
@@ -375,26 +401,18 @@ defmodule Nidhox.Objects.Animals do
   defp wrap(world, self, _other, way) do
     %Instance{x: x, y: y, hspeed: hspeed, vspeed: vspeed} = instance = World.fetch(world, self)
     {width, height} = sprite_size(world, instance)
-    room_width = room_width(world)
-    room_height = room_height(world)
-
-    x =
-      cond do
-        hspeed < 0 and x < 0 -> x + room_width + width
-        hspeed > 0 and x >= room_width -> x - (room_width + width)
-        true -> x
-      end
-
-    y =
-      cond do
-        way != :both -> y
-        vspeed < 0 and y < 0 -> y + room_height + height
-        vspeed > 0 and y >= room_height -> y - (room_height + height)
-        true -> y
-      end
-
+    x = wrapped(x, hspeed, width, room_width(world))
+    y = if way == :both, do: wrapped(y, vspeed, height, room_height(world)), else: y
     World.update(world, self, &%{&1 | x: x, y: y})
   end
+
+  defp wrapped(position, speed, size, span) when speed < 0 and position < 0,
+    do: position + span + size
+
+  defp wrapped(position, speed, size, span) when speed > 0 and position >= span,
+    do: position - (span + size)
+
+  defp wrapped(position, _speed, _size, _span), do: position
 
   defp face(world, self) do
     hspd = Gml.var(world, self, :hspd)
@@ -421,7 +439,11 @@ defmodule Nidhox.Objects.Animals do
     end
   end
 
-  defp sprite_size(world, %Instance{sprite_index: sprite, image_xscale: xscale, image_yscale: yscale}) do
+  defp sprite_size(world, %Instance{
+         sprite_index: sprite,
+         image_xscale: xscale,
+         image_yscale: yscale
+       }) do
     case World.sprite(world, sprite) do
       nil -> {0, 0}
       %{size: {width, height}} -> {width * xscale, height * yscale}
@@ -429,9 +451,13 @@ defmodule Nidhox.Objects.Animals do
     end
   end
 
-  defp hsv(hue, saturation, value), do: Cauldron2D.GameMaker.Colour.hsv(hue, saturation, value)
+  defp hsv(hue, saturation, value), do: Colour.hsv(hue, saturation, value)
   defp distance({x1, y1}, {x2, y2}), do: :math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1))
   defp object_name(world, self), do: World.object(world, World.fetch(world, self).object).name
-  defp room_width(world), do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(0)
-  defp room_height(world), do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(1)
+
+  defp room_width(world),
+    do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(0)
+
+  defp room_height(world),
+    do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(1)
 end

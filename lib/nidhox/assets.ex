@@ -1,13 +1,15 @@
 defmodule Nidhox.Assets do
   @moduledoc """
   The game's data file, read once from the player's own copy and shared by every
-  process: its resources and every picture cut from its texture pages.
+  process: its resources, every picture cut from its texture pages, and the depths its
+  objects are created at (`Nidhox.ObjectDepths`).
 
       {:ok, assets} = Nidhox.Assets.load("path/to/data.win")
       Nidhox.Assets.get().data.rooms
 
-  `find/1` names the data file to read: the path given, then `config :nidhox, :data`
-  (which `NIDHOX_DATA` sets), then the first of `candidates/0` that exists.
+  `find/1` names the data file to read: the path given, else `config :nidhox, :data`,
+  which `config/runtime.exs` sets to `NIDHOX_DATA`, else the first of the game's usual
+  installs under the home directory that exists.
   """
 
   alias Cauldron2D.GameMaker.Data
@@ -16,48 +18,39 @@ defmodule Nidhox.Assets do
   @key {__MODULE__, :assets}
   @knee 6
 
-  @enforce_keys [:path, :data, :pictures]
-  defstruct [:path, :data, :pictures, :pages]
+  @enforce_keys [:path, :data, :pictures, :object_depths]
+  defstruct [:path, :data, :pictures, :pages, :object_depths]
 
   @type t :: %__MODULE__{
           path: Path.t(),
           data: Data.t(),
-          pictures: %{term() => FrenchCurve.Raster.t()}
+          pictures: %{term() => FrenchCurve.Raster.t()},
+          object_depths: %{String.t() => number()}
         }
 
   @doc "The data file to read, or `nil` when none is given, configured or installed."
   @spec find(Path.t() | nil) :: Path.t() | nil
-  def find(path) do
-    path || Application.get_env(:nidhox, :data) || Enum.find(candidates(), &File.exists?/1)
-  end
+  def find(path), do: path || Application.get_env(:nidhox, :data)
 
   @doc """
-  Where the game's data file sits in its usual installs: the Windows build under
-  CrossOver's Steam, then the macOS build under Steam.
+  Read the data file at `path`, its object depths (`Nidhox.ObjectDepths.read/2`) and cut
+  its pictures, and install them for every process. Returns the first error met.
   """
-  @spec candidates() :: [Path.t()]
-  def candidates do
-    support = Path.expand("~/Library/Application Support")
-
-    [
-      Path.join([
-        support,
-        "CrossOver/Bottles/Steam/drive_c/Program Files (x86)/Steam/steamapps/common/Nidhogg/data.win"
-      ]),
-      Path.join([
-        support,
-        "Steam/steamapps/common/Nidhogg/Nidhogg.app/Contents/Resources/game.ios"
-      ])
-    ]
-  end
-
-  @doc "Read the data file at `path`, cut its pictures and install them for every process."
   @spec load(Path.t()) :: {:ok, t()} | {:error, term()}
   def load(path) do
     with {:ok, data} <- Data.read(path),
+         {:ok, object_depths} <- Nidhox.ObjectDepths.read(path, data),
          {:ok, pages} <- Pictures.new(data) do
       pictures = Pictures.table(pages, data)
-      assets = %__MODULE__{path: path, data: data, pictures: pictures, pages: pages}
+
+      assets = %__MODULE__{
+        path: path,
+        data: data,
+        pictures: pictures,
+        pages: pages,
+        object_depths: object_depths
+      }
+
       :persistent_term.put(@key, assets)
       {:ok, assets}
     end

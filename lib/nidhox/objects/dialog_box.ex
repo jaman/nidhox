@@ -83,9 +83,10 @@ defmodule Nidhox.Objects.DialogBox do
   end
 
   defp type(world, self, _other) do
-    if Gml.truthy?(Gml.var(world, self, :readyToDraw)) and rem(trunc(System.get(world, :frame)), 2) == 0,
-      do: next_letter(world, self),
-      else: world
+    if Gml.truthy?(Gml.var(world, self, :readyToDraw)) and
+         rem(trunc(System.get(world, :frame)), 2) == 0,
+       do: next_letter(world, self),
+       else: world
   end
 
   defp next_letter(world, self) do
@@ -117,16 +118,20 @@ defmodule Nidhox.Objects.DialogBox do
   defp letter(world, self, letter) do
     position =
       {Gml.var(world, self, :MARGIN_X) + Gml.var(world, self, :NEXT_X_POSITION),
-       Gml.var(world, self, :MARGIN_Y) + Gml.var(world, self, :LINE_HEIGHT) * Gml.var(world, self, :LINE)}
+       Gml.var(world, self, :MARGIN_Y) +
+         Gml.var(world, self, :LINE_HEIGHT) * Gml.var(world, self, :LINE)}
 
     items = Text.items(world.data, @font, letter, position, colour: @white)
     canvas = canvas(world, self)
-    world = if Surfaces.exists?(world, canvas), do: Surfaces.draw(world, canvas, items), else: world
+
+    world =
+      if Surfaces.exists?(world, canvas), do: Surfaces.draw(world, canvas, items), else: world
 
     Gml.put(world, self, %{
       textAdded: Gml.var(world, self, :textAdded, "") <> letter,
       textToAdd: world |> Gml.var(self, :textToAdd, "") |> String.slice(1..-1//1),
-      NEXT_X_POSITION: Gml.var(world, self, :NEXT_X_POSITION) + Gml.var(world, self, :LETTER_WIDTH)
+      NEXT_X_POSITION:
+        Gml.var(world, self, :NEXT_X_POSITION) + Gml.var(world, self, :LETTER_WIDTH)
     })
   end
 
@@ -135,7 +140,11 @@ defmodule Nidhox.Objects.DialogBox do
     frame = System.get(world, :frame)
     {canvas_width, _height} = Surfaces.size(world, canvas)
     tint = if rem(trunc(frame), 3) == 0, do: @white, else: @yellow
-    x = Camera.left(world) + (Camera.width(world) - canvas_width) * 0.5 + :math.cos(frame / 20) * @sway
+
+    x =
+      Camera.left(world) + (Camera.width(world) - canvas_width) * 0.5 +
+        :math.cos(frame / 20) * @sway
+
     y = Camera.top(world) + @top + :math.sin(frame / 30) * @sway
 
     Draw.item(world, Surfaces.item(world, canvas, {x, y}, blend: tint))
@@ -173,7 +182,8 @@ defmodule Nidhox.Objects.DialogBox do
 
   defp break_line(world, current, width, at, space, output) do
     if Gml.gt?(Text.width(world.data, @font, String.slice(current, 0, at)), width) and space != -1 do
-      {String.slice(current, space..-1//1), 1, -1, output <> String.slice(current, 0, space) <> @line_break}
+      {String.slice(current, space..-1//1), 1, -1,
+       output <> String.slice(current, 0, space) <> @line_break}
     else
       {current, at, space, output}
     end

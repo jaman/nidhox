@@ -18,7 +18,8 @@ defmodule Nidhox.Screen.MenuList do
   (0 to 1).
 
   `:up` and `:down` from either side move round the ring, `:attack` or `:start` choose,
-  `:left` and `:right` change the selected choice's value, and `:jump` goes back.
+  `:left` and `:right` change the selected choice's value, and `:jump` goes back — and,
+  NidhOX's addition, so does `:pause` (`Esc`).
   """
 
   alias Nidhox.Screen.Art
@@ -48,6 +49,14 @@ defmodule Nidhox.Screen.MenuList do
   @slider_gap 4
   @slider_width 32
   @slider_height 4
+  @presses [
+    {[:start, :attack], :choose},
+    {[:jump, :pause], :back},
+    {[:up], :up},
+    {[:down], :down},
+    {[:left], :left},
+    {[:right], :right}
+  ]
 
   @doc """
   The menu `key` of `choices`, under `title` (or `nil`), with the choice whose option is
@@ -99,16 +108,21 @@ defmodule Nidhox.Screen.MenuList do
   end
 
   defp pressed(menu, side, pressed) do
-    cond do
-      :start in pressed or :attack in pressed -> {:choose, selected(menu), side}
-      :jump in pressed -> {:back, side}
-      :up in pressed -> {:moved, turned(menu, -1)}
-      :down in pressed -> {:moved, turned(menu, 1)}
-      :left in pressed -> {:change, selected(menu), -1, side}
-      :right in pressed -> {:change, selected(menu), 1, side}
-      true -> nil
-    end
+    action =
+      Enum.find_value(@presses, fn {buttons, action} ->
+        if Enum.any?(buttons, &(&1 in pressed)), do: action
+      end)
+
+    act(menu, side, action)
   end
+
+  defp act(menu, side, :choose), do: {:choose, selected(menu), side}
+  defp act(_menu, side, :back), do: {:back, side}
+  defp act(menu, _side, :up), do: {:moved, turned(menu, -1)}
+  defp act(menu, _side, :down), do: {:moved, turned(menu, 1)}
+  defp act(menu, side, :left), do: {:change, selected(menu), -1, side}
+  defp act(menu, side, :right), do: {:change, selected(menu), 1, side}
+  defp act(_menu, _side, nil), do: nil
 
   defp lines(%__MODULE__{choices: choices, selected: selected}) do
     count = length(choices)

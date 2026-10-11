@@ -95,14 +95,20 @@ defmodule Nidhox.Brain.Travel do
         world
 
       ledge ->
-        {step, world} =
-          if Gml.gt?(abs(World.fetch(world, ledge).x - x), 48),
-            do: {true, world},
-            else: on_double_beat(world, self, 60)
-
-        if step, do: Buttons.press(world, self, if(Gml.eq?(way, 1), do: @right, else: @left)), else: world
+        step_to_ledge(world, self, World.fetch(world, ledge).x - x, way)
     end
   end
+
+  defp step_to_ledge(world, self, gap, way) do
+    {step, world} =
+      if Gml.gt?(abs(gap), 48),
+        do: {true, world},
+        else: on_double_beat(world, self, 60)
+
+    if step, do: Buttons.press(world, self, way_button(way)), else: world
+  end
+
+  defp way_button(way), do: if(Gml.eq?(way, 1), do: @right, else: @left)
 
   defp back_off(world, self) do
     world = Buttons.release_all(world, self, @all)
@@ -137,7 +143,8 @@ defmodule Nidhox.Brain.Travel do
   end
 
   defp step_back_at_ledge(world, self, apart) do
-    {step, world} = if Gml.lt?(apart, 48), do: on_double_beat(world, self, 60), else: {false, world}
+    {step, world} =
+      if Gml.lt?(apart, 48), do: on_double_beat(world, self, 60), else: {false, world}
 
     if step,
       do: world |> Buttons.press(self, @back) |> give_up_later(self),
@@ -179,7 +186,8 @@ defmodule Nidhox.Brain.Travel do
 
   defp step_back_under_sky(world, self) do
     with true <- Gml.gt?(distance(world, self), 48),
-         true <- Clock.between?(Gml.var(world, self, :stateCounter), Clock.period(world, self, 3.5)),
+         true <-
+           Clock.between?(Gml.var(world, self, :stateCounter), Clock.period(world, self, 3.5)),
          {true, world} <- Gml.prob(world, 3) do
       open_sky(world, self)
     else
@@ -203,7 +211,8 @@ defmodule Nidhox.Brain.Travel do
   end
 
   defp stop_now_and_then(world, self) do
-    with true <- Clock.between?(Gml.var(world, self, :actionCounter), Clock.period(world, self, 4)),
+    with true <-
+           Clock.between?(Gml.var(world, self, :actionCounter), Clock.period(world, self, 4)),
          {true, world} <- Gml.prob(world, 10) do
       complete(world, self)
     else
@@ -221,7 +230,10 @@ defmodule Nidhox.Brain.Travel do
       |> Buttons.press(self, @down)
       |> Buttons.release(self, @attack)
 
-    world = if Gml.gt?(abs(Gml.var(world, man, :hspd)), 0.2), do: Buttons.press(world, self, @forward), else: world
+    world =
+      if Gml.gt?(abs(Gml.var(world, man, :hspd)), 0.2),
+        do: Buttons.press(world, self, @forward),
+        else: world
 
     world =
       if Gml.gt?(Gml.var(world, self, :actionCounter), 7) and on_ground?(world, man),
@@ -285,7 +297,10 @@ defmodule Nidhox.Brain.Travel do
         complete(world, self)
 
       true ->
-        world = world |> walk_to(self, World.fetch(world, other).x, World.fetch(world, man).x) |> Moves.jump_over(self, man)
+        world =
+          world
+          |> walk_to(self, World.fetch(world, other).x, World.fetch(world, man).x)
+          |> Moves.jump_over(self, man)
 
         if Gml.gt?(Gml.var(world, self, :actionCounter), 180),
           do: Gml.put(world, self, %{actionCompleted: 1, actionFailed: 1}),
@@ -305,7 +320,9 @@ defmodule Nidhox.Brain.Travel do
           do: {true, world},
           else: on_beat(world, self, 7)
 
-      if now and not Gml.truthy?(Gml.var(world, self, :flyingSword)), do: rise(world, self, man), else: world
+      if now and not Gml.truthy?(Gml.var(world, self, :flyingSword)),
+        do: rise(world, self, man),
+        else: world
     end
   end
 
@@ -319,9 +336,14 @@ defmodule Nidhox.Brain.Travel do
         else: world
 
     cond do
-      not (Gml.lt?(distance(world, self), 48) and Sense.present?(other)) -> Buttons.press(world, self, @up)
-      Gml.gt?(World.fetch(world, other).x, World.fetch(world, man).x) -> Buttons.press(world, self, @left)
-      true -> Buttons.press(world, self, @right)
+      not (Gml.lt?(distance(world, self), 48) and Sense.present?(other)) ->
+        Buttons.press(world, self, @up)
+
+      Gml.gt?(World.fetch(world, other).x, World.fetch(world, man).x) ->
+        Buttons.press(world, self, @left)
+
+      true ->
+        Buttons.press(world, self, @right)
     end
   end
 
@@ -365,17 +387,18 @@ defmodule Nidhox.Brain.Travel do
 
   defp done_pausing(world, self) do
     {done, world} =
-      cond do
-        Gml.gt?(Gml.var(world, self, :actionCounter), 60) -> {true, world}
-        true -> nine_beats_or_close(world, self)
-      end
+      if Gml.gt?(Gml.var(world, self, :actionCounter), 60),
+        do: {true, world},
+        else: nine_beats_or_close(world, self)
 
     if done, do: Gml.put(world, self, %{actionCompleted: 1, actionFailed: 1}), else: world
   end
 
   defp nine_beats_or_close(world, self) do
     {chance, world} =
-      if Clock.every?(world, self, :actionCounter, 9), do: Gml.prob(world, 10), else: {false, world}
+      if Clock.every?(world, self, :actionCounter, 9),
+        do: Gml.prob(world, 10),
+        else: {false, world}
 
     {chance or Gml.lt?(distance(world, self), 64), world}
   end
@@ -437,10 +460,14 @@ defmodule Nidhox.Brain.Travel do
     world = Buttons.release_all(world, self, @all)
     player_index = Gml.var(world, self, :playerIndex)
 
-    if Sense.present?(opponent(world, self)) and not Gml.gt?(Gml.var(world, self, :actionCounter), 60) and
+    if Sense.present?(opponent(world, self)) and
+         not Gml.gt?(Gml.var(world, self, :actionCounter), 60) and
          Gml.eq?(Match.get(world, :leadingPlayerIndex), Query.other_player(player_index)) do
       world = run_home(world, self, player_index)
-      if Clock.every?(world, self, :stateCounter, 1), do: Buttons.press(world, self, @jump), else: world
+
+      if Clock.every?(world, self, :stateCounter, 1),
+        do: Buttons.press(world, self, @jump),
+        else: world
     else
       fail(world, self)
     end
@@ -518,7 +545,12 @@ defmodule Nidhox.Brain.Travel do
     world =
       if Sense.present?(other),
         do: away_from_x(world, self, World.fetch(world, other).x, World.fetch(world, man).x),
-        else: Buttons.press(world, self, if(Gml.gt?(Gml.var(world, man, :hspd), 0), do: @right, else: @left))
+        else:
+          Buttons.press(
+            world,
+            self,
+            if(Gml.gt?(Gml.var(world, man, :hspd), 0), do: @right, else: @left)
+          )
 
     counter = Gml.var(world, self, :actionCounter)
     world = if Gml.gt?(counter, 10), do: Buttons.release(world, self, @jump), else: world
@@ -529,11 +561,15 @@ defmodule Nidhox.Brain.Travel do
   end
 
   defp on_beat(world, self, chance) do
-    if Clock.every?(world, self, :actionCounter, 1), do: Gml.prob(world, chance), else: {false, world}
+    if Clock.every?(world, self, :actionCounter, 1),
+      do: Gml.prob(world, chance),
+      else: {false, world}
   end
 
   defp on_double_beat(world, self, chance) do
-    if Clock.every?(world, self, :actionCounter, 2), do: Gml.prob(world, chance), else: {false, world}
+    if Clock.every?(world, self, :actionCounter, 2),
+      do: Gml.prob(world, chance),
+      else: {false, world}
   end
 
   defp ground_at?(world, point) do
@@ -557,18 +593,30 @@ defmodule Nidhox.Brain.Travel do
   end
 
   defp away_from(world, self, other),
-    do: away_from_x(world, self, World.fetch(world, other).x, World.fetch(world, player(world, self)).x)
+    do:
+      away_from_x(
+        world,
+        self,
+        World.fetch(world, other).x,
+        World.fetch(world, player(world, self)).x
+      )
 
   defp away_from_x(world, self, other_x, x) do
-    if Gml.lt?(other_x, x), do: Buttons.press(world, self, @right), else: Buttons.press(world, self, @left)
+    if Gml.lt?(other_x, x),
+      do: Buttons.press(world, self, @right),
+      else: Buttons.press(world, self, @left)
   end
 
   defp walk_to(world, self, target_x, x) do
-    if Gml.lt?(target_x, x), do: Buttons.press(world, self, @left), else: Buttons.press(world, self, @right)
+    if Gml.lt?(target_x, x),
+      do: Buttons.press(world, self, @left),
+      else: Buttons.press(world, self, @right)
   end
 
   defp toward(world, self, target_x, x) do
-    if Gml.gt?(target_x, x), do: Buttons.press(world, self, @right), else: Buttons.press(world, self, @left)
+    if Gml.gt?(target_x, x),
+      do: Buttons.press(world, self, @right),
+      else: Buttons.press(world, self, @left)
   end
 
   defp complete(world, self), do: Gml.put(world, self, %{actionCompleted: 1})

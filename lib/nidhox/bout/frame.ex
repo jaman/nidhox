@@ -195,11 +195,15 @@ defmodule Nidhox.Bout.Frame do
   end
 
   defp each_object(world, names, event) do
-    Enum.reduce(names, world, fn name, world ->
-      Enum.reduce(Gml.all(world, name), world, fn id, world ->
-        if World.fetch(world, id), do: World.perform(world, id, :other, event), else: world
-      end)
-    end)
+    Enum.reduce(names, world, &each_instance(&2, &1, event))
+  end
+
+  defp each_instance(world, name, event) do
+    Enum.reduce(Gml.all(world, name), world, &perform_other(&2, &1, event))
+  end
+
+  defp perform_other(world, id, event) do
+    if World.fetch(world, id), do: World.perform(world, id, :other, event), else: world
   end
 
   defp each_man(world, fun) do

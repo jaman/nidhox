@@ -37,9 +37,9 @@ defmodule Nidhox.Man do
 
   alias Cauldron2D.GameMaker.{Collide, Draw, Instance, World}
   alias Nidhox.Bout.Variants
+  alias Nidhox.Brain.Personality
   alias Nidhox.Gml
   alias Nidhox.Man.{Behave, Enter, Friction, Physics, Push, Query, State, Weapon}
-  alias Nidhox.Brain.Personality
   alias Nidhox.Objects.{Challenge, System}
 
   @noone -4

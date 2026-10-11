@@ -36,8 +36,12 @@ defmodule Nidhox.Bout.PlayerColour do
   @spec get(World.t(), non_neg_integer() | nil, number()) :: {{byte(), byte(), byte()}, World.t()}
   def get(%World{} = world, self, @computer), do: get(world, self, computer_index(world))
   def get(%World{} = world, _self, 0), do: {{0, 0, 0}, world}
-  def get(%World{} = world, _self, 1), do: {picked(world, :miscPref_p1color, {255, 255, 0}), world}
-  def get(%World{} = world, _self, 2), do: {picked(world, :miscPref_p2color, {255, 160, 64}), world}
+
+  def get(%World{} = world, _self, 1),
+    do: {picked(world, :miscPref_p1color, {255, 255, 0}), world}
+
+  def get(%World{} = world, _self, 2),
+    do: {picked(world, :miscPref_p2color, {255, 160, 64}), world}
 
   def get(%World{} = world, _self, index) when is_map_key(@photoshop, index) do
     {hue, saturation, value} = @photoshop[index]
@@ -67,7 +71,8 @@ defmodule Nidhox.Bout.PlayerColour do
       2
     else
       with arcade when arcade != nil <- Gml.first(world, "ArcadeMode"),
-           personalities when is_map(personalities) <- Gml.var(world, arcade, :personalityMap, nil) do
+           personalities when is_map(personalities) <-
+             Gml.var(world, arcade, :personalityMap, nil) do
         Map.get(@personalities, Map.get(personalities, Gml.var(world, arcade, :level)), @rainbow)
       else
         _none -> @rainbow
@@ -83,7 +88,9 @@ defmodule Nidhox.Bout.PlayerColour do
   end
 
   defp bgr(colour),
-    do: {Bitwise.band(colour, 0xFF), Bitwise.band(Bitwise.bsr(colour, 8), 0xFF), Bitwise.band(Bitwise.bsr(colour, 16), 0xFF)}
+    do:
+      {Bitwise.band(colour, 0xFF), Bitwise.band(Bitwise.bsr(colour, 8), 0xFF),
+       Bitwise.band(Bitwise.bsr(colour, 16), 0xFF)}
 
   defp rainbow(world, self) do
     if Gml.truthy?(System.get(world, :flashing)) do

@@ -52,7 +52,8 @@ defmodule Nidhox.Objects.Nidhogg do
       {"gml_Object_Nidhogg_Create_0", &start/3},
       {"gml_Object_Dragable_Create_0", &segment/3},
       {"gml_Object_Dragable_Step_0", &crawl/3},
-      {"gml_Object_NidhoggZone_Create_0", fn world, self, _other -> Gml.put(world, self, %{active: 0}) end},
+      {"gml_Object_NidhoggZone_Create_0",
+       fn world, self, _other -> Gml.put(world, self, %{active: 0}) end},
       {"gml_Object_NidhoggZone_Collision_Man", &wake/3}
     ]
   end
@@ -66,7 +67,12 @@ defmodule Nidhox.Objects.Nidhogg do
       Enum.reduce(0..(@segments - 1), world, fn i, world ->
         {world, part} = World.create(world, object, {x - i * @segment_length, y})
         parts = Gml.var(world, self, :parts)
-        world = world |> Gml.put(part, %{text: Integer.to_string(i)}) |> Gml.put(self, %{parts: parts ++ [part]})
+
+        world =
+          world
+          |> Gml.put(part, %{text: Integer.to_string(i)})
+          |> Gml.put(self, %{parts: parts ++ [part]})
+
         follow(world, self, part, i, parts)
       end)
 
@@ -83,12 +89,25 @@ defmodule Nidhox.Objects.Nidhogg do
     world
     |> Gml.put(part, %{targetObj: List.last(parts)})
     |> snap_to_target(part)
-    |> World.update(part, &%{&1 | image_index: floor(i / @segments * @frames) / 1, image_speed: 0.0})
+    |> World.update(
+      part,
+      &%{&1 | image_index: floor(i / @segments * @frames) / 1, image_speed: 0.0}
+    )
   end
 
   defp snap_to_target(world, part) do
     world = update_target(world, part)
-    World.update(world, part, &%{&1 | x: Gml.var(world, part, :X), y: Gml.var(world, part, :Y), image_angle: Gml.var(world, part, :targetAngle) / 1})
+
+    World.update(
+      world,
+      part,
+      &%{
+        &1
+        | x: Gml.var(world, part, :X),
+          y: Gml.var(world, part, :Y),
+          image_angle: Gml.var(world, part, :targetAngle) / 1
+      }
+    )
   end
 
   defp update_target(world, part) do
@@ -96,8 +115,13 @@ defmodule Nidhox.Objects.Nidhogg do
 
     case target > 0 && World.fetch(world, target) do
       %Instance{x: x, y: y, image_angle: angle} ->
-        length = Gml.var(world, Gml.first(world, "Nidhogg") || -4, :segmentLength, @segment_length)
-        Gml.put(world, part, %{X: x + Gml.lengthdir_x(length, angle + 180), Y: y + Gml.lengthdir_y(length, angle + 180)})
+        length =
+          Gml.var(world, Gml.first(world, "Nidhogg") || -4, :segmentLength, @segment_length)
+
+        Gml.put(world, part, %{
+          X: x + Gml.lengthdir_x(length, angle + 180),
+          Y: y + Gml.lengthdir_y(length, angle + 180)
+        })
 
       _none ->
         %Instance{x: x} = World.fetch(world, part)
@@ -128,7 +152,13 @@ defmodule Nidhox.Objects.Nidhogg do
   defp crawl(world, self, _other) do
     world =
       if Gml.var(world, self, :holdSpeed) > 0,
-        do: world |> World.update(self, &Instance.put_motion(&1, %{speed: Gml.var(world, self, :holdSpeed)})) |> Gml.put(self, %{holdSpeed: 0}),
+        do:
+          world
+          |> World.update(
+            self,
+            &Instance.put_motion(&1, %{speed: Gml.var(world, self, :holdSpeed)})
+          )
+          |> Gml.put(self, %{holdSpeed: 0}),
         else: world
 
     world = update_target(world, self)
@@ -160,7 +190,11 @@ defmodule Nidhox.Objects.Nidhogg do
 
     if distance > 0 do
       angle = Gml.point_direction({x, y}, target)
-      world = world |> Gml.put(self, %{targetAngle: angle}) |> turn_towards(self, angle, ratio, @body_turn)
+
+      world =
+        world
+        |> Gml.put(self, %{targetAngle: angle})
+        |> turn_towards(self, angle, ratio, @body_turn)
 
       World.update(world, self, fn segment ->
         %{
@@ -177,7 +211,12 @@ defmodule Nidhox.Objects.Nidhogg do
   defp turn_towards(world, self, aim, ratio, most) do
     %Instance{image_angle: angle} = World.fetch(world, self)
     swing = -NidhoggHead.tween(angle, aim)
-    World.update(world, self, &%{&1 | image_angle: angle + Gml.clamp(swing * ratio * 0.4, -most, most)})
+
+    World.update(
+      world,
+      self,
+      &%{&1 | image_angle: angle + Gml.clamp(swing * ratio * 0.4, -most, most)}
+    )
   end
 
   defp show_way(world, self, before) do
@@ -207,7 +246,12 @@ defmodule Nidhox.Objects.Nidhogg do
     %Instance{x: man_x, y: man_y} = World.fetch(world, man)
 
     world
-    |> turn_towards(self, Gml.point_direction({x, y}, {man_x, man_y - @aim_above}), ratio, @chase_turn)
+    |> turn_towards(
+      self,
+      Gml.point_direction({x, y}, {man_x, man_y - @aim_above}),
+      ratio,
+      @chase_turn
+    )
     |> run_on(self)
   end
 
@@ -229,13 +273,24 @@ defmodule Nidhox.Objects.Nidhogg do
 
         if :math.sqrt((edge_x - x) * (edge_x - x) + (edge_y - y) * (edge_y - y)) < @edge_stop,
           do: World.update(world, self, &Instance.put_motion(&1, %{speed: 0})),
-          else: world |> turn_towards(self, Gml.point_direction({x, y}, {edge_x, edge_y}), ratio, @edge_turn) |> run_on(self)
+          else:
+            world
+            |> turn_towards(
+              self,
+              Gml.point_direction({x, y}, {edge_x, edge_y}),
+              ratio,
+              @edge_turn
+            )
+            |> run_on(self)
     end
   end
 
   defp run_on(world, self) do
     World.update(world, self, fn segment ->
-      Instance.put_motion(segment, %{direction: segment.image_angle, speed: Gml.var(world, self, :maxSpeed)})
+      Instance.put_motion(segment, %{
+        direction: segment.image_angle,
+        speed: Gml.var(world, self, :maxSpeed)
+      })
     end)
   end
 
@@ -243,9 +298,14 @@ defmodule Nidhox.Objects.Nidhogg do
     %Instance{hspeed: hspeed} = World.fetch(world, self)
 
     cond do
-      hspeed > 0 -> Enum.reduce(Gml.all(world, "NidhoggHead"), world, &Gml.put(&2, &1, %{headYScale: 1}))
-      hspeed < 0 -> Enum.reduce(Gml.all(world, "NidhoggHead"), world, &Gml.put(&2, &1, %{headYScale: -1}))
-      true -> world
+      hspeed > 0 ->
+        Enum.reduce(Gml.all(world, "NidhoggHead"), world, &Gml.put(&2, &1, %{headYScale: 1}))
+
+      hspeed < 0 ->
+        Enum.reduce(Gml.all(world, "NidhoggHead"), world, &Gml.put(&2, &1, %{headYScale: -1}))
+
+      true ->
+        world
     end
   end
 
@@ -259,7 +319,10 @@ defmodule Nidhox.Objects.Nidhogg do
       |> Gml.all("NidhoggHead")
       |> Enum.reduce(world, fn head, world ->
         %Instance{x: x} = World.fetch(world, head)
-        across = Gml.clamp(x, Camera.left(world) + @wake_margin, Camera.right(world) - @wake_margin)
+
+        across =
+          Gml.clamp(x, Camera.left(world) + @wake_margin, Camera.right(world) - @wake_margin)
+
         Sound.play(world, @wake_sound, {across, y})
       end)
       |> Gml.put(self, %{active: 1})

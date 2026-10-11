@@ -37,8 +37,10 @@ defmodule Nidhox.Objects.Torches do
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
   def handlers do
     [
-      {"gml_Object_Torch_Step_0", fn world, self, _other -> burn(world, self, @candle_flames) end},
-      {"gml_Object_WallTorch_Step_0", fn world, self, _other -> burn(world, self, @wall_flames) end},
+      {"gml_Object_Torch_Step_0",
+       fn world, self, _other -> burn(world, self, @candle_flames) end},
+      {"gml_Object_WallTorch_Step_0",
+       fn world, self, _other -> burn(world, self, @wall_flames) end},
       {"gml_Object_TorchDark_Create_0", &dark/3},
       {"gml_Object_BallLight_Create_0", &lamp/3},
       {"gml_Object_BallLight_Alarm_0", &lamp_frame/3},
@@ -50,7 +52,10 @@ defmodule Nidhox.Objects.Torches do
   defp lamp(world, self, _other) do
     world
     |> World.inherited(self, "BallLight", :create, 0)
-    |> World.update(self, &(%{&1 | image_index: 0.0, image_speed: 0.0} |> Instance.put_alarm(0, @first_frame)))
+    |> World.update(
+      self,
+      &(%{&1 | image_index: 0.0, image_speed: 0.0} |> Instance.put_alarm(0, @first_frame))
+    )
   end
 
   defp lamp_frame(world, self, _other) do
@@ -68,11 +73,16 @@ defmodule Nidhox.Objects.Torches do
     y = Gml.lengthdir_y(ystart, angle) + 0.0
     world = World.update(world, self, &%{&1 | x: x, y: y})
     {lit, world} = Gml.prob(world, @flame_chance)
-    if lit, do: world |> Gml.all("Particles") |> Enum.reduce(world, &flare(&2, &1, {x, y})), else: world
+
+    if lit,
+      do: world |> Gml.all("Particles") |> Enum.reduce(world, &flare(&2, &1, {x, y})),
+      else: world
   end
 
   defp flare(world, particles, {x, y}) do
-    %{torchSystem: system, torchEmitter: emitter, torchParticle: particle} = World.fetch(world, particles).vars
+    %{torchSystem: system, torchEmitter: emitter, torchParticle: particle} =
+      World.fetch(world, particles).vars
+
     region = {x - @flame_size, x + @flame_size, y - @flame_size, y + @flame_size}
 
     world
@@ -82,7 +92,12 @@ defmodule Nidhox.Objects.Torches do
 
   defp lamp_draw(world, self, _other) do
     %Instance{x: x, y: y} = World.fetch(world, self)
-    world = if abs(x - Camera.center_x(world)) < @lamp_reach, do: Chain.draw(world, {x, y}, {x, 0}, true), else: world
+
+    world =
+      if abs(x - Camera.center_x(world)) < @lamp_reach,
+        do: Chain.draw(world, {x, y}, {x, 0}, true),
+        else: world
+
     Draw.self(world, self)
   end
 
@@ -104,8 +119,12 @@ defmodule Nidhox.Objects.Torches do
     %Instance{x: x, y: y} = World.fetch(world, self)
 
     Enum.reduce(flames, world, fn {dx, dy}, world ->
-      %{torchSystem: system, torchEmitter: emitter, torchParticle: particle} = World.fetch(world, particles).vars
-      region = {x + dx - @flame_size, x + dx + @flame_size, y + dy - @flame_size, y + dy + @flame_size}
+      %{torchSystem: system, torchEmitter: emitter, torchParticle: particle} =
+        World.fetch(world, particles).vars
+
+      region =
+        {x + dx - @flame_size, x + dx + @flame_size, y + dy - @flame_size, y + dy + @flame_size}
+
       world = PartSystems.emitter_region(world, system, emitter, region, :ellipse, :linear)
       {lit, world} = Gml.prob(world, @flame_chance)
       if lit, do: PartSystems.emitter_burst(world, system, emitter, particle, 1), else: world

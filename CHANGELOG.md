@@ -2,7 +2,29 @@
 
 ## Unreleased
 
+### Changed
+
+- How the picture reaches a terminal is chosen by the Cauldron client
+  (`Cauldron2D.Drafter.Client.Picture`): `--picture` and `NIDHOX_PICTURE` set it for
+  every player, ssh players included, `size:WxH` is accepted too, and the default stays
+  `native:2,png,swap`.
+
 ### Added
+
+- `--mute` (or `CAULDRON_MUTE=1`): no sound on this machine.
+
+
+### Added
+
+- `MIX_ENV=linux`: an environment of its own (`config/linux.exs`, each environment's
+  config file read when present), so a Linux build in this checkout goes to
+  `_build/linux` and its native code to the libraries' per-architecture folders, leaving
+  the macOS builds alone.
+
+- `mix nidhox --picture` (or `NIDHOX_PICTURE`): any of `native` (the room at its own
+  size times the largest whole number that fits, or `native:N`), `png` and `swap`, comma
+  separated, for how the picture reaches a kitty terminal; `native:2,png,swap` by
+  default, `none` for none.
 
 - The title's attract mode: left alone for 1200 steps, the title plays a match of the
   computer against itself in an area at random, the logo and a blinking "press start"
@@ -85,6 +107,25 @@
 
 ### Changed
 
+- Hex package metadata: GPL-2.0-or-later (`LICENSE`), the GitHub link, and the packaged
+  files listed (`lib`, `mix.exs`, `.formatter.exs`, the README, changelog and licence).
+  The libraries are the sibling checkouts when present, else their Hex releases
+  (`PLUMB_HEX` forces Hex).
+- The depths objects are created at are read from the player's copy at startup
+  (`Nidhox.ObjectDepths.read/2`, kept in `Nidhox.Assets`): from the `Nidhogg.exe` beside
+  a `data.win`, or, for the macOS build's `game.ios`, from its objects themselves. A
+  `data.win` without its `Nidhogg.exe`, or with one from another build, does not start.
+  `Nidhox.ObjectDepths.table/0` is removed.
+- The default player name is `fencer`; it was `fencer@<host name>`, which showed the
+  machine's name to the other player online.
+- The decompiled pseudocode under `docs/` is ignored by git.
+- The pause menu shows "LEAVE GAME" instead of "QUIT TO TITLE SCREEN" to the player on
+  another machine, since choosing it takes only them out of the game.
+- `gamepad` comes through `cauldron_2d_drafter` and is no longer listed in `mix.exs`.
+- The data file's default is set in `config/runtime.exs`: `NIDHOX_DATA`, else the first of
+  the game's usual Steam installs under the home directory, Linux's included; `--data`
+  overrides it. `Nidhox.Assets.candidates/0` is gone, and no script names a path of its own.
+
 - The menus are the game's own: one ring of choices turning under the logo
   (`Nidhox.Screen.MenuList`), drawn and sounded as the game's `MainMenu` draws them, its
   lists in the game's order, every one in the title room, VARIANTS under MULTIPLAYER and
@@ -111,6 +152,76 @@
 
 ### Fixed
 
+- `nidhox.log` takes notices too, so each ssh player's session start and end, and why
+  an ssh connection was dropped, are recorded.
+
+- HOST OVER SSH shows the command to connect with for each of this machine's networks,
+  up to three, the home network first; it showed one address, which could be a VPN's
+  the other player is not on.
+
+- `mix nidhox` writes warnings and errors, a crashed ssh session among them, to
+  `nidhox.log` in the game's data directory.
+- A player over ssh whose game's world stops goes to the lobby, told "NidhOX
+  stopped", instead of freezing on the last frame.
+- A game whose terminal goes away quits, and the controller helper exits with it.
+- `Esc` pauses a bout, the warm-up, the tutorial and challenge mode as the game's does
+  (`keyboard_check_pressed(27)`), on the game's pause menu, which now also has OPTIONS;
+  `q` no longer leaves the game and `p` no longer freezes it, `Ctrl+Q` quitting.
+- `Esc` goes back on the title's menus, as jump does, and out of every ONLINE VERSUS
+  screen — hosting, host over ssh, the host list and the address and code screens —
+  stopping any hosting.
+- The `Enter` that finishes typing a join code no longer reopens the typing at once,
+  hiding how the join went; a failed join says why: nothing answering at the address,
+  no game hosting there, or the code refused (`Cauldron2D.Distribution.join/3`).
+- HOST OVER SSH on ONLINE VERSUS: the game served over ssh (`Cauldron2D.Drafter.Server`)
+  on a port typed when hosting — any free one when left empty, filled in from
+  `NIDHOX_SSH_PORT` or `mix nidhox --ssh-port` — the other player connecting with
+  `ssh -p <port> new@<address>`
+  and playing side 2 in this machine's game from their own terminal.
+- When the other player leaves a game this machine hosts, over ssh or the network, a
+  bout in progress is won by forfeit, the match ends, and the hosting screen comes back,
+  still hosting on the same port and code, saying "the other player left", so the next
+  player connects as the first did; their side no longer passes to this machine's
+  keyboard.
+- The other player choosing QUIT TO TITLE SCREEN from the pause of a game this machine
+  hosts now leaves: a bout in progress is the host's by forfeit, their client quits —
+  over ssh their session closes, terminal restored — and the hosting screen comes
+  back, still hosting, saying "the other player quit". It took the host to the title
+  and stopped hosting.
+- A hosted game's level select no longer goes back to the main menu after 720 steps
+  untouched, which stopped hosting and dropped the other player.
+- A second copy of the game on the same machine joining the first plays as
+  `"<name> (2)"`, instead of taking the host's player and freezing the host.
+- Over ssh the game draws at 20 frames a second and skips frames a slow connection
+  cannot carry, instead of falling behind; a player has 10 minutes to log in, ssh's
+  host key question included.
+- A player connected over ssh is disconnected when the host stops hosting — quitting
+  to the title, going back, or quitting the game — their terminal restored and told
+  "NidhOX: the host stopped hosting." (or "The server stopped." as the game quits),
+  instead of left frozen on the last frame. `mix nidhox` stops the VM in order as it
+  quits.
+- A host's address and join code are typed on the keyboard (`Nidhox.Typing`, a menu the
+  world asks the client to open), instead of picked a character at a time with the
+  movement keys, which also typed nothing.
+- Either side's keys work the options menu, and it has CONTROLLERS: each connected
+  controller and the player it plays, movable between player 1, player 2 and none.
+- The musician's logo flashes yellow, not black, as the game's `ShowLogos` draws it.
+- The sky's side rooms show their wind faintly, as the game's `DarkenClouds` sets it
+  (a `"swirly"` wind surface tinted at alpha 0.1, backgrounds 0 and 1 tinted with it);
+  the cloud tiles take the clouds' own tint.
+- The sky's cloud bridge (`NewCloudBlock`) is drawn, breathing as the game draws it;
+  the sun sinks as it moves off the room's middle (`Sun`'s step).
+- Swords on the ground (`PickupContainer`) and swords falling (`DroppedWeapon`) are
+  drawn; the game's draw events for them were missing, so they were invisible.
+- The mines' pump-jack (`Pump`) rocks: its wheel, beam and beam end, drawn from the
+  game's draw event.
+- The game's function addresses (`tools/yyc/yyc.exs`) take only function starts, so no
+  name points into the middle of another function's code.
+- "Final Screen" shows in the castle's, the cemetery's and the wilds' last rooms before
+  the end, made by those rooms' code as in the game.
+- Objects the game's code makes take the depths the game makes them at
+  (`Nidhox.ObjectDepths`, the game's `object_get_depth` table), and the animals and
+  other things a room places draw in front of the grass, as in the game.
 - Music plays as the game plays it, from the game's own objects: the title's track
   (`MainMenuMusic`) only in the title room, three seconds after entering it, chosen by
   the level last played (the castle's at first), and each area's layers with its

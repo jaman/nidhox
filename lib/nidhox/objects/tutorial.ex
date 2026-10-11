@@ -66,7 +66,8 @@ defmodule Nidhox.Objects.Tutorial do
       {"gml_Object_Tutorial_Create_0", &create/3},
       {"gml_Object_Tutorial_Step_2", &teach/3},
       {"gml_Object_Tutorial_Other_10", &finish/3},
-      {"gml_Object_Tutorial_Destroy_0", fn world, self, _other -> World.emit(world, Audio.stopped({:tutorial, self})) end},
+      {"gml_Object_Tutorial_Destroy_0",
+       fn world, self, _other -> World.emit(world, Audio.stopped({:tutorial, self})) end},
       {"gml_Object_TutorialFinishLine_Step_0", &finish_line/3}
     ]
   end
@@ -90,7 +91,12 @@ defmodule Nidhox.Objects.Tutorial do
 
     world
     |> Gml.put(brain, %{playerIndex: @partner, personality: @standing})
-    |> World.emit(Audio.keyed({:tutorial, self}, {:recording, @music}, {:level, System.get(world, :musicVol, 1), 0.0}, loop: true, music: true))
+    |> World.emit(
+      Audio.keyed(
+        {:tutorial, self},
+        {:recording, @music},
+        {:level, System.get(world, :musicVol, 1), 0.0}, loop: true, music: true)
+    )
     |> Gml.put(self, %{sound: {:tutorial, self}})
   end
 
@@ -202,7 +208,9 @@ defmodule Nidhox.Objects.Tutorial do
         check: %{0 => 0, 1 => 0, 2 => 0},
         currentMove: next
       })
-      |> then(&Enum.reduce(Gml.all(&1, "DialogBox"), &1, fn box, world -> World.destroy(world, box) end))
+      |> then(
+        &Enum.reduce(Gml.all(&1, "DialogBox"), &1, fn box, world -> World.destroy(world, box) end)
+      )
 
     world = if next == hd(moves), do: World.perform(world, self, :other, 10), else: world
     begin_lesson(world, next, yellow)
@@ -224,7 +232,9 @@ defmodule Nidhox.Objects.Tutorial do
   defp begin_lesson(world, @pick_up, yellow) do
     centre = Camera.center_x(world)
     offset = Gml.clamp(1000 * (World.fetch(world, yellow).x - centre), -@drop_reach, @drop_reach)
-    {world, _sword} = World.create(world, World.object_index(world, "DroppedWeapon"), {centre - offset, 0})
+
+    {world, _sword} =
+      World.create(world, World.object_index(world, "DroppedWeapon"), {centre - offset, 0})
 
     if World.fetch(world, yellow) != nil and Physics.weapon_type(world, yellow) == @sword do
       world = Physics.next_state(world, yellow, @disarmed)
@@ -244,7 +254,10 @@ defmodule Nidhox.Objects.Tutorial do
   end
 
   defp follow_music(world, self) do
-    World.emit(world, Audio.moved(Gml.var(world, self, :sound), {:level, System.get(world, :musicVol, 1), 0.0}))
+    World.emit(
+      world,
+      Audio.moved(Gml.var(world, self, :sound), {:level, System.get(world, :musicVol, 1), 0.0})
+    )
   end
 
   defp keep_on_screen(world, self) do
@@ -256,7 +269,9 @@ defmodule Nidhox.Objects.Tutorial do
 
       world
       |> Gml.all("Man")
-      |> Enum.reduce(world, fn man, world -> World.update(world, man, &%{&1 | x: Gml.clamp(&1.x, left, right)}) end)
+      |> Enum.reduce(world, fn man, world ->
+        World.update(world, man, &%{&1 | x: Gml.clamp(&1.x, left, right)})
+      end)
     end
   end
 
@@ -272,7 +287,15 @@ defmodule Nidhox.Objects.Tutorial do
     if move not in [@running, @last] and rem(trunc(System.get(world, :frame)), 60) == 0 and
          not Gml.exists?(world, "OrangePlayer") do
       armed = move in [@disarming, @thrown]
-      {orange, world} = enter(world, "OrangePlayer", "OrangePlayerRoomEntryPoint", if(armed, do: @sword, else: @fists))
+
+      {orange, world} =
+        enter(
+          world,
+          "OrangePlayer",
+          "OrangePlayerRoomEntryPoint",
+          if(armed, do: @sword, else: @fists)
+        )
+
       Physics.next_state(world, orange, @entering)
     else
       world

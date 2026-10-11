@@ -54,8 +54,9 @@ defmodule Nidhox.Man.States.Move do
   """
 
   alias Cauldron2D.GameMaker.{Instance, World}
+  alias Nidhox.Bout.Variants
   alias Nidhox.Gml
-  alias Nidhox.Man.{Actions, Physics, State, Weapon}
+  alias Nidhox.Man.{Actions, Physics, Query, State, Weapon}
   alias Nidhox.Objects.Particles
 
   @left 0
@@ -92,7 +93,10 @@ defmodule Nidhox.Man.States.Move do
   end
 
   def behave(world, self, 9) do
-    {_past, world} = world |> State.pose(self, 237) |> State.animate(self, abs(State.hspd(world, self)) * 0.36, true)
+    {_past, world} =
+      world
+      |> State.pose(self, 237)
+      |> State.animate(self, abs(State.hspd(world, self)) * 0.36, true)
 
     cond do
       not State.on_ground?(world, self) -> Physics.grab_ledge_or_fall(world, self)
@@ -102,7 +106,10 @@ defmodule Nidhox.Man.States.Move do
   end
 
   def behave(world, self, 58) do
-    {_past, world} = world |> State.pose(self, 260) |> State.animate(self, abs(State.hspd(world, self)) * 0.3, true)
+    {_past, world} =
+      world
+      |> State.pose(self, 260)
+      |> State.animate(self, abs(State.hspd(world, self)) * 0.3, true)
 
     cond do
       not State.on_ground?(world, self) -> Physics.grab_ledge_or_fall(world, self)
@@ -119,7 +126,9 @@ defmodule Nidhox.Man.States.Move do
       |> State.put(self, %{hspd: State.get(world, self, :facingXScale) * 3})
       |> State.pose(self, 261)
 
-    if State.on_ground?(world, self), do: hop(world, self), else: Physics.grab_ledge_or_fall(world, self)
+    if State.on_ground?(world, self),
+      do: hop(world, self),
+      else: Physics.grab_ledge_or_fall(world, self)
   end
 
   def behave(world, self, 61) do
@@ -163,7 +172,9 @@ defmodule Nidhox.Man.States.Move do
   def behave(world, self, 36) do
     sprite = World.fetch(world, State.get(world, self, :flesh)).sprite_index
     {past, world} = world |> State.pose(self, sprite) |> State.animate(self, 0.6, false)
-    world = if past, do: world |> State.put(self, %{frame: 0}) |> State.pose(self, 246), else: world
+
+    world =
+      if past, do: world |> State.put(self, %{frame: 0}) |> State.pose(self, 246), else: world
 
     world
     |> hang_pose(self)
@@ -259,7 +270,10 @@ defmodule Nidhox.Man.States.Move do
 
       not State.down?(world, self, @left) and not State.down?(world, self, @right) ->
         world = Physics.apply_horizontal_friction(world, self, 0.2)
-        if abs(State.hspd(world, self)) - 4 < -1.0e-5, do: State.stand(world, self), else: run_attack(world, self)
+
+        if abs(State.hspd(world, self)) - 4 < -1.0e-5,
+          do: State.stand(world, self),
+          else: run_attack(world, self)
 
       true ->
         run_attack(world, self)
@@ -288,7 +302,9 @@ defmodule Nidhox.Man.States.Move do
 
   defp run_cocked(world, self) do
     world = Physics.move_left_and_right(world, self, 0.2, 0.2)
-    world = if idle?(world, self), do: Physics.apply_horizontal_friction(world, self, 0.1), else: world
+
+    world =
+      if idle?(world, self), do: Physics.apply_horizontal_friction(world, self, 0.1), else: world
 
     if State.down?(world, self, @up) do
       world |> cocked_attack(self) |> cocked_jump(self)
@@ -330,14 +346,24 @@ defmodule Nidhox.Man.States.Move do
     world =
       if abs(State.hspd(world, self)) - 0.2 >= -1.0e-5,
         do: State.put(world, self, %{buttonHeldCounter: 0}),
-        else: State.put(world, self, %{buttonHeldCounter: State.get(world, self, :buttonHeldCounter) + 1})
+        else:
+          State.put(world, self, %{
+            buttonHeldCounter: State.get(world, self, :buttonHeldCounter) + 1
+          })
 
-    world = if State.pressed?(world, self, @left), do: State.put(world, self, %{facingXScale: -1}), else: world
-    world = if State.pressed?(world, self, @right), do: State.put(world, self, %{facingXScale: 1}), else: world
+    world =
+      if State.pressed?(world, self, @left),
+        do: State.put(world, self, %{facingXScale: -1}),
+        else: world
+
+    world =
+      if State.pressed?(world, self, @right),
+        do: State.put(world, self, %{facingXScale: 1}),
+        else: world
 
     world =
       if idle?(world, self),
-        do: world |> Physics.apply_horizontal_friction(self, 0.1) |> Nidhox.Man.Query.face_opponent(self),
+        do: world |> Physics.apply_horizontal_friction(self, 0.1) |> Query.face_opponent(self),
         else: world
 
     cond do
@@ -348,7 +374,8 @@ defmodule Nidhox.Man.States.Move do
   end
 
   defp slide(world, self) do
-    world = if idle?(world, self), do: Physics.apply_horizontal_friction(world, self, 0.03), else: world
+    world =
+      if idle?(world, self), do: Physics.apply_horizontal_friction(world, self, 0.03), else: world
 
     cond do
       State.pressed?(world, self, @jump) ->
@@ -415,9 +442,10 @@ defmodule Nidhox.Man.States.Move do
   defp landed_hop(world, self) do
     world = State.put(world, self, %{hspd: State.hspd(world, self) * 0.5})
 
-    if Gml.truthy?(State.get(world, self, :buttonHeldCounter)) and not State.down?(world, self, @down),
-      do: State.put(world, self, %{buttonHeldCounter: 0, frame: 0}),
-      else: State.go(world, self, 52)
+    if Gml.truthy?(State.get(world, self, :buttonHeldCounter)) and
+         not State.down?(world, self, @down),
+       do: State.put(world, self, %{buttonHeldCounter: 0, frame: 0}),
+       else: State.go(world, self, 52)
   end
 
   defp wall_slide(world, self) do
@@ -448,7 +476,7 @@ defmodule Nidhox.Man.States.Move do
 
   defp climb(world, self, facing) do
     cond do
-      State.down?(world, self, @down) and not Nidhox.Bout.Variants.baby_mode?(world) ->
+      State.down?(world, self, @down) and not Variants.baby_mode?(world) ->
         State.go(world, self, 62)
 
       State.pressed?(world, self, @jump) ->
@@ -489,7 +517,7 @@ defmodule Nidhox.Man.States.Move do
 
   defp hang_buttons(world, self) do
     cond do
-      State.pressed?(world, self, @down) and not Nidhox.Bout.Variants.baby_mode?(world) ->
+      State.pressed?(world, self, @down) and not Variants.baby_mode?(world) ->
         State.go(world, self, 62)
 
       State.pressed?(world, self, @jump) ->
@@ -531,7 +559,8 @@ defmodule Nidhox.Man.States.Move do
     end
   end
 
-  defp idle?(world, self), do: not State.down?(world, self, @left) and not State.down?(world, self, @right)
+  defp idle?(world, self),
+    do: not State.down?(world, self, @left) and not State.down?(world, self, @right)
 
   defp frames(world, sprite) do
     case World.sprite(world, sprite) do

@@ -38,7 +38,10 @@ defmodule Nidhox.Objects.PlayerOutlines do
   end
 
   defp draw(world, self, _other) do
-    world = if Surfaces.exists?(world, Gml.var(world, self, :canvas, -1)), do: world, else: World.perform(world, self, :create, 0)
+    world =
+      if Surfaces.exists?(world, Gml.var(world, self, :canvas, -1)),
+        do: world,
+        else: World.perform(world, self, :create, 0)
 
     world =
       case Gml.first(world, "HeldWeapon") do

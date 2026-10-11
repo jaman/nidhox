@@ -32,10 +32,12 @@ defmodule Nidhox.Objects.Smoke do
   def handlers do
     [
       {"gml_Object_Smoker_Create_0", fn world, self, _other -> fire(world, self, false) end},
-      {"gml_Object_Smoker_Step_0", fn world, self, _other -> puff(world, self, {-16, 16, -2, 2}) end},
+      {"gml_Object_Smoker_Step_0",
+       fn world, self, _other -> puff(world, self, {-16, 16, -2, 2}) end},
       {"gml_Object_Smoker_Draw_0", &draw/3},
       {"gml_Object_Pyre_Create_0", &pyre/3},
-      {"gml_Object_Pyre_Step_0", fn world, self, _other -> puff(world, self, {-16, 16, -16, -2}) end}
+      {"gml_Object_Pyre_Step_0",
+       fn world, self, _other -> puff(world, self, {-16, 16, -16, -2}) end}
     ]
   end
 
@@ -54,7 +56,10 @@ defmodule Nidhox.Objects.Smoke do
 
   defp fire(world, self, draws_itself) do
     {world, system} = PartSystems.system_create(world)
-    world = if draws_itself, do: world, else: PartSystems.system_automatic_draw(world, system, false)
+
+    world =
+      if draws_itself, do: world, else: PartSystems.system_automatic_draw(world, system, false)
+
     {world, emitter} = PartSystems.emitter_create(world, system)
     {world, smoke} = PartSystems.type_create(world)
 
@@ -76,28 +81,48 @@ defmodule Nidhox.Objects.Smoke do
     |> PartSystems.type_speed(ember, 0, 0.1, 0, 0)
     |> PartSystems.type_direction(ember, 0, 360, 0, 0.05)
     |> PartSystems.type_gravity(ember, 0.02, 90)
-    |> Gml.put(self, %{particleSystem: system, particleEmitter: emitter, smoke: smoke, ember: ember})
+    |> Gml.put(self, %{
+      particleSystem: system,
+      particleEmitter: emitter,
+      smoke: smoke,
+      ember: ember
+    })
   end
 
   defp puff(world, self, {left, right, top, bottom}) do
-    %Instance{x: x, y: y, vars: %{particleSystem: system, particleEmitter: emitter, smoke: smoke, ember: ember}} =
+    %Instance{
+      x: x,
+      y: y,
+      vars: %{particleSystem: system, particleEmitter: emitter, smoke: smoke, ember: ember}
+    } =
       World.fetch(world, self)
 
     frame = System.get(world, :frame)
 
     world
-    |> PartSystems.emitter_region(system, emitter, {x + left, x + right, y + top, y + bottom}, :ellipse, :linear)
+    |> PartSystems.emitter_region(
+      system,
+      emitter,
+      {x + left, x + right, y + top, y + bottom},
+      :ellipse,
+      :linear
+    )
     |> burst_on(system, emitter, smoke, every?(frame, @smoke_every))
     |> burst_on(system, emitter, ember, every?(frame, @ember_every))
   end
 
   defp every?(frame, period), do: abs(:math.fmod(frame, period)) <= 1.0e-5
 
-  defp burst_on(world, system, emitter, type, true), do: PartSystems.emitter_burst(world, system, emitter, type, 1)
+  defp burst_on(world, system, emitter, type, true),
+    do: PartSystems.emitter_burst(world, system, emitter, type, 1)
+
   defp burst_on(world, _system, _emitter, _type, false), do: world
 
   defp draw(world, self, _other) do
     %Instance{depth: depth, vars: %{particleSystem: system}} = World.fetch(world, self)
-    world |> PartSystems.items(system) |> Enum.reduce(world, &Draw.item(&2, Map.put(&1, :depth, depth)))
+
+    world
+    |> PartSystems.items(system)
+    |> Enum.reduce(world, &Draw.item(&2, Map.put(&1, :depth, depth)))
   end
 end

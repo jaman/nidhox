@@ -5,13 +5,20 @@ defmodule Nidhox.Screen do
   its objects; over it only the pause menu and the replay's skip line are added.
   """
 
-  alias Nidhox.Screen.{Art, Credits, Levels, Logos, Online, Pause, Results, Title}
+  alias Nidhox.Objects.System
+  alias Nidhox.Screen.{Art, Credits, Levels, Logos, MenuList, Online, Pause, Results, Title}
 
   @skip {160, 186}
 
   @doc "The room items and the GUI items of `state`'s screen."
   @spec layer(map(), {number(), number()}) :: {[map()], [map()]}
-  def layer(%{screen: :logos} = state, window), do: {[], Logos.items(state.timer, window)}
+  def layer(%{screen: :logos} = state, window),
+    do: {[], Logos.items(state.timer, System.get(state.world, :frame), window)}
+
+  def layer(%{screen: :title, menu: %MenuList{key: :online}} = state, window),
+    do:
+      {[],
+       Title.items(state.steps, state.menu, window) ++ Online.notice(state.online.status, window)}
 
   def layer(%{screen: screen} = state, window) when screen in [:title, :join],
     do: {[], Title.items(state.steps, state.menu, window)}
@@ -23,6 +30,9 @@ defmodule Nidhox.Screen do
     do: {[], Credits.items(state.credits, state.timer, window)}
 
   def layer(%{screen: :hosting} = state, window), do: {[], Online.hosting(state.online, window)}
+
+  def layer(%{screen: :ssh_hosting} = state, window),
+    do: {[], Online.ssh_hosting(state.online, window)}
 
   def layer(%{screen: screen} = state, window) when screen in [:address, :code],
     do: {[], Online.entry(state.entry, state.online.status, window)}

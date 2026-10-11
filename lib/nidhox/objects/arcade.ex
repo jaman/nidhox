@@ -106,7 +106,11 @@ defmodule Nidhox.Objects.Arcade do
   @spec pressed?(World.t(), 8 | 9 | 10) :: boolean()
   def pressed?(%World{input: input}, button) do
     action = Map.fetch!(@buttons, button)
-    input |> Map.get(:players, %{}) |> Map.values() |> Enum.any?(&(action in Map.get(&1, :pressed, MapSet.new())))
+
+    input
+    |> Map.get(:players, %{})
+    |> Map.values()
+    |> Enum.any?(&(action in Map.get(&1, :pressed, MapSet.new())))
   end
 
   @doc "The computer's difficulty in the run (`getArcadeModeDifficulty`), 0–1."
@@ -114,16 +118,25 @@ defmodule Nidhox.Objects.Arcade do
   def difficulty(%World{} = world) do
     arcade = Gml.first(world, "ArcadeMode")
     total = map_size(Gml.var(world, arcade, :personalityMap, %{}))
-    {_x, y, _speed} = Path.position(Enum.at(world.data.paths, 1), (Gml.var(world, arcade, :level) - 1) / total)
+
+    {_x, y, _speed} =
+      Path.position(Enum.at(world.data.paths, 1), (Gml.var(world, arcade, :level) - 1) / total)
+
     base = (400 - y) / 400
     {room_width, screen_width} = {Camera.room_width(world), Camera.width(world)}
-    across = if room_width > screen_width, do: Camera.left(world) / (room_width - screen_width), else: 0.5
+
+    across =
+      if room_width > screen_width,
+        do: Camera.left(world) / (room_width - screen_width),
+        else: 0.5
+
     0.75 * base + 0.125 * room_percent(world) + 0.125 * across
   end
 
   @doc "How far through its area the room is (`getLevelRoomPercent`): 0 at the far left to 1 at the far right."
   @spec room_percent(World.t()) :: number()
-  def room_percent(%World{} = world), do: Map.get(@room_percent, Enum.at(world.data.rooms, world.room).name, 1)
+  def room_percent(%World{} = world),
+    do: Map.get(@room_percent, Enum.at(world.data.rooms, world.room).name, 1)
 
   @doc "Whether level `level` of the run is against `personality` (`levelContainsPersonality`)."
   @spec contains?(World.t(), number(), number()) :: boolean()
@@ -136,8 +149,14 @@ defmodule Nidhox.Objects.Arcade do
   @spec personality(World.t()) :: number() | nil
   def personality(%World{} = world) do
     case Gml.first(world, "ArcadeMode") do
-      nil -> nil
-      arcade -> Map.get(Gml.var(world, arcade, :personalityMap, %{}), round(Gml.var(world, arcade, :level)))
+      nil ->
+        nil
+
+      arcade ->
+        Map.get(
+          Gml.var(world, arcade, :personalityMap, %{}),
+          round(Gml.var(world, arcade, :level))
+        )
     end
   end
 
@@ -148,9 +167,11 @@ defmodule Nidhox.Objects.Arcade do
       {"gml_Object_ArcadeMode_Create_0", &arcade_start/3},
       {"gml_Object_ArcadeMode_Step_0", &arcade_step/3},
       {"gml_Object_ArcadeMode_Other_10", &start_level/3},
-      {"gml_Object_ArcadeMode_Other_4", fn world, self, _other -> Gml.put(world, self, %{playerAttacked: 0}) end},
+      {"gml_Object_ArcadeMode_Other_4",
+       fn world, self, _other -> Gml.put(world, self, %{playerAttacked: 0}) end},
       {"gml_Object_ArcadeMode_Draw_0", &arcade_draw/3},
-      {"gml_Object_ShowProgress_Create_0", fn world, self, _other -> Gml.put(world, self, %{cleared: 0}) end},
+      {"gml_Object_ShowProgress_Create_0",
+       fn world, self, _other -> Gml.put(world, self, %{cleared: 0}) end},
       {"gml_Object_ShowProgress_Step_0", &progress_step/3},
       {"gml_Object_ShowProgress_Draw_0", &progress_draw/3}
     ]
@@ -164,7 +185,8 @@ defmodule Nidhox.Objects.Arcade do
       level: 1,
       framesElapsed: 0,
       locationMap: Map.new(levels, fn {{area, _personality}, level} -> {level, area} end),
-      personalityMap: Map.new(levels, fn {{_area, personality}, level} -> {level, personality} end),
+      personalityMap:
+        Map.new(levels, fn {{_area, personality}, level} -> {level, personality} end),
       totalLevels: length(@levels),
       perfect: 1,
       cleanHands: 1,
@@ -195,9 +217,14 @@ defmodule Nidhox.Objects.Arcade do
     level = Gml.var(world, self, :level)
 
     cond do
-      winner(world) != 1 -> goto(world, "rArcadeProgress")
-      level >= map_size(Gml.var(world, self, :personalityMap, %{})) -> goto(world, "rBeatGameStats")
-      true -> world |> Gml.put(self, %{level: level + 1}) |> goto("rArcadeProgress")
+      winner(world) != 1 ->
+        goto(world, "rArcadeProgress")
+
+      level >= map_size(Gml.var(world, self, :personalityMap, %{})) ->
+        goto(world, "rBeatGameStats")
+
+      true ->
+        world |> Gml.put(self, %{level: level + 1}) |> goto("rArcadeProgress")
     end
   end
 
@@ -216,7 +243,9 @@ defmodule Nidhox.Objects.Arcade do
         do: world,
         else: Gml.put(world, self, %{framesElapsed: Gml.var(world, self, :framesElapsed) + 1})
 
-    if Gml.truthy?(Gml.var(world, self, :playerAttacked)), do: world, else: watch_attack(world, self)
+    if Gml.truthy?(Gml.var(world, self, :playerAttacked)),
+      do: world,
+      else: watch_attack(world, self)
   end
 
   defp watch_attack(world, self) do
@@ -235,7 +264,11 @@ defmodule Nidhox.Objects.Arcade do
   defp arcade_draw(world, self, _other) do
     if room_name(world) == "rBeatGameStats" do
       text = "GAME COMPLETE##TIME#" <> Match.time(Gml.var(world, self, :framesElapsed))
-      Draw.text(world, 1, text, {Camera.center_x(world), Camera.center_y(world) - 32}, halign: :center, valign: :middle)
+
+      Draw.text(world, 1, text, {Camera.center_x(world), Camera.center_y(world) - 32},
+        halign: :center,
+        valign: :middle
+      )
     else
       world
     end
@@ -249,9 +282,14 @@ defmodule Nidhox.Objects.Arcade do
     world = if start, do: world, else: Gml.put(world, self, %{cleared: 1})
 
     cond do
-      Gml.truthy?(Gml.var(world, self, :cleared)) and start -> World.perform(world, arcade, :other, 10)
-      pressed?(world, 9) -> World.perform(world, arcade, :other, 10)
-      true -> world
+      Gml.truthy?(Gml.var(world, self, :cleared)) and start ->
+        World.perform(world, arcade, :other, 10)
+
+      pressed?(world, 9) ->
+        World.perform(world, arcade, :other, 10)
+
+      true ->
+        world
     end
   end
 
@@ -265,7 +303,9 @@ defmodule Nidhox.Objects.Arcade do
 
         world
         |> Camera.put_center_x(Camera.center_x(world) + (to_x - Camera.center_x(world)) * @ease)
-        |> then(&Camera.put_center_y(&1, Camera.center_y(&1) + (to_y - Camera.center_y(&1)) * @ease))
+        |> then(
+          &Camera.put_center_y(&1, Camera.center_y(&1) + (to_y - Camera.center_y(&1)) * @ease)
+        )
 
       :error ->
         world
@@ -279,8 +319,16 @@ defmodule Nidhox.Objects.Arcade do
 
     world =
       world
-      |> Draw.item(rectangle({left - 10, middle - @band}, {right + 10, middle + @band}, {0, 0, 0}))
-      |> Draw.item(rectangle({left - 10, middle - @band}, {left + 32 + level * 16 - 16, middle + @band}, Colour.hsv(38, 150, 20)))
+      |> Draw.item(
+        rectangle({left - 10, middle - @band}, {right + 10, middle + @band}, {0, 0, 0})
+      )
+      |> Draw.item(
+        rectangle(
+          {left - 10, middle - @band},
+          {left + 32 + level * 16 - 16, middle + @band},
+          Colour.hsv(38, 150, 20)
+        )
+      )
 
     world =
       Enum.reduce(1..Gml.var(world, arcade, :totalLevels)//1, world, fn mark, world ->
@@ -323,7 +371,13 @@ defmodule Nidhox.Objects.Arcade do
 
     world =
       Enum.reduce(0..3, world, fn turn, world ->
-        Draw.text(world, 1, text, {x + Gml.lengthdir_x(1, turn * 90), y + Gml.lengthdir_y(1, turn * 90)}, [{:colour, {0, 0, 0}} | style])
+        Draw.text(
+          world,
+          1,
+          text,
+          {x + Gml.lengthdir_x(1, turn * 90), y + Gml.lengthdir_y(1, turn * 90)},
+          [{:colour, {0, 0, 0}} | style]
+        )
       end)
 
     Draw.text(world, 1, text, {x, y}, [{:colour, {255, 255, 255}} | style])
@@ -332,7 +386,8 @@ defmodule Nidhox.Objects.Arcade do
   defp rectangle({x1, y1}, {x2, y2}, colour),
     do: %{picture: :pixel, position: {x1, y1}, scale: {x2 - x1 + 1, y2 - y1 + 1}, blend: colour}
 
-  defp make(world, name), do: world |> World.create(World.object_index(world, name), {0, 0}) |> elem(0)
+  defp make(world, name),
+    do: world |> World.create(World.object_index(world, name), {0, 0}) |> elem(0)
 
   defp goto(world, room), do: World.goto(world, Data.index(world.data, :rooms, room))
 

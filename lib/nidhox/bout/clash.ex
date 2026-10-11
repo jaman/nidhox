@@ -84,12 +84,7 @@ defmodule Nidhox.Bout.Clash do
     if shown_sword?(world, weapon) do
       world
       |> flying(match)
-      |> Enum.reduce(world, fn thrown, world ->
-        if World.fetch(world, thrown) != nil and coloured_flying?(world, thrown) and
-             Overlap.held?(world, weapon, thrown),
-           do: knock_down(world, weapon, thrown),
-           else: world
-      end)
+      |> Enum.reduce(world, &knock_down_if_held(&2, weapon, &1))
     else
       world
     end
@@ -107,24 +102,7 @@ defmodule Nidhox.Bout.Clash do
 
       world
       |> all_flying()
-      |> Enum.reduce({false, world}, fn thrown, {struck, world} ->
-        if World.fetch(world, thrown) != nil and Gml.var(world, thrown, :playerIndex) != player and
-             Overlap.flying?(world, thrown, flesh) do
-          %Instance{x: x, y: y} = World.fetch(world, thrown)
-
-          {true,
-           world
-           |> Challenge.move_completed(
-             Gml.var(world, thrown, :playerIndex),
-             @throw,
-             {x, y - @popup_rise}
-           )
-           |> Sound.play(@struck, {x, y})
-           |> World.destroy(thrown)}
-        else
-          {struck, world}
-        end
-      end)
+      |> Enum.reduce({false, world}, &strike_flesh(&2, &1, player, flesh))
     else
       _ -> {false, world}
     end
@@ -254,6 +232,33 @@ defmodule Nidhox.Bout.Clash do
     else
       world
     end
+  end
+
+  defp knock_down_if_held(world, weapon, thrown) do
+    if World.fetch(world, thrown) != nil and coloured_flying?(world, thrown) and
+         Overlap.held?(world, weapon, thrown),
+       do: knock_down(world, weapon, thrown),
+       else: world
+  end
+
+  defp strike_flesh({struck, world}, thrown, player, flesh) do
+    if World.fetch(world, thrown) != nil and Gml.var(world, thrown, :playerIndex) != player and
+         Overlap.flying?(world, thrown, flesh),
+       do: {true, struck_by(world, thrown)},
+       else: {struck, world}
+  end
+
+  defp struck_by(world, thrown) do
+    %Instance{x: x, y: y} = World.fetch(world, thrown)
+
+    world
+    |> Challenge.move_completed(
+      Gml.var(world, thrown, :playerIndex),
+      @throw,
+      {x, y - @popup_rise}
+    )
+    |> Sound.play(@struck, {x, y})
+    |> World.destroy(thrown)
   end
 
   defp knock_down(world, weapon, thrown) do

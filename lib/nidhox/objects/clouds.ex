@@ -4,13 +4,15 @@ defmodule Nidhox.Objects.Clouds do
 
     * `CloudBlockArea` lays a `NewCloudBlock` every `sFancyCloudPlat` width (16 pixels)
       along its own width and is gone
-    * `NewCloudBlock`, a cloud a fencer can stand on, drawn as nothing: its `frame`
+    * `NewCloudBlock`, a cloud a fencer can stand on: its `frame`
       runs on 0.3 a step while a fencer stands on it (`touched`, set by the fencer) up to
       its last frame, and back 0.075 a step otherwise. Each match frame (user event 2)
       then user event 0: worn all the way through it loses its `PassThroughBlock`
       (`block`); otherwise it has one at its place, 16 pixels wide and
       `100 / sprite_get_height(block.sprite_height)` tall in scale. It shows `frame`;
-      `touched` is cleared
+      `touched` is cleared. It draws its sprite at its frame and blend, `|sin(x + y +
+      frame / 30)| × 0.1 + 1` wide and `|cos(x + y + frame / 50)| × 0.1 + 1` tall,
+      moved back by half of what that adds to its size, so it swells about its middle
     * `DarkCloudPoofArea` lays a `CloudPoof` every 16 pixels along its width, at
       `(x + 16i + 2 sin(i / 10), y + sprite_height + 8 + 2 cos(i / 5))`
     * `CloudPoof`, a puff: its starting scale (`startXScale`, `startYScale`) its scaled
@@ -50,18 +52,39 @@ defmodule Nidhox.Objects.Clouds do
   def handlers do
     [
       {"gml_Object_CloudBlockArea_Create_0", &lay_blocks/3},
-      {"gml_Object_NewCloudBlock_Create_0", fn world, self, _other -> Gml.put(world, self, %{frame: 0, block: -4, touched: 0}) end},
+      {"gml_Object_NewCloudBlock_Create_0",
+       fn world, self, _other -> Gml.put(world, self, %{frame: 0, block: -4, touched: 0}) end},
       {"gml_Object_NewCloudBlock_Other_12", &wear/3},
       {"gml_Object_NewCloudBlock_Other_10", &solid/3},
-      {"gml_Object_NewCloudBlock_Draw_0", fn world, _self, _other -> world end},
+      {"gml_Object_NewCloudBlock_Draw_0", &draw_block/3},
       {"gml_Object_DarkCloudPoofArea_Create_0", &lay_poofs/3},
       {"gml_Object_CloudPoof_Create_0", &poof/3},
       {"gml_Object_CloudPoof_Other_12", &breathe/3},
       {"gml_Object_CloudPoof_Draw_0", fn world, self, _other -> Draw.self(world, self) end},
       {"gml_Object_FakeCloudPoof_Other_12", &fake_breathe/3},
       {"gml_Object_FakeCloudPoof_Create_0", &fake/3},
-      {"gml_Object_FakeCloudPoof_Step_0", fn world, self, _other -> World.update(world, self, &%{&1 | image_speed: 0.1}) end}
+      {"gml_Object_FakeCloudPoof_Step_0",
+       fn world, self, _other -> World.update(world, self, &%{&1 | image_speed: 0.1}) end}
     ]
+  end
+
+  defp draw_block(world, self, _other) do
+    %Instance{x: x, y: y, sprite_index: sprite, image_index: image, image_blend: blend} =
+      World.fetch(world, self)
+
+    frame = System.get(world, :frame)
+    wide = abs(:math.sin(x + y + frame / 30)) * 0.1 + 1
+    tall = abs(:math.cos(x + y + frame / 50)) * 0.1 + 1
+    {width, height} = Enum.at(world.data.sprites, sprite).size
+
+    Draw.sprite(
+      world,
+      sprite,
+      image,
+      {x - (width * wide - width) / 2, y - (height * tall - height) / 2},
+      scale: {wide, tall},
+      blend: blend
+    )
   end
 
   defp lay_blocks(world, self, _other) do
@@ -104,7 +127,9 @@ defmodule Nidhox.Objects.Clouds do
   end
 
   defp worn_through(world, _self, -4), do: world
-  defp worn_through(world, self, block), do: world |> World.destroy(block) |> Gml.put(self, %{block: -4})
+
+  defp worn_through(world, self, block),
+    do: world |> World.destroy(block) |> Gml.put(self, %{block: -4})
 
   defp whole(world, self, -4) do
     %Instance{x: x, y: y} = World.fetch(world, self)
@@ -114,7 +139,14 @@ defmodule Nidhox.Objects.Clouds do
     tall = sprite_size(world, round(scaled(world, body) |> elem(1))) |> elem(1)
 
     world
-    |> World.update(block, &%{&1 | image_xscale: 16 / width, image_yscale: if(tall > 0, do: 100 / tall, else: &1.image_yscale)})
+    |> World.update(
+      block,
+      &%{
+        &1
+        | image_xscale: 16 / width,
+          image_yscale: if(tall > 0, do: 100 / tall, else: &1.image_yscale)
+      }
+    )
     |> Gml.put(self, %{block: block})
   end
 
@@ -193,18 +225,21 @@ defmodule Nidhox.Objects.Clouds do
       world = Gml.put(world, self, %{flash: 1, touched: 0})
       %Instance{x: x, y: y} = World.fetch(world, self)
 
-      Enum.reduce(Gml.all(world, "Man"), world, fn man, world ->
-        %Instance{x: man_x, y: man_y, vars: vars} = World.fetch(world, man)
-        moving = abs(Map.get(vars, :hspd, 0)) + abs(Map.get(vars, :vspd, 0)) - 0.2 > 1.0e-5
-
-        if not Gml.truthy?(Gml.var(world, self, :touched)) and moving and
-             (distance({x, y - 20}, {man_x, man_y}) < @touch or distance({x, y}, {man_x, man_y}) < @touch),
-           do: Gml.put(world, self, %{touched: 1}),
-           else: world
-      end)
+      Enum.reduce(Gml.all(world, "Man"), world, &touch_by(&2, self, {x, y}, &1))
     else
       world
     end
+  end
+
+  defp touch_by(world, self, {x, y}, man) do
+    %Instance{x: man_x, y: man_y, vars: vars} = World.fetch(world, man)
+    moving = abs(Map.get(vars, :hspd, 0)) + abs(Map.get(vars, :vspd, 0)) - 0.2 > 1.0e-5
+
+    if not Gml.truthy?(Gml.var(world, self, :touched)) and moving and
+         (distance({x, y - 20}, {man_x, man_y}) < @touch or
+            distance({x, y}, {man_x, man_y}) < @touch),
+       do: Gml.put(world, self, %{touched: 1}),
+       else: world
   end
 
   defp evaporate(world, self) do
@@ -213,11 +248,22 @@ defmodule Nidhox.Objects.Clouds do
     last = frames(world, self) - 1
 
     case {Gml.truthy?(Gml.var(world, self, :touched)), sprite} do
-      {true, @poof} -> world |> World.update(self, &%{&1 | sprite_index: @evaporate}) |> Gml.put(self, %{frame: 0})
-      {true, @evaporate} -> Gml.put(world, self, %{frame: Gml.clamp(frame + 1, 0, last)})
-      {false, @evaporate} -> mend(world, self, Gml.clamp(frame - @mend, 0, last))
-      {false, @poof} -> Gml.put(world, self, %{frame: frame + 0.1})
-      _other -> world
+      {true, @poof} ->
+        world
+        |> World.update(self, &%{&1 | sprite_index: @evaporate})
+        |> Gml.put(self, %{frame: 0})
+
+      {true, @evaporate} ->
+        Gml.put(world, self, %{frame: Gml.clamp(frame + 1, 0, last)})
+
+      {false, @evaporate} ->
+        mend(world, self, Gml.clamp(frame - @mend, 0, last))
+
+      {false, @poof} ->
+        Gml.put(world, self, %{frame: frame + 0.1})
+
+      _other ->
+        world
     end
   end
 
@@ -249,7 +295,11 @@ defmodule Nidhox.Objects.Clouds do
     {frame, world} = Gml.irandom(world, frames(world, self))
 
     world
-    |> Gml.put(self, %{startXScale: width / sprite_width, startYScale: height / sprite_height, randomStart: start})
+    |> Gml.put(self, %{
+      startXScale: width / sprite_width,
+      startYScale: height / sprite_height,
+      randomStart: start
+    })
     |> World.update(self, &%{&1 | image_index: frame / 1})
   end
 

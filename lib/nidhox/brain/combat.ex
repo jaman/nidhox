@@ -70,7 +70,11 @@ defmodule Nidhox.Brain.Combat do
     if Sense.present?(other) do
       quarter = max(Clock.period(world, self, 0.25), 1)
       count = Gml.var(world, self, :actionCounter)
-      world = if Gml.eq?(Gml.round(:math.fmod(count, quarter)), 0), do: Buttons.press(world, self, @back), else: world
+
+      world =
+        if Gml.eq?(Gml.round(:math.fmod(count, quarter)), 0),
+          do: Buttons.press(world, self, @back),
+          else: world
 
       world =
         if Clock.every?(world, self, :actionCounter, 1),
@@ -90,7 +94,8 @@ defmodule Nidhox.Brain.Combat do
       on_ground?(world, other) or not on_ground?(world, man) ->
         done(world, self, false)
 
-      Gml.gt?(Gml.var(world, self, :actionCounter), 180) or Sense.weapon_type(world, man) != @sword ->
+      Gml.gt?(Gml.var(world, self, :actionCounter), 180) or
+          Sense.weapon_type(world, man) != @sword ->
         done(world, self, true)
 
       truthy_point_distance?(world, man, other) and Gml.lt?(distance(world, self), 24) and
@@ -153,11 +158,20 @@ defmodule Nidhox.Brain.Combat do
     other = opponent(world, self)
 
     cond do
-      Gml.eq?(Gml.var(world, self, :personality), 5) or not first_move_made?(world) -> done(world, self, true)
-      Gml.var(world, man, :state) in @dive_states -> done(world, self, false)
-      not Sense.present?(other) -> done(world, self, true)
-      Sense.under_low_area?(world, other) or Sense.under_low_area?(world, man) -> done(world, self, true)
-      true -> world |> Buttons.release_all(self, [0, 1, 2, 3, 5, 4]) |> dive(self, man, other)
+      Gml.eq?(Gml.var(world, self, :personality), 5) or not first_move_made?(world) ->
+        done(world, self, true)
+
+      Gml.var(world, man, :state) in @dive_states ->
+        done(world, self, false)
+
+      not Sense.present?(other) ->
+        done(world, self, true)
+
+      Sense.under_low_area?(world, other) or Sense.under_low_area?(world, man) ->
+        done(world, self, true)
+
+      true ->
+        world |> Buttons.release_all(self, [0, 1, 2, 3, 5, 4]) |> dive(self, man, other)
     end
   end
 
@@ -166,7 +180,10 @@ defmodule Nidhox.Brain.Combat do
       take_off(world, self, man, other)
     else
       world = Buttons.press(world, self, @jump)
-      if Gml.var(world, man, :state) != 14 and Sense.present?(other), do: steer_dive(world, self, man, other), else: world
+
+      if Gml.var(world, man, :state) != 14 and Sense.present?(other),
+        do: steer_dive(world, self, man, other),
+        else: world
     end
   end
 
@@ -264,7 +281,10 @@ defmodule Nidhox.Brain.Combat do
 
       if Gml.lt?(distance(world, self), 24),
         do: toggle(world, self, @attack),
-        else: world |> walk_to(self, World.fetch(world, other).x, World.fetch(world, man).x) |> Moves.jump_over(self, man)
+        else:
+          world
+          |> walk_to(self, World.fetch(world, other).x, World.fetch(world, man).x)
+          |> Moves.jump_over(self, man)
     end
   end
 
@@ -332,13 +352,17 @@ defmodule Nidhox.Brain.Combat do
 
   defp leap_over(world, self, man, player_index) do
     {go, world} = go_now(world, self)
-    world = if go and Gml.eq?(player_index, 1), do: Buttons.press(world, self, @right), else: world
+
+    world =
+      if go and Gml.eq?(player_index, 1), do: Buttons.press(world, self, @right), else: world
+
     world = if Gml.eq?(player_index, 2), do: Buttons.press(world, self, @left), else: world
     world = Moves.jump_over(world, self, man)
 
-    if Gml.gt?(Gml.var(world, man, :vspd), 0) and not Gml.eq?(Gml.var(world, self, :personality), 5),
-      do: Buttons.press(world, self, @attack),
-      else: world
+    if Gml.gt?(Gml.var(world, man, :vspd), 0) and
+         not Gml.eq?(Gml.var(world, self, :personality), 5),
+       do: Buttons.press(world, self, @attack),
+       else: world
   end
 
   defp go_now(world, self) do
@@ -409,9 +433,14 @@ defmodule Nidhox.Brain.Combat do
 
   defp lunge(world, self) do
     cond do
-      not first_move_made?(world) -> done(world, self, true)
-      Gml.var(world, player(world, self), :state) == @lunging -> Gml.put(world, self, %{actionCompleted: 1})
-      true -> toggle(world, self, @attack)
+      not first_move_made?(world) ->
+        done(world, self, true)
+
+      Gml.var(world, player(world, self), :state) == @lunging ->
+        Gml.put(world, self, %{actionCompleted: 1})
+
+      true ->
+        toggle(world, self, @attack)
     end
   end
 
@@ -423,18 +452,24 @@ defmodule Nidhox.Brain.Combat do
       not first_move_made?(world) ->
         done(world, self, true)
 
-      not on_ground?(world, man) or Gml.var(world, man, :state) == 38 ->
+      off_balance?(world, man) ->
         done(world, self, true)
 
-      Gml.var(world, man, :state) == 55 or not Sense.present?(other) or Sense.weapon_type(world, man) != @fists ->
-        Gml.put(world, self, %{actionCompleted: 1})
-
-      Gml.var(world, other, :state) == @knocked_down or Sense.weapon_type(world, other) != @fists ->
+      punch_over?(world, man, other) ->
         Gml.put(world, self, %{actionCompleted: 1})
 
       true ->
         swing(world, self, man, other)
     end
+  end
+
+  defp off_balance?(world, man),
+    do: not on_ground?(world, man) or Gml.var(world, man, :state) == 38
+
+  defp punch_over?(world, man, other) do
+    Gml.var(world, man, :state) == 55 or not Sense.present?(other) or
+      Sense.weapon_type(world, man) != @fists or
+      Gml.var(world, other, :state) == @knocked_down or Sense.weapon_type(world, other) != @fists
   end
 
   defp swing(world, self, man, other) do
@@ -454,21 +489,23 @@ defmodule Nidhox.Brain.Combat do
     man = player(world, self)
     other = opponent(world, self)
 
-    cond do
-      not first_move_made?(world) ->
-        done(world, self, true)
+    if first_move_made?(world),
+      do:
+        world |> Buttons.release_all(self, [0, 1, 5, 4, 3]) |> sweep_or_finish(self, man, other),
+      else: done(world, self, true)
+  end
 
-      true ->
-        world = Buttons.release_all(world, self, [0, 1, 5, 4, 3])
-
-        if Gml.var(world, man, :state) == 70 or not Sense.present?(other),
-          do: Gml.put(world, self, %{actionCompleted: 1}),
-          else: sweep(world, self, man, other)
-    end
+  defp sweep_or_finish(world, self, man, other) do
+    if Gml.var(world, man, :state) == 70 or not Sense.present?(other),
+      do: Gml.put(world, self, %{actionCompleted: 1}),
+      else: sweep(world, self, man, other)
   end
 
   defp sweep(world, self, man, other) do
-    world = if on_ground?(world, other), do: world, else: Gml.put(world, self, %{actionCompleted: 1, actionFailed: 1})
+    world =
+      if on_ground?(world, other),
+        do: world,
+        else: Gml.put(world, self, %{actionCompleted: 1, actionFailed: 1})
 
     if Sense.weapon_type(world, other) == @sword and Gml.var(world, other, :stance) == @low do
       done(world, self, true)
@@ -476,9 +513,14 @@ defmodule Nidhox.Brain.Combat do
       world = toward(world, self, World.fetch(world, other).x, World.fetch(world, man).x)
 
       cond do
-        Gml.lt?(distance(world, self), 32) -> world |> Buttons.press(self, @down) |> toggle(self, @attack)
-        Gml.lt?(distance(world, self), 54) -> Buttons.press(world, self, @down)
-        true -> world
+        Gml.lt?(distance(world, self), 32) ->
+          world |> Buttons.press(self, @down) |> toggle(self, @attack)
+
+        Gml.lt?(distance(world, self), 54) ->
+          Buttons.press(world, self, @down)
+
+        true ->
+          world
       end
     end
   end
@@ -505,13 +547,15 @@ defmodule Nidhox.Brain.Combat do
     personality = Gml.var(world, self, :personality)
 
     cond do
-      Sense.weapon_type(world, man) != @sword or Gml.gt?(Gml.var(world, self, :actionCounter), 180) ->
+      Sense.weapon_type(world, man) != @sword or
+          Gml.gt?(Gml.var(world, self, :actionCounter), 180) ->
         Gml.put(world, self, %{actionCompleted: 1})
 
       not Sense.present?(other) ->
         done(world, self, true)
 
-      not Gml.eq?(personality, 1) and (Sense.under_low_area?(world, other) or Sense.under_low_area?(world, man)) ->
+      not Gml.eq?(personality, 1) and
+          (Sense.under_low_area?(world, other) or Sense.under_low_area?(world, man)) ->
         done(world, self, true)
 
       Buttons.down?(world, self, @attack) ->
@@ -528,9 +572,15 @@ defmodule Nidhox.Brain.Combat do
 
     {now, world} =
       cond do
-        Gml.lt?(abs(oy - y), 11) -> {true, world}
-        on_ground?(world, man) -> {false, toggle(world, self, @jump)}
-        true -> {Gml.lt?(oy, y) and Gml.gt?(Gml.var(world, man, :vspd), 0), Buttons.press(world, self, @jump)}
+        Gml.lt?(abs(oy - y), 11) ->
+          {true, world}
+
+        on_ground?(world, man) ->
+          {false, toggle(world, self, @jump)}
+
+        true ->
+          {Gml.lt?(oy, y) and Gml.gt?(Gml.var(world, man, :vspd), 0),
+           Buttons.press(world, self, @jump)}
       end
 
     now = now or (not Gml.lt?(Gml.var(world, man, :vspd), 0) and Gml.eq?(personality, 1))
@@ -547,11 +597,15 @@ defmodule Nidhox.Brain.Combat do
   end
 
   defp walk_to(world, self, target_x, x) do
-    if Gml.lt?(target_x, x), do: Buttons.press(world, self, @left), else: Buttons.press(world, self, @right)
+    if Gml.lt?(target_x, x),
+      do: Buttons.press(world, self, @left),
+      else: Buttons.press(world, self, @right)
   end
 
   defp toward(world, self, target_x, x) do
-    if Gml.gt?(target_x, x), do: Buttons.press(world, self, @right), else: Buttons.press(world, self, @left)
+    if Gml.gt?(target_x, x),
+      do: Buttons.press(world, self, @right),
+      else: Buttons.press(world, self, @left)
   end
 
   defp blocked?(world, point) do
@@ -569,7 +623,12 @@ defmodule Nidhox.Brain.Combat do
   end
 
   defp done(world, self, failed),
-    do: Gml.put(world, self, if(failed, do: %{actionCompleted: 1, actionFailed: 1}, else: %{actionCompleted: 1}))
+    do:
+      Gml.put(
+        world,
+        self,
+        if(failed, do: %{actionCompleted: 1, actionFailed: 1}, else: %{actionCompleted: 1})
+      )
 
   defp on_ground?(world, man), do: Gml.truthy?(Gml.var(world, man, :onGround))
   defp player(world, self), do: Gml.var(world, self, :player, @noone)

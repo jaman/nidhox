@@ -62,7 +62,9 @@ defmodule Nidhox.Brain.Sense do
   @doc "Whether fencer `man`'s opponent holds the high ground (`playerStuckInLowGround`)."
   @spec stuck_in_low_ground?(World.t(), number()) :: boolean()
   def stuck_in_low_ground?(%World{} = world, man) do
-    other = Query.by_player(world, Query.other_player(Gml.var(world, man, :playerIndex))) || @noone
+    other =
+      Query.by_player(world, Query.other_player(Gml.var(world, man, :playerIndex))) || @noone
+
     holding_high_ground?(world, other)
   end
 
@@ -140,7 +142,9 @@ defmodule Nidhox.Brain.Sense do
     |> Gml.all(thrown)
     |> Enum.find(@noone, fn sword ->
       %Instance{x: sx, y: sy} = World.fetch(world, sword)
-      Gml.lt?(distance(chest, {sx, sy}), @sword_reach) and Gml.lt?(abs(y - @chest - sy), @sword_height)
+
+      Gml.lt?(distance(chest, {sx, sy}), @sword_reach) and
+        Gml.lt?(abs(y - @chest - sy), @sword_height)
     end)
   end
 
@@ -150,7 +154,8 @@ defmodule Nidhox.Brain.Sense do
 
   @doc "Fencer `man`'s weapon type: 1 fists, 2 sword, 0 without a weapon."
   @spec weapon_type(World.t(), number()) :: number()
-  def weapon_type(%World{} = world, man), do: Gml.var(world, Gml.var(world, man, :weapon, @noone), :type)
+  def weapon_type(%World{} = world, man),
+    do: Gml.var(world, Gml.var(world, man, :weapon, @noone), :type)
 
   @doc "The distance between two points (`point_distance`)."
   @spec distance({number(), number()}, {number(), number()}) :: float()

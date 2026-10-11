@@ -58,7 +58,11 @@ defmodule Nidhox.Objects.InstanceCodes do
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
   def handlers do
     names = Enum.map(@vars ++ @fields, &elem(&1, 0)) ++ ["rMinesCenter_0"]
-    Enum.map(Enum.uniq(names), &{"gml_RoomCC_#{&1}_Create", fn world, self, _other -> run(world, self, &1) end})
+
+    Enum.map(
+      Enum.uniq(names),
+      &{"gml_RoomCC_#{&1}_Create", fn world, self, _other -> run(world, self, &1) end}
+    )
   end
 
   defp run(world, self, "rMinesCenter_0"), do: World.update(world, self, &%{&1 | y: &1.y + 16})

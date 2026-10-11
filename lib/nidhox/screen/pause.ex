@@ -3,7 +3,10 @@ defmodule Nidhox.Screen.Pause do
   The pause over a bout, as the game's `PauseController` runs it.
 
     * its menu: "UNPAUSE GAME", "CHANGE LEVEL" in a versus bout with no player on
-      another machine, and "QUIT TO TITLE SCREEN", the first selected
+      another machine, and "QUIT TO TITLE SCREEN", the first selected; NidhOX adds
+      "OPTIONS", which opens the game's options on the client of the player who chose it;
+      a player on another machine sees "QUIT TO TITLE SCREEN" as "LEAVE GAME", which
+      takes only them out of the game
     * either side moves the selection with `:up` and `:down`, round from the last to
       the first and back, and chooses with `:attack` or `:start` — once neither is held
       by anyone, so the press that paused chooses nothing
@@ -18,7 +21,7 @@ defmodule Nidhox.Screen.Pause do
   @enforce_keys [:choices]
   defstruct [:choices, selected: 0, armed?: false]
 
-  @type option :: :unpause | :change_level | :title
+  @type option :: :unpause | :change_level | :title | :options
   @type t :: %__MODULE__{
           choices: [{String.t(), option()}],
           selected: non_neg_integer(),
@@ -43,19 +46,23 @@ defmodule Nidhox.Screen.Pause do
       if mode == :versus and not remote?, do: [{"CHANGE LEVEL", :change_level}], else: []
 
     %__MODULE__{
-      choices: [{"UNPAUSE GAME", :unpause}] ++ change_level ++ [{"QUIT TO TITLE SCREEN", :title}]
+      choices:
+        [{"UNPAUSE GAME", :unpause}] ++
+          change_level ++ [{"QUIT TO TITLE SCREEN", :title}, {"OPTIONS", :options}]
     }
   end
 
-  @doc "What the players did this step: `{:choose, option}` or `{:stay, pause}`."
-  @spec input(t(), %{1 => map(), 2 => map()}) :: {:choose, option()} | {:stay, t()}
+  @doc "What the players did this step: `{:choose, option, side}` or `{:stay, pause}`."
+  @spec input(t(), %{1 => map(), 2 => map()}) :: {:choose, option(), 1 | 2} | {:stay, t()}
   def input(%__MODULE__{} = pause, players) do
     inputs = Map.values(players)
     armed? = pause.armed? or not Enum.any?(inputs, &held_any?(&1, @choosing))
 
+    chooser = Enum.find([1, 2], &pressed_any?(players[&1], @choosing))
+
     cond do
-      armed? and Enum.any?(inputs, &pressed_any?(&1, @choosing)) ->
-        {:choose, selected(pause)}
+      armed? and chooser != nil ->
+        {:choose, selected(pause), chooser}
 
       Enum.any?(inputs, &pressed_any?(&1, [:up])) ->
         {:stay, %{moved(pause, -1) | armed?: armed?}}
@@ -68,18 +75,24 @@ defmodule Nidhox.Screen.Pause do
     end
   end
 
-  @doc "The pause's GUI items over a window `{width, height}`."
-  @spec items(t(), {number(), number()}) :: [map()]
-  def items(%__MODULE__{} = pause, window) do
+  @doc """
+  The pause's GUI items over a window `{width, height}`, as `viewer` sees them: `:local`
+  for a player on this machine, `:remote` for one on another.
+  """
+  @spec items(t(), {number(), number()}, :local | :remote) :: [map()]
+  def items(%__MODULE__{} = pause, window, viewer \\ :local) do
     lines =
       pause.choices
       |> Enum.with_index()
-      |> Enum.flat_map(fn {{label, _option}, index} ->
-        line(label, index, index == pause.selected, window)
+      |> Enum.flat_map(fn {{label, option}, index} ->
+        line(shown_label(label, option, viewer), index, index == pause.selected, window)
       end)
 
     [Art.shade(window, @shade, @shade_alpha) | lines]
   end
+
+  defp shown_label(_label, :title, :remote), do: "LEAVE GAME"
+  defp shown_label(label, _option, _viewer), do: label
 
   defp line(label, index, selected?, window) do
     top = @top + index * @spacing

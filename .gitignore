@@ -5,3 +5,4 @@
 erl_crash.dump
 *.ez
 /tools/yyc/out/
+/docs/pseudocode_*.md

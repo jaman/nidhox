@@ -34,8 +34,10 @@ defmodule Nidhox.Objects.Blocks do
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
   def handlers do
     [
-      {"gml_Object_Block_Create_0", fn world, self, _other -> Gml.put(world, self, %{vspd: 0, hspd: 0, conveyor: 0}) end},
-      {"gml_Object_PassThroughBlock_Create_0", fn world, self, _other -> Gml.put(world, self, %{hspd: 0, vspd: 0}) end},
+      {"gml_Object_Block_Create_0",
+       fn world, self, _other -> Gml.put(world, self, %{vspd: 0, hspd: 0, conveyor: 0}) end},
+      {"gml_Object_PassThroughBlock_Create_0",
+       fn world, self, _other -> Gml.put(world, self, %{hspd: 0, vspd: 0}) end},
       {"gml_Object_Conveyor_Create_0", &conveyor/3},
       {"gml_Object_Conveyor_Step_0", &conveyor_step/3},
       {"gml_Object_Conveyor_Draw_0", &conveyor_draw/3},
@@ -56,7 +58,10 @@ defmodule Nidhox.Objects.Blocks do
   defp conveyor(world, self, other) do
     world
     |> World.inherited(self, "Block", :create, 0, other)
-    |> World.update(self, &%{&1 | image_speed: Gml.var(world, self, :conveyor) / 1, depth: @conveyor_depth})
+    |> World.update(
+      self,
+      &%{&1 | image_speed: Gml.var(world, self, :conveyor) / 1, depth: @conveyor_depth}
+    )
   end
 
   defp belt(world, self, other, speed) do
@@ -70,7 +75,9 @@ defmodule Nidhox.Objects.Blocks do
     do: World.update(world, self, &%{&1 | image_speed: Gml.var(world, self, :conveyor) / 1})
 
   defp conveyor_draw(world, self, _other) do
-    %Instance{x: x, y: y, sprite_index: sprite, image_index: frame, image_xscale: xscale} = World.fetch(world, self)
+    %Instance{x: x, y: y, sprite_index: sprite, image_index: frame, image_xscale: xscale} =
+      World.fetch(world, self)
+
     width = world |> World.sprite(sprite) |> Map.fetch!(:size) |> elem(0)
     repeats = floor(width * xscale / width)
 
@@ -89,7 +96,9 @@ defmodule Nidhox.Objects.Blocks do
   defp spike_smoosher(world, self, _other), do: world |> Physics.create(self) |> crusher(self)
 
   defp crusher(world, self) do
-    %Instance{sprite_index: sprite, image_xscale: xscale, image_yscale: yscale} = World.fetch(world, self)
+    %Instance{sprite_index: sprite, image_xscale: xscale, image_yscale: yscale} =
+      World.fetch(world, self)
+
     {width, height} = world |> World.sprite(sprite) |> Map.fetch!(:size)
     {world, blood} = World.create(world, World.object_index(world, "BloodSurface"), {0, 0})
     %Instance{sprite_index: blood_sprite} = World.fetch(world, blood)
@@ -97,7 +106,14 @@ defmodule Nidhox.Objects.Blocks do
     stale = Gml.var(world, blood, :blood, -1)
 
     world
-    |> World.update(blood, &%{&1 | image_xscale: width * xscale / blood_width, image_yscale: height * yscale / blood_height})
+    |> World.update(
+      blood,
+      &%{
+        &1
+        | image_xscale: width * xscale / blood_width,
+          image_yscale: height * yscale / blood_height
+      }
+    )
     |> free_surface(stale)
     |> World.perform(blood, :create, 0)
     |> Gml.put(self, %{moving: @falling, blood: blood, timer: 0})
@@ -116,9 +132,10 @@ defmodule Nidhox.Objects.Blocks do
 
     world =
       if Gml.var(world, self, :moving) == @falling do
-        if not Physics.block_at?(world, {x - half, y}) and not Physics.block_at?(world, {x + half, y}),
-          do: Gml.put(world, self, %{vspd: Gml.var(world, self, :vspd) + 0.1}),
-          else: smoosher_landed(world, self, {x, y})
+        if not Physics.block_at?(world, {x - half, y}) and
+             not Physics.block_at?(world, {x + half, y}),
+           do: Gml.put(world, self, %{vspd: Gml.var(world, self, :vspd) + 0.1}),
+           else: smoosher_landed(world, self, {x, y})
       else
         climb(world, self, y, start)
       end
@@ -129,11 +146,17 @@ defmodule Nidhox.Objects.Blocks do
   defp smoosher_landed(world, self, {x, y}) do
     world =
       if Gml.var(world, self, :vspd) > 0,
-        do: world |> Gml.put(self, %{vspd: 0, timer: @landed_wait}) |> Sound.play(@landing_sound, {x, y}),
+        do:
+          world
+          |> Gml.put(self, %{vspd: 0, timer: @landed_wait})
+          |> Sound.play(@landing_sound, {x, y}),
         else: world
 
     if Gml.var(world, self, :timer) < 0,
-      do: world |> Gml.put(self, %{moving: @climbing}) |> Gml.put(self, %{vspd: Gml.var(world, self, :vspd) - 0.1}),
+      do:
+        world
+        |> Gml.put(self, %{moving: @climbing})
+        |> Gml.put(self, %{vspd: Gml.var(world, self, :vspd) - 0.1}),
       else: world
   end
 
@@ -159,7 +182,8 @@ defmodule Nidhox.Objects.Blocks do
       else: Gml.put(world, self, %{vspd: 0, moving: @falling})
   end
 
-  defp clamp_speed(world, self), do: Gml.put(world, self, %{vspd: Gml.clamp(Gml.var(world, self, :vspd), -4, 8)})
+  defp clamp_speed(world, self),
+    do: Gml.put(world, self, %{vspd: Gml.clamp(Gml.var(world, self, :vspd), -4, 8)})
 
   defp carry_blood(world, self) do
     case World.fetch(world, self) do
@@ -171,12 +195,14 @@ defmodule Nidhox.Objects.Blocks do
         blood = Gml.var(world, self, :blood, -4)
 
         if World.fetch(world, blood),
-          do: World.update(world, blood, &%{&1 | x: x - origin_x, y: y - origin_y, visible: false}),
+          do:
+            World.update(world, blood, &%{&1 | x: x - origin_x, y: y - origin_y, visible: false}),
           else: world
     end
   end
 
-  defp count_down(world, self), do: Gml.put(world, self, %{timer: Gml.var(world, self, :timer) - 1})
+  defp count_down(world, self),
+    do: Gml.put(world, self, %{timer: Gml.var(world, self, :timer) - 1})
 
   defp lose_blood(world, self, _other) do
     blood = Gml.var(world, self, :blood, -4)

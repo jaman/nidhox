@@ -67,7 +67,9 @@ defmodule Nidhox.Objects.Brain do
 
   defp changing?(world) do
     level = Gml.var(world, Gml.first(world, "ArcadeMode"), :level)
-    Arcade.contains?(world, level, @changing) and Gml.eq?(:math.fmod(System.get(world, :frame), 60), 0)
+
+    Arcade.contains?(world, level, @changing) and
+      Gml.eq?(:math.fmod(System.get(world, :frame), 60), 0)
   end
 
   defp new_personality(world, self) do
@@ -138,9 +140,14 @@ defmodule Nidhox.Objects.Brain do
     world = Gml.put(world, self, %{player: man})
 
     cond do
-      not Sense.present?(man) -> world |> Intent.next_state(self, @waiting) |> Gml.put(self, %{lastOnGroundY: -1})
-      Gml.exists?(world, "ChallengeMode") -> world
-      true -> world |> follow_ground(self, man) |> wait_for_control(self, man)
+      not Sense.present?(man) ->
+        world |> Intent.next_state(self, @waiting) |> Gml.put(self, %{lastOnGroundY: -1})
+
+      Gml.exists?(world, "ChallengeMode") ->
+        world
+
+      true ->
+        world |> follow_ground(self, man) |> wait_for_control(self, man)
     end
   end
 
@@ -153,7 +160,8 @@ defmodule Nidhox.Objects.Brain do
   defp wait_for_control(world, self, man) do
     state = Gml.var(world, man, :state)
 
-    if state == @entering or Query.collapsing?(world, man) or Query.stabbed?(world, man) or state == 28 or
+    if state == @entering or Query.collapsing?(world, man) or Query.stabbed?(world, man) or
+         state == 28 or
          Gml.truthy?(Match.get(world, :finished)),
        do: Intent.next_state(world, self, @waiting),
        else: world
@@ -163,10 +171,17 @@ defmodule Nidhox.Objects.Brain do
     man = Gml.var(world, self, :player, @noone)
     other = Query.by_player(world, Query.other_player(player)) || @noone
     world = Gml.put(world, self, %{opponent: other, opponentDist: @far, flyingSword: @noone})
-    world = if Sense.present?(man), do: Gml.put(world, self, %{flyingSword: Sense.dangerous_sword(world, man)}), else: world
+
+    world =
+      if Sense.present?(man),
+        do: Gml.put(world, self, %{flyingSword: Sense.dangerous_sword(world, man)}),
+        else: world
 
     if Sense.present?(man) and Sense.present?(other),
-      do: Gml.put(world, self, %{opponentDist: abs(World.fetch(world, man).x - World.fetch(world, other).x)}),
+      do:
+        Gml.put(world, self, %{
+          opponentDist: abs(World.fetch(world, man).x - World.fetch(world, other).x)
+        }),
       else: world
   end
 

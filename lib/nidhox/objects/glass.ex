@@ -30,12 +30,14 @@ defmodule Nidhox.Objects.Glass do
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
   def handlers do
     [
-      {"gml_Object_Window_Create_0", fn world, self, _other -> Gml.put(world, self, %{shattedDirection: 0}) end},
+      {"gml_Object_Window_Create_0",
+       fn world, self, _other -> Gml.put(world, self, %{shattedDirection: 0}) end},
       {"gml_Object_Window_Collision_Man", &struck/3},
       {"gml_Object_Window_Collision_FlyingWeapon", &struck/3},
       {"gml_Object_Window_Destroy_0", &shatter/3},
       {"gml_Object_GlassFragment_Create_0", &fragment/3},
-      {"gml_Object_GlassFragment_Alarm_0", fn world, self, _other -> World.destroy(world, self) end},
+      {"gml_Object_GlassFragment_Alarm_0",
+       fn world, self, _other -> World.destroy(world, self) end},
       {"gml_Object_GlassFragment_Collision_Block", &clink/3}
     ]
   end
@@ -63,7 +65,12 @@ defmodule Nidhox.Objects.Glass do
       {world, piece} = World.create(world, fragment, {x, y - up})
       {turn, world} = Gml.random_range(world, -@spread, @spread)
       {speed, world} = Gml.random_range(world, 2, 4)
-      World.update(world, piece, &Instance.put_motion(&1, %{direction: direction + turn, speed: speed}))
+
+      World.update(
+        world,
+        piece,
+        &Instance.put_motion(&1, %{direction: direction + turn, speed: speed})
+      )
     end)
   end
 
@@ -74,7 +81,10 @@ defmodule Nidhox.Objects.Glass do
     {spin, world} = Gml.random_range(world, -10, 10)
 
     world
-    |> World.update(self, &%{&1 | image_index: frame / 1, image_speed: 0.0, gravity: 0.3, friction: 0.03})
+    |> World.update(
+      self,
+      &%{&1 | image_index: frame / 1, image_speed: 0.0, gravity: 0.3, friction: 0.03}
+    )
     |> Gml.put(self, %{spin: spin})
   end
 

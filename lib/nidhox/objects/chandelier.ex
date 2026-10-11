@@ -64,7 +64,13 @@ defmodule Nidhox.Objects.Chandelier do
       |> World.inherited(self, "o_chandelier", :create, 0)
       |> Gml.put(self, %{overrideDepth: @override_depth, spin_speed: 0, angle: @start_angle})
 
-    {world, bottom} = World.create(world, World.object_index(world, "Empty"), hung(World.fetch(world, self), @start_angle))
+    {world, bottom} =
+      World.create(
+        world,
+        World.object_index(world, "Empty"),
+        hung(World.fetch(world, self), @start_angle)
+      )
+
     {creak, world} = Gml.choose(world, @creaks)
     {loop, world} = Ear.attach(world, bottom, creak)
 
@@ -88,7 +94,10 @@ defmodule Nidhox.Objects.Chandelier do
     spin = Gml.var(world, self, :spin_speed)
     dir = Gml.var(world, self, :dir)
     {spin, side} = if Gml.gt?(angle, 0), do: {spin - @pull, 1}, else: {spin + @pull, 0}
-    world = if Gml.eq?(dir, side), do: world, else: Sound.play(world, @squeak, {x, y + @squeak_drop})
+
+    world =
+      if Gml.eq?(dir, side), do: world, else: Sound.play(world, @squeak, {x, y + @squeak_drop})
+
     angle = angle + spin
 
     world
@@ -98,7 +107,9 @@ defmodule Nidhox.Objects.Chandelier do
   end
 
   defp move_bottom(world, bottom, {x, y}) do
-    if World.fetch(world, bottom), do: World.update(world, bottom, &%{&1 | x: x, y: y}), else: world
+    if World.fetch(world, bottom),
+      do: World.update(world, bottom, &%{&1 | x: x, y: y}),
+      else: world
   end
 
   defp draw(world, self, _other) do
@@ -111,7 +122,10 @@ defmodule Nidhox.Objects.Chandelier do
       angle: chandelier.image_angle,
       blend: chandelier.image_blend
     )
-    |> Draw.sprite(chandelier.sprite_index, Gml.var(world, self, :foo), {chandelier.x, chandelier.y},
+    |> Draw.sprite(
+      chandelier.sprite_index,
+      Gml.var(world, self, :foo),
+      {chandelier.x, chandelier.y},
       scale: {chandelier.image_xscale, chandelier.image_yscale},
       angle: chandelier.image_angle + Gml.var(world, self, :pv) * 3.5,
       blend: Colour.hsv(hue, 100, 255),
@@ -120,12 +134,16 @@ defmodule Nidhox.Objects.Chandelier do
     )
   end
 
-  defp hush(world, self, _other), do: World.emit(world, Audio.stopped(Gml.var(world, self, :soundLoop, nil)))
+  defp hush(world, self, _other),
+    do: World.emit(world, Audio.stopped(Gml.var(world, self, :soundLoop, nil)))
 
   defp hang_still(world, self, _other) do
     world = World.inherited(world, self, "ChandelierStill", :create, 0)
     %Instance{x: x, y: y} = World.fetch(world, self)
-    world |> World.create(World.object_index(world, "SuddenDeathBG"), {x, y - @backdrop_lift}) |> elem(0)
+
+    world
+    |> World.create(World.object_index(world, "SuddenDeathBG"), {x, y - @backdrop_lift})
+    |> elem(0)
   end
 
   defp still(world, self, _other) do
@@ -134,7 +152,8 @@ defmodule Nidhox.Objects.Chandelier do
     world = World.update(world, self, &%{&1 | image_angle: 0.0})
 
     if World.fetch(world, bottom),
-      do: World.update(world, bottom, &%{&1 | x: Camera.center_x(world), y: Camera.center_y(world)}),
+      do:
+        World.update(world, bottom, &%{&1 | x: Camera.center_x(world), y: Camera.center_y(world)}),
       else: world
   end
 
@@ -144,7 +163,10 @@ defmodule Nidhox.Objects.Chandelier do
 
     world
     |> Gml.all("SuddenDeathBG")
-    |> Enum.reduce(world, &World.update(&2, &1, fn backdrop -> %{backdrop | image_angle: -angle / 1} end))
+    |> Enum.reduce(
+      world,
+      &World.update(&2, &1, fn backdrop -> %{backdrop | image_angle: -angle / 1} end)
+    )
     |> Chain.draw({x, y + @hang}, {x, @chain_top}, false)
     |> World.inherited(self, "ChandelierStill", :draw, 0)
   end

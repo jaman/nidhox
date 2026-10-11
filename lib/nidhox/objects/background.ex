@@ -55,7 +55,9 @@ defmodule Nidhox.Objects.Background do
 
     [vars.final | vars.squares]
     |> Enum.reduce(world, fn surface, world ->
-      if surface != nil and Surfaces.exists?(world, surface), do: Surfaces.free(world, surface), else: world
+      if surface != nil and Surfaces.exists?(world, surface),
+        do: Surfaces.free(world, surface),
+        else: world
     end)
     |> put_vars(self, %{final: nil, squares: List.duplicate(nil, @squares)})
   end

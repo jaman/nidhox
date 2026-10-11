@@ -162,7 +162,10 @@ defmodule Nidhox.Music.Mixer do
       |> first_synth(self, %{SYNTH1: 1, SYNTH2: 1})
 
     synth_two = var(world, self, :SYNTH2)
-    world = world |> put_mix(self, 139, synth_two) |> part_of_four(self, 140, Gml.eq?(synth_two, 0))
+
+    world =
+      world |> put_mix(self, 139, synth_two) |> part_of_four(self, 140, Gml.eq?(synth_two, 0))
+
     synth_one = var(world, self, :SYNTH1)
     world |> put_mix(self, 138, synth_one) |> part_of_four(self, 141, Gml.eq?(synth_one, 0))
   end
@@ -184,6 +187,7 @@ defmodule Nidhox.Music.Mixer do
 
   defp sky_part(world, self) do
     {world, part} = next_part(world, self, @sky_parts)
+
     world
     |> then(&Enum.reduce(@sky_synths, &1, fn synth, world -> put_mix(world, self, synth, 0) end))
     |> put_mix(self, Enum.at(@sky_synths, part - 1), 1)
@@ -227,7 +231,13 @@ defmodule Nidhox.Music.Mixer do
     do: put_mix(world, self, layer, max(@drum_floor, start.(mix_of(world, self, layer))))
 
   defp cap(world, self, layer, by),
-    do: put_mix(world, self, layer, min(mix_of(world, self, by) || 0, mix_of(world, self, layer) || 0))
+    do:
+      put_mix(
+        world,
+        self,
+        layer,
+        min(mix_of(world, self, by) || 0, mix_of(world, self, layer) || 0)
+      )
 
   defp mix_of(world, self, layer), do: world |> Gml.var(self, :mixer, %{}) |> Map.get(layer)
 

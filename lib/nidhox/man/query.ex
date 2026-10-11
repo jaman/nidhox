@@ -20,6 +20,7 @@ defmodule Nidhox.Man.Query do
   """
 
   alias Cauldron2D.GameMaker.{Instance, World}
+  alias Nidhox.Bout.Camera
   alias Nidhox.Gml
 
   @yellow "YellowPlayer"
@@ -96,7 +97,7 @@ defmodule Nidhox.Man.Query do
          orange when orange != nil <- first(world, @orange) do
       abs(World.fetch(world, yellow).x - World.fetch(world, orange).x)
     else
-      _missing -> Nidhox.Bout.Camera.right(world) - Nidhox.Bout.Camera.left(world)
+      _missing -> Camera.right(world) - Camera.left(world)
     end
   end
 

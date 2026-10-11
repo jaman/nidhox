@@ -55,8 +55,17 @@ defmodule Nidhox.Objects.CheerControl do
     standing = Enum.count(crowd, &(not Gml.eq?(Gml.var(world, &1, :state), @sitting)))
 
     case Gml.var(world, self, :sound) do
-      -1 -> world
-      sound -> World.emit(world, Audio.moved(sound, {:level, System.get(world, :sfxVol, 1) * standing / length(crowd), 0.0}))
+      -1 ->
+        world
+
+      sound ->
+        World.emit(
+          world,
+          Audio.moved(
+            sound,
+            {:level, System.get(world, :sfxVol, 1) * standing / length(crowd), 0.0}
+          )
+        )
     end
   end
 end

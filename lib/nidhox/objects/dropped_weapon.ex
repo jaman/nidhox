@@ -11,10 +11,11 @@ defmodule Nidhox.Objects.DroppedWeapon do
     * user event 1 (floor or ceiling): coming down it kicks up dust and comes to rest as a
       `PickupContainer` pointing the way its blade fell; going up it starts to fall
       (`vspd` 1)
+    * draw: itself (`draw_self`)
     * leaving the room: gone
   """
 
-  alias Cauldron2D.GameMaker.{Instance, World}
+  alias Cauldron2D.GameMaker.{Draw, Instance, World}
   alias Nidhox.Gml
   alias Nidhox.Man.{Physics, Weapon}
   alias Nidhox.Objects.Particles
@@ -27,6 +28,7 @@ defmodule Nidhox.Objects.DroppedWeapon do
     [
       {"gml_Object_DroppedWeapon_Create_0", &start/3},
       {"gml_Object_DroppedWeapon_Other_12", &update/3},
+      {"gml_Object_DroppedWeapon_Draw_0", fn world, self, _other -> Draw.self(world, self) end},
       {"gml_Object_DroppedWeapon_Other_10", &wall/3},
       {"gml_Object_DroppedWeapon_Other_11", &floor/3},
       {"gml_Object_DroppedWeapon_Other_0", &gone/3}
@@ -92,5 +94,6 @@ defmodule Nidhox.Objects.DroppedWeapon do
 
   defp gone(world, self, _other), do: World.destroy(world, self)
 
-  defp room_height(world), do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(1)
+  defp room_height(world),
+    do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(1)
 end

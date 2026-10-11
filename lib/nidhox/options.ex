@@ -11,9 +11,14 @@ defmodule Nidhox.Options do
   the second seat at the same keyboard (the game option `:player_2`,
   `Nidhox.Controls.seat_keys/1`) — then lists, under that player, every action with its
   keys; choosing one waits for the next key and makes it that action's only key.
+  CONTROLS also has CONTROLLERS: every connected controller with the player it plays
+  (the client's `controllers`), choosing one or `:left` and `:right` moving it between
+  PLAYER 1, PLAYER 2 and NONE (saved as the client's `pads`).
 
-  `:up` and `:down` move round the list, `:enter` chooses, and `:escape` goes back a
-  page and closes the menu from the first. Choosing "flashing" or "persistent blood"
+  Either player's keys work it: their up and down move round the list, attack or start
+  chooses, jump or pause goes back a page (closing the menu from the first), and left
+  and right change a slider; the raw keys `:up`, `:down`, `:left`, `:right`, `:enter`
+  and `:escape` (a controller's d-pad, `A`, `B` and `Start`) do the same. Choosing "flashing" or "persistent blood"
   turns it on or off: the game options `:flashing` and `:persistent_blood`, which
   `Nidhox.Game` gives the game's `System`. `:left` and `:right` move MUSIC or SFX down
   or up by 0.1, within 0 to 1: the client's music and effects levels, the effects level
@@ -31,7 +36,7 @@ defmodule Nidhox.Options do
   @enforce_keys [:page, :settings]
   defstruct [:page, :settings, selected: 0, rebinding: nil]
 
-  @type page :: :options | :players | {:controls, 1 | 2}
+  @type page :: :options | :players | {:controls, 1 | 2} | :controllers
   @type t :: %__MODULE__{
           page: page(),
           settings: map(),
@@ -42,6 +47,17 @@ defmodule Nidhox.Options do
   @step 0.1
   @screams 1..14
   @shade 0.75
+  @pad_choices [1, 2, :none]
+  @menu_keys %{
+    up: :up,
+    down: :down,
+    left: :left,
+    right: :right,
+    attack: :enter,
+    start: :enter,
+    jump: :escape,
+    pause: :escape
+  }
 
   @doc "The menu as it opens, on its first page, showing `settings`."
   @spec open(map()) :: t()
@@ -61,7 +77,9 @@ defmodule Nidhox.Options do
     end
   end
 
-  def event(%__MODULE__{} = menu, {:key, key}, settings), do: key(menu, key, settings)
+  def event(%__MODULE__{} = menu, {:key, _key} = event, settings),
+    do: key(menu, menu_key(settings, event), settings)
+
   def event(%__MODULE__{} = menu, _event, settings), do: reply(menu, settings)
 
   @doc "The menu's GUI items over a window `{width, height}`."
@@ -72,7 +90,18 @@ defmodule Nidhox.Options do
   defp list(%__MODULE__{} = menu),
     do: %{MenuList.new(menu.page, title(menu.page), choices(menu)) | selected: menu.selected}
 
+  defp menu_key(settings, {:key, key} = event) do
+    spec = Input.spec_of(event)
+
+    Enum.find_value([1, 2], key, fn player ->
+      settings
+      |> keymap(player)
+      |> Enum.find_value(fn {action, keys} -> spec in keys and Map.get(@menu_keys, action) end)
+    end)
+  end
+
   defp key(menu, :up, settings), do: reply(turned(menu, -1), settings)
+
   defp key(menu, :down, settings), do: reply(turned(menu, 1), settings)
   defp key(menu, :escape, settings), do: back(menu, settings)
   defp key(menu, :enter, settings), do: choose(menu, chosen(menu), settings)
@@ -92,6 +121,9 @@ defmodule Nidhox.Options do
     |> Map.put(:sounds, [{:recording, "sfxScream#{Enum.random(@screams)}"}])
   end
 
+  defp slide(menu, {:pad, name}, step, settings),
+    do: reply(menu, put_pad(settings, name, if(step > 0, do: 1, else: -1)))
+
   defp slide(menu, _row, _step, settings), do: reply(menu, settings)
 
   defp level(value), do: value |> max(0.0) |> min(1.0)
@@ -108,6 +140,11 @@ defmodule Nidhox.Options do
     do: reply(%{menu | page: {:controls, player}, selected: 0}, settings)
 
   defp choose(menu, {:action, action}, settings), do: reply(%{menu | rebinding: action}, settings)
+
+  defp choose(menu, :controllers, settings),
+    do: reply(%{menu | page: :controllers, selected: 0}, settings)
+
+  defp choose(menu, {:pad, name}, settings), do: reply(menu, put_pad(settings, name, 1))
   defp choose(menu, _option, settings), do: reply(menu, settings)
 
   defp back(%__MODULE__{page: :options}, settings), do: %{menu: nil, settings: settings}
@@ -117,6 +154,9 @@ defmodule Nidhox.Options do
 
   defp back(%__MODULE__{page: {:controls, player}} = menu, settings),
     do: reply(%{menu | page: :players, selected: player - 1}, settings)
+
+  defp back(%__MODULE__{page: :controllers} = menu, settings),
+    do: reply(%{menu | page: :players, selected: 2}, settings)
 
   defp reply(menu, settings), do: %{menu: %{menu | settings: settings}, settings: settings}
 
@@ -136,6 +176,7 @@ defmodule Nidhox.Options do
   defp title(:options), do: "OPTIONS"
   defp title(:players), do: "CONTROLS"
   defp title({:controls, player}), do: "PLAYER #{player}"
+  defp title(:controllers), do: "CONTROLLERS"
 
   defp choices(%__MODULE__{page: :options, settings: settings}) do
     [
@@ -149,7 +190,16 @@ defmodule Nidhox.Options do
   end
 
   defp choices(%__MODULE__{page: :players}),
-    do: [{"PLAYER 1", {:player, 1}}, {"PLAYER 2", {:player, 2}}]
+    do: [{"PLAYER 1", {:player, 1}}, {"PLAYER 2", {:player, 2}}, {"CONTROLLERS", :controllers}]
+
+  defp choices(%__MODULE__{page: :controllers, settings: %{controllers: [_ | _] = controllers}}),
+    do:
+      for(
+        %{name: name, player: player} <- controllers,
+        do: {"#{name}  #{pad_player(player)}", {:pad, name}}
+      )
+
+  defp choices(%__MODULE__{page: :controllers}), do: [{"NO CONTROLLERS", :none}]
 
   defp choices(%__MODULE__{page: {:controls, player}, settings: settings, rebinding: rebinding}) do
     keymap = keymap(settings, player)
@@ -158,6 +208,25 @@ defmodule Nidhox.Options do
       keys = if action == rebinding, do: "...", else: keys(Map.get(keymap, action, []))
       {"#{action}  #{keys}", {:action, action}}
     end
+  end
+
+  defp pad_player(nil), do: "NONE"
+  defp pad_player(player), do: "PLAYER #{player}"
+
+  defp put_pad(settings, name, step) do
+    current =
+      Enum.find_value(settings.controllers, :none, &(&1.name == name and (&1.player || :none)))
+
+    index = Enum.find_index(@pad_choices, &(&1 == current)) || 0
+
+    pads =
+      Map.put(
+        settings.pads,
+        name,
+        Enum.at(@pad_choices, Integer.mod(index + step, length(@pad_choices)))
+      )
+
+    %{settings | pads: pads}
   end
 
   defp switch(true), do: " ON"

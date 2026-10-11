@@ -16,14 +16,27 @@ defmodule Nidhox.Online do
     * `joining` — `{address, code, side}` to join at the start of the next step
     * `status` — a line to show the players, or `nil`
     * `port` — the port a host listens on for joining nodes, `nil` for any free one
+    * `ssh` — `%{server, addresses, port}` while this machine serves the game over ssh
+      (`Cauldron2D.Drafter.Server`), `addresses` the first three of
+      `Cauldron2D.Distribution.addresses/0`; else `nil`
+    * `ssh_port` — the port to offer for serving over ssh, `nil` for any free one
+    * `quitting` — the players from another machine asked to quit (`Nidhox.Flow`), not
+      counted as joining while they are still on their way out
 
   Effects:
 
     * `:host` — host as `@name`, calling on the network as `@game`
     * `:unhost` — stop hosting
+    * `{:ssh_host, port}` — serve the game over ssh on `port` (`0` for any free one), on
+      every IPv4 interface, so a
+      player connects with `ssh -p <port> new@<address>` (registering a name the first
+      time) and plays in this machine's world from their own terminal
+    * `:ssh_unhost` — stop serving over ssh; a player connected that way is
+      disconnected, their terminal restored and told "NidhOX: the host stopped hosting."
     * `:listen`, `:unlisten` — start and stop looking for hosts
-    * `:prefill_address` — the state's `entry` started over as this machine's address
-      up to its last dot, the part a host on the same network shares
+    * `:prefill_address` — the state's `entry` started as this machine's address up to
+      its last dot, the part a host on the same network shares, and the client of the
+      player typing it (`typer`) asked to type it (`Nidhox.Typing`)
     * `{:join, address, code, side}` — join the host at `address` with `code` at the
       start of the next step, the status "connecting.." until then; once joined, the
       client of the player on `side` is asked to enter the host's world
@@ -33,12 +46,14 @@ defmodule Nidhox.Online do
 
   alias Cauldron2D.Beacon.Listener
   alias Cauldron2D.Distribution
+  alias Cauldron2D.Drafter.Server
   alias Nidhox.Flow
-  alias Nidhox.Screen.Entry
 
   @name "nidhox"
   @game "NidhOX"
   @listen_every 30
+  @shown_addresses 3
+  @ssh_closed "NidhOX: the host stopped hosting."
 
   @type t :: %{
           host: Distribution.host() | nil,
@@ -47,17 +62,41 @@ defmodule Nidhox.Online do
           found: [%{host: String.t(), node: node()}],
           joining: {String.t(), String.t(), 1 | 2} | nil,
           status: String.t() | nil,
-          port: pos_integer() | nil
+          port: pos_integer() | nil,
+          ssh:
+            %{server: Server.t(), addresses: [String.t()], port: pos_integer()}
+            | nil,
+          ssh_port: pos_integer() | nil,
+          quitting: [term()]
         }
 
-  @doc "No hosting, looking or joining; a host listens on `port`, `nil` for any free port."
-  @spec new(pos_integer() | nil) :: t()
-  def new(port \\ nil),
-    do: %{host: nil, owner: nil, listener: nil, found: [], joining: nil, status: nil, port: port}
+  @doc """
+  No hosting, looking or joining; a host listens on `port`, `nil` for any free port, and
+  offers `ssh_port` for serving over ssh, `nil` for any free one.
+  """
+  @spec new(pos_integer() | nil, pos_integer() | nil) :: t()
+  def new(port \\ nil, ssh_port \\ nil),
+    do: %{
+      host: nil,
+      owner: nil,
+      listener: nil,
+      found: [],
+      joining: nil,
+      status: nil,
+      port: port,
+      ssh: nil,
+      ssh_port: ssh_port,
+      quitting: []
+    }
 
   @doc "Whether this machine hosts ONLINE VERSUS, a player of its bouts playing from another."
   @spec hosting?(%{online: t()}) :: boolean()
-  def hosting?(%{online: %{host: host}}), do: host != nil
+  def hosting?(%{online: %{host: host, ssh: ssh}}), do: host != nil or ssh != nil
+
+  @doc "Whether `player` plays from another machine while this one hosts ONLINE VERSUS."
+  @spec remote_player?(%{online: t()}, %{owner: term()}) :: boolean()
+  def remote_player?(%{online: online} = state, %{owner: owner}),
+    do: hosting?(state) and owner != online.owner
 
   @doc "The name a host's node and a joining node's take: `<name>@<address>`."
   @spec name() :: String.t()
@@ -85,8 +124,8 @@ defmodule Nidhox.Online do
         |> Flow.ask(side, {:enter, %{source: {:node, node}}})
         |> put_status("connected")
 
-      {:error, _reason} ->
-        put_status(state, "could not connect")
+      {:error, reason} ->
+        put_status(state, join_failure(reason))
     end
   end
 
@@ -98,6 +137,38 @@ defmodule Nidhox.Online do
   end
 
   defp effect(:host, state), do: state
+
+  defp effect({:ssh_host, port}, %{online: %{ssh: nil} = online} = state) do
+    with [_first | _others] = addresses <- Enum.take(Distribution.addresses(), @shown_addresses),
+         {:ok, server} <-
+           Server.start(
+             game: Nidhox.Client,
+             port: port,
+             ip: {0, 0, 0, 0},
+             beacon: false,
+             node: false
+           ) do
+      %{
+        state
+        | online: %{
+            online
+            | ssh: %{server: server, addresses: addresses, port: server.port},
+              status: nil
+          }
+      }
+    else
+      [] -> put_status(state, join_failure(:no_network))
+      {:error, reason} -> put_status(state, ssh_failure(port, reason))
+    end
+  end
+
+  defp effect({:ssh_host, _port}, state), do: state
+  defp effect(:ssh_unhost, %{online: %{ssh: nil}} = state), do: state
+
+  defp effect(:ssh_unhost, %{online: %{ssh: %{server: server}} = online} = state) do
+    Server.stop(server, @ssh_closed)
+    %{state | online: %{online | ssh: nil}}
+  end
 
   defp effect(:unhost, %{online: %{host: nil}} = state), do: state
 
@@ -120,19 +191,37 @@ defmodule Nidhox.Online do
     %{state | online: %{online | listener: nil, found: []}}
   end
 
-  defp effect(:prefill_address, %{entry: %Entry{} = entry} = state) do
-    case Distribution.address() do
-      {:ok, address} ->
-        prefix = address |> String.split(".") |> Enum.drop(-1) |> Enum.map_join(&(&1 <> "."))
-        %{state | entry: Entry.new(entry.label, entry.alphabet, entry.longest, prefix)}
+  defp effect(:prefill_address, %{entry: {kind, label, alphabet, longest, _text}} = state) do
+    prefix =
+      case Distribution.address() do
+        {:ok, address} ->
+          address |> String.split(".") |> Enum.drop(-1) |> Enum.map_join(&(&1 <> "."))
 
-      {:error, _reason} ->
-        state
-    end
+        {:error, _reason} ->
+          ""
+      end
+
+    state = %{state | entry: {kind, label, alphabet, longest, prefix}}
+    Flow.ask(state, state.typer, {:menu, {:typing, state.entry}})
   end
 
   defp effect({:join, address, code, side}, %{online: online} = state),
     do: %{state | online: %{online | joining: {address, code, side}, status: "connecting.."}}
+
+  defp join_failure(:bad_address), do: "that is not an address"
+  defp join_failure(:unreachable), do: "nothing answers at that address"
+  defp join_failure(:not_hosting), do: "no game is hosting at that address"
+  defp join_failure(:refused), do: "the host refused: check the code"
+  defp join_failure(:no_network), do: "this machine has no network"
+  defp join_failure(reason), do: "could not connect: #{inspect(reason)}"
+
+  defp ssh_failure(port, {:shutdown, {:failed_to_start_child, _child, :eaddrinuse}}),
+    do: ssh_port_taken(port)
+
+  defp ssh_failure(port, :eaddrinuse), do: ssh_port_taken(port)
+  defp ssh_failure(_port, reason), do: "could not serve over ssh: #{inspect(reason)}"
+
+  defp ssh_port_taken(port), do: "port #{port} is taken: choose another"
 
   defp refresh(%{online: %{listener: listener} = online, steps: steps} = state)
        when listener != nil and rem(steps, @listen_every) == 0 do

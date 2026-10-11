@@ -136,7 +136,8 @@ defmodule Nidhox.Man.Physics do
     end)
   end
 
-  defp while_here(world, self, fun), do: if(World.fetch(world, self), do: fun.(world), else: world)
+  defp while_here(world, self, fun),
+    do: if(World.fetch(world, self), do: fun.(world), else: world)
 
   defp slide_and_hit(world, self, across) do
     {world, hit} = slide(world, self, Gml.sign(across), abs(across))

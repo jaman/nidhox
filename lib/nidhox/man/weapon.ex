@@ -257,6 +257,7 @@ defmodule Nidhox.Man.Weapon do
   defp crossing?(world, pickup, flesh) do
     %Instance{x: x, y: y} = World.fetch(world, pickup)
     width = sprite_width(world, pickup)
+
     flesh != @noone and World.fetch(world, flesh) != nil and
       Collide.on_line(world, {x, y - 3}, {x + width, y - 3}, {:id, flesh}) != nil
   end

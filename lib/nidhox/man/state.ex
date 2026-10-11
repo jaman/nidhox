@@ -41,7 +41,8 @@ defmodule Nidhox.Man.State do
 
   @doc "The world with fencer `self` to take its standing state next step."
   @spec stand(World.t(), non_neg_integer()) :: World.t()
-  def stand(world, self), do: go(world, self, if(armed?(world, self), do: @fencing, else: @unarmed))
+  def stand(world, self),
+    do: go(world, self, if(armed?(world, self), do: @fencing, else: @unarmed))
 
   @doc "The world with fencer `self`'s body in sprite `sprite`."
   @spec pose(World.t(), non_neg_integer(), integer()) :: World.t()

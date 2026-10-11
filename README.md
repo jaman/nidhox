@@ -5,7 +5,9 @@ Nidhogg Open-source eXperience: a two-player fencing game played in a terminal o
 
 No game files are included. NidhOX reads the data file of a copy you own — `data.win`
 from the Windows build, or `game.ios` from inside the macOS build's `Nidhogg.app` — and
-draws its rooms from it.
+draws its rooms from it. With `data.win` it also reads the `Nidhogg.exe` installed
+beside it, for the depths the game creates its objects at; a `data.win` without it does
+not start.
 
 ```sh
 mix deps.get
@@ -14,8 +16,8 @@ mix nidhox --area Wilds
 mix nidhox --data path/to/data.win
 ```
 
-`--data` defaults to `NIDHOX_DATA`, then the usual Steam installs under CrossOver and
-macOS. `--area` is the area the level select starts on: `Cemetery` (the default),
+`--data` defaults to `NIDHOX_DATA`, then the first of the usual Steam installs under
+your home directory: CrossOver's, macOS's and Linux's (set in `config/runtime.exs`). `--area` is the area the level select starts on: `Cemetery` (the default),
 `Castle`, `Mines`, `Sky` or `Wilds`.
 
 ## Controls
@@ -29,9 +31,13 @@ Two players share the keyboard, or play with a controller each:
 | attack | `F` | `M` | `X` |
 | jump | `G` | `N` | `A` |
 | start, pause | `Enter` | `Enter` | Start |
-| options | `Esc` | | |
+| pause | `Esc` | | |
 
-The first controller to send anything plays side 1, the second side 2.
+Either side's keys work the menus; jump or `Esc` goes back. `Ctrl+Q` quits at once.
+
+Controllers take the free sides in the order they connect; **Options → Controls →
+Controllers** lists the connected ones and moves each between player 1, player 2 and
+none, and the choice is kept for that controller.
 
 ## Modes
 
@@ -50,14 +56,46 @@ match against itself; any key brings back the menu.
   - **Online versus**: one machine hosts and another joins it; both play in the
     host's game.
     - **Host** shows this machine's address and a join code. Tell both to the player
-      joining. Hosting stops when you go back to the menus before it.
+      joining. Hosting stops when you go back (jump or `Esc`).
+    - **Host over SSH** serves the game over ssh instead. It first asks for the port:
+      leave it empty for any free one, or type one (`NIDHOX_SSH_PORT` or `mix nidhox
+      --ssh-port` fills it in). It then shows the command to give the other player:
+      `ssh -p <port> new@<address>`. They need only an ssh client — no copy of the game. The first
+      time, any password opens a form where they pick a name and password, and they
+      connect as that name from then on. They play orange in this machine's game, in
+      their own terminal; sound reaches them only through an `ssh -R` tunnel to a player
+      program on their machine. They have 10 minutes from connecting to log in. The
+      game reaches them at 20 frames a second, fewer on a connection too slow for
+      that. Going back, quitting to the title or quitting the game stops serving;
+      they are disconnected with their terminal put back as it was and a line saying
+      the host stopped.
+
+      On a terminal that keeps images, how the picture is sent can be chosen when
+      starting the game, for every player including those over ssh, with `mix nidhox
+      --picture` (or `NIDHOX_PICTURE`) and any of, comma separated: `native` draws
+      the room at its own size times the largest whole number that fits the window,
+      or `native:2`, `native:3`, … at that many times; `size:WxH` sets the size
+      itself; `png` sends each frame as a PNG, smaller; `swap` replaces each frame
+      without the picture going blank in between. The default is `native:2,png,swap`;
+      `--picture none` sends the picture at the window's cells as raw pixels instead.
     - **Join** lists the hosts on your local network; pick one and type its code.
     - **Set IP** types a host's address (it starts with your own network's part),
       then its code.
 
-    Typing: up and down change the character under the cursor, left and right move
-    the cursor (right past the end adds a character), `Enter` or attack finishes,
-    jump goes back. The joining player plays orange.
+    Typing: type the address or code on the keyboard (letters come out in capitals);
+    Backspace and Delete erase, the arrows move the caret, `Enter` finishes and `Esc`
+    goes back. With a controller, up and down change the character before the caret.
+    If the typing box closes, press start or attack to bring it back. The joining
+    player plays orange.
+
+    If the other player leaves, the bout under way is yours by forfeit and the hosting
+    screen comes back saying "the other player left", still hosting on the same port
+    (or address and code), so another player can connect straight away. When the other
+    player chooses QUIT TO TITLE SCREEN from the pause, they leave: their ssh session
+    or game ends and this machine goes back to the hosting screen the same way, saying
+    "the other player quit". A second copy of the
+    game on the same machine can join the first; it plays as your name with " (2)"
+    after it.
 
     The code admits the joining machine fully to the host's Erlang VM, so give it only
     to the player you are playing with. On a local network this needs nothing more.
@@ -79,7 +117,7 @@ match against itself; any key brings back the menu.
 - **Options** — **Controls** to remap each player's keys, flashing and persistent
   blood on or off, and music and sound effect sliders (left and right; the effects
   level scales the music too, as in the game). They are kept in your settings,
-  `~/.config/nidhox/<name>.settings`. `Esc` opens them during play as well.
+  `~/.config/nidhox/<name>.settings`. They are on the pause menu as well.
 - **Credits** — from your copy's `credits.txt`.
 - **Quit to desktop**
 - **How to play** — the game's own lessons, one at a time, with an orange dummy.
@@ -91,9 +129,10 @@ match against itself; any key brings back the menu.
   it. Every move that lands scores its worth: lunge, snap, kick, punch, sweep, guard,
   parry, throw and dodge. A move's worth halves each time you use it and climbs back
   while you use others, so vary them. Dying ends the run; your best score is shown
-  along the bottom. `Enter` pauses.
+  along the bottom. `Enter` or `Esc` pauses.
 
-`Enter` during a bout pauses it: unpause, change level (versus), or quit to the title.
+`Enter` or `Esc` during a bout pauses it: unpause, change level (versus), quit to the
+title, or options.
 After a bout come its time, the winner, and each side's kills and suicides; any press
 goes on to the level select. Every bout's result is kept, per player, in
 `~/.local/share/nidhox/ledger.dets`.

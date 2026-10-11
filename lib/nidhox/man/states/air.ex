@@ -209,7 +209,9 @@ defmodule Nidhox.Man.States.Air do
         do: world,
         else: State.put(world, self, %{vspd: State.get(world, self, :vspd) * 0.96})
 
-    if State.get(world, self, :vspd) > 1.0e-5, do: State.go(world, self, 18), else: in_air(world, self)
+    if State.get(world, self, :vspd) > 1.0e-5,
+      do: State.go(world, self, 18),
+      else: in_air(world, self)
   end
 
   defp in_air(world, self) do

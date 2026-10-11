@@ -25,7 +25,13 @@ defmodule Nidhox.Brain.Intent do
   @spec clear(World.t(), non_neg_integer()) :: World.t()
   def clear(%World{} = world, self) do
     world
-    |> Gml.put(self, %{action: -1, actionCounter: 0, actionCompleted: 0, actionSuggestion: -1, actionFailed: 0})
+    |> Gml.put(self, %{
+      action: -1,
+      actionCounter: 0,
+      actionCompleted: 0,
+      actionSuggestion: -1,
+      actionFailed: 0
+    })
     |> Buttons.release_all(self, [0, 1, 2, 3, 5, 4])
   end
 

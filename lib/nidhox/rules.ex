@@ -47,8 +47,8 @@ defmodule Nidhox.Rules do
   @switches @entries |> Keyword.delete(:time_limit) |> Keyword.keys()
   @on_at_start [:divekicks, :throws]
   @limit_step 1800
-  @limit_wrap 36000
-  @shortest_limit 10800
+  @limit_wrap 36_000
+  @shortest_limit 10_800
 
   defstruct switches: Map.new(@switches, &{&1, if(&1 in @on_at_start, do: 1, else: 0)}),
             time_limit: 0

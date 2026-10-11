@@ -5,6 +5,8 @@ defmodule Nidhox.Objects.Sun do
     * `ParallaxObject` create: `overrideDepth` −1, so the camera moves it by its own
       depth (`Nidhox.Bout.CameraFollow`)
     * `Sun` create: the parent's create, no `canvas` yet
+    * `Sun` step: it sinks as it moves off the room's middle: `y = ystart + |x −
+      room_width / 2| × 64 / room_width / 2`
     * `Sun` draw: without its canvas, a 200 × 200 surface cleared to white at alpha 0
       gets a white disc (`draw_ellipse(0, 0, 200, 200, false)`) written to its alpha
       only (`draw_set_colour_write_enable(false, false, false, true)`). Then, with
@@ -29,8 +31,10 @@ defmodule Nidhox.Objects.Sun do
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
   def handlers do
     [
-      {"gml_Object_ParallaxObject_Create_0", fn world, self, _other -> Gml.put(world, self, %{overrideDepth: -1}) end},
+      {"gml_Object_ParallaxObject_Create_0",
+       fn world, self, _other -> Gml.put(world, self, %{overrideDepth: -1}) end},
       {"gml_Object_Sun_Create_0", &start/3},
+      {"gml_Object_Sun_Step_0", &sink/3},
       {"gml_Object_Sun_Draw_0", &draw/3},
       {"gml_Object_Sun_Destroy_0", &free/3},
       {"gml_Object_Sun_Other_5", &free/3},
@@ -44,6 +48,16 @@ defmodule Nidhox.Objects.Sun do
     |> Gml.put(self, %{canvas: -1})
   end
 
+  defp sink(world, self, _other) do
+    room_width = world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(0)
+
+    World.update(
+      world,
+      self,
+      &%{&1 | y: &1.ystart + abs(&1.x - room_width / 2) * 64 / room_width / 2}
+    )
+  end
+
   defp draw(world, self, _other) do
     {world, canvas} = canvas(world, self)
     frame = System.get(world, :frame)
@@ -55,7 +69,9 @@ defmodule Nidhox.Objects.Sun do
         world,
         Surfaces.item(world, canvas, {x, y},
           origin: {@size / 2, @size / 2},
-          scale: {ring * 0.5 + abs(:math.sin(frame / 30)) * 0.025, ring * 0.5 + abs(:math.cos(frame / 30)) * 0.025},
+          scale:
+            {ring * 0.5 + abs(:math.sin(frame / 30)) * 0.025,
+             ring * 0.5 + abs(:math.cos(frame / 30)) * 0.025},
           angle: -(:math.sin(frame / 60) * 10 * ring / 2),
           blend: Colour.hsv(:math.sin(frame / 70 * ring) * 20, 100, bright * 255 - ring * 5),
           alpha: 1.0
@@ -75,7 +91,11 @@ defmodule Nidhox.Objects.Sun do
       world =
         world
         |> Surfaces.clear(canvas, @white, 0)
-        |> Surfaces.draw(canvas, [%{picture: {:ellipse, {@size, @size}, :filled}, position: {0, 0}, blend: @white}], write: @alpha_only)
+        |> Surfaces.draw(
+          canvas,
+          [%{picture: {:ellipse, {@size, @size}, :filled}, position: {0, 0}, blend: @white}],
+          write: @alpha_only
+        )
         |> Gml.put(self, %{canvas: canvas})
 
       {world, canvas}

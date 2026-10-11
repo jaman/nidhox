@@ -50,19 +50,30 @@ defmodule Nidhox.Backgrounds do
     end)
   end
 
-  defp change(_layer, 0, value), do: %{visible: truthy?(value), background: %{visible: truthy?(value)}}
+  defp change(_layer, 0, value),
+    do: %{visible: truthy?(value), background: %{visible: truthy?(value)}}
+
   defp change(_layer, 2, value), do: %{background: %{sprite: round(value)}}
   defp change(%Layer{offset: {_x, y}}, 3, value), do: %{offset: {value, y}}
   defp change(%Layer{offset: {x, _y}}, 4, value), do: %{offset: {x, value}}
-  defp change(%Layer{content: {:background, %{tiled: {_across, down}}}}, 7, value), do: %{background: %{tiled: {truthy?(value), down}}}
-  defp change(%Layer{content: {:background, %{tiled: {across, _down}}}}, 8, value), do: %{background: %{tiled: {across, truthy?(value)}}}
+
+  defp change(%Layer{content: {:background, %{tiled: {_across, down}}}}, 7, value),
+    do: %{background: %{tiled: {truthy?(value), down}}}
+
+  defp change(%Layer{content: {:background, %{tiled: {across, _down}}}}, 8, value),
+    do: %{background: %{tiled: {across, truthy?(value)}}}
+
   defp change(_layer, 9, value), do: %{background: %{xscale: value}}
   defp change(_layer, 10, value), do: %{background: %{yscale: value}}
   defp change(%Layer{speed: {_across, down}}, 11, value), do: %{speed: {value, down}}
   defp change(%Layer{speed: {across, _down}}, 12, value), do: %{speed: {across, value}}
 
-  defp change(%Layer{content: {:background, %{colour: {_r, _g, _b, alpha}}}}, 13, {red, green, blue}),
-    do: %{background: %{colour: {red, green, blue, alpha}}}
+  defp change(
+         %Layer{content: {:background, %{colour: {_r, _g, _b, alpha}}}},
+         13,
+         {red, green, blue}
+       ),
+       do: %{background: %{colour: {red, green, blue, alpha}}}
 
   defp change(%Layer{content: {:background, %{colour: {red, green, blue, _alpha}}}}, 14, value),
     do: %{background: %{colour: {red, green, blue, round(value * 255)}}}
@@ -73,14 +84,24 @@ defmodule Nidhox.Backgrounds do
   defp read(%Layer{content: {:background, %{sprite: sprite}}}, 2), do: sprite
   defp read(%Layer{offset: {x, _y}}, 3), do: x
   defp read(%Layer{offset: {_x, y}}, 4), do: y
-  defp read(%Layer{content: {:background, %{tiled: {across, _down}}}}, 7), do: if(across, do: 1, else: 0)
-  defp read(%Layer{content: {:background, %{tiled: {_across, down}}}}, 8), do: if(down, do: 1, else: 0)
+
+  defp read(%Layer{content: {:background, %{tiled: {across, _down}}}}, 7),
+    do: if(across, do: 1, else: 0)
+
+  defp read(%Layer{content: {:background, %{tiled: {_across, down}}}}, 8),
+    do: if(down, do: 1, else: 0)
+
   defp read(%Layer{content: {:background, background}}, 9), do: Map.get(background, :xscale, 1)
   defp read(%Layer{content: {:background, background}}, 10), do: Map.get(background, :yscale, 1)
   defp read(%Layer{speed: {across, _down}}, 11), do: across
   defp read(%Layer{speed: {_across, down}}, 12), do: down
-  defp read(%Layer{content: {:background, %{colour: {red, green, blue, _alpha}}}}, 13), do: {red, green, blue}
-  defp read(%Layer{content: {:background, %{colour: {_red, _green, _blue, alpha}}}}, 14), do: alpha / 255
+
+  defp read(%Layer{content: {:background, %{colour: {red, green, blue, _alpha}}}}, 13),
+    do: {red, green, blue}
+
+  defp read(%Layer{content: {:background, %{colour: {_red, _green, _blue, alpha}}}}, 14),
+    do: alpha / 255
+
   defp read(_layer, _property), do: 0
 
   defp truthy?(value), do: value > 0.5

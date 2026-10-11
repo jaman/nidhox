@@ -48,11 +48,15 @@ defmodule Nidhox.Bout.CameraFollow do
   end
 
   defp hold_players(world, match) do
-    Enum.reduce(["YellowPlayer", "OrangePlayer"], world, fn name, world ->
-      Enum.reduce(Gml.all(world, name), world, fn man, world ->
-        if World.fetch(world, man), do: RightOfWay.stay_in_view(world, man, match), else: world
-      end)
-    end)
+    Enum.reduce(["YellowPlayer", "OrangePlayer"], world, &hold_each(&2, &1, match))
+  end
+
+  defp hold_each(world, name, match) do
+    Enum.reduce(Gml.all(world, name), world, &hold(&2, &1, match))
+  end
+
+  defp hold(world, man, match) do
+    if World.fetch(world, man), do: RightOfWay.stay_in_view(world, man, match), else: world
   end
 
   defp place_match(world, match) do
@@ -134,8 +138,15 @@ defmodule Nidhox.Bout.CameraFollow do
   end
 
   defp remember(world, match),
-    do: Gml.put(world, match, %{pCameraCenterX: Camera.center_x(world), pCameraCenterY: Camera.center_y(world)})
+    do:
+      Gml.put(world, match, %{
+        pCameraCenterX: Camera.center_x(world),
+        pCameraCenterY: Camera.center_y(world)
+      })
 
-  defp room_width(world), do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(0)
-  defp room_height(world), do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(1)
+  defp room_width(world),
+    do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(0)
+
+  defp room_height(world),
+    do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(1)
 end

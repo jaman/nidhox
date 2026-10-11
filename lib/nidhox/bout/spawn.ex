@@ -78,8 +78,13 @@ defmodule Nidhox.Bout.Spawn do
   @spec reset_timer(World.t(), number()) :: World.t()
   def reset_timer(%World{} = world, delay) do
     case Gml.first(world, "Match") do
-      nil -> world
-      match -> Gml.put(world, match, %{spawnTimer: if(delay > @least_delay, do: delay, else: @least_delay)})
+      nil ->
+        world
+
+      match ->
+        Gml.put(world, match, %{
+          spawnTimer: if(delay > @least_delay, do: delay, else: @least_delay)
+        })
     end
   end
 
@@ -160,8 +165,15 @@ defmodule Nidhox.Bout.Spawn do
 
     world =
       case Gml.nearest(world, {x, y}, "RespawnPoint") do
-        nil -> world
-        point -> World.update(world, man, &%{&1 | x: World.fetch(world, point).x, y: World.fetch(world, point).y})
+        nil ->
+          world
+
+        point ->
+          World.update(
+            world,
+            man,
+            &%{&1 | x: World.fetch(world, point).x, y: World.fetch(world, point).y}
+          )
       end
 
     %Instance{x: x, y: y} = World.fetch(world, man)
@@ -193,11 +205,15 @@ defmodule Nidhox.Bout.Spawn do
         nil
 
       men ->
-        Enum.max_by(men, fn id ->
-          %Instance{x: ix, y: iy} = World.fetch(world, id)
-          if id == man, do: -1, else: (ix - x) * (ix - x) + (iy - y) * (iy - y)
-        end)
+        Enum.max_by(men, &squared_distance(world, &1, man, {x, y}))
     end
+  end
+
+  defp squared_distance(_world, man, man, _point), do: -1
+
+  defp squared_distance(world, id, _man, {x, y}) do
+    %Instance{x: ix, y: iy} = World.fetch(world, id)
+    (ix - x) * (ix - x) + (iy - y) * (iy - y)
   end
 
   @doc "How many fencers are up, not collapsing (`howManyPlayersLeft`)."

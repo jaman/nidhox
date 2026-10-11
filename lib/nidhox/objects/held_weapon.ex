@@ -89,7 +89,10 @@ defmodule Nidhox.Objects.HeldWeapon do
   defp sword_sprite(world, mother) do
     on_stairs =
       World.fetch(world, mother) != nil and
-        World.object(world, World.fetch(world, mother).object).name in ["YellowPlayer", "OrangePlayer"]
+        World.object(world, World.fetch(world, mother).object).name in [
+          "YellowPlayer",
+          "OrangePlayer"
+        ]
 
     case on_stairs && Gml.var(world, mother, :state) do
       31 -> @down_stairs_sprite

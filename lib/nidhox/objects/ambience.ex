@@ -38,16 +38,23 @@ defmodule Nidhox.Objects.Ambience do
   def handlers do
     [
       {"gml_Object_CenterRoomNoises_Create_0", &centre_room/3},
-      {"gml_Object_CenterRoomNoises_Other_10", fn world, self, _other -> hush(world, self, [:leftSound, :rightSound, :wind]) end},
+      {"gml_Object_CenterRoomNoises_Other_10",
+       fn world, self, _other -> hush(world, self, [:leftSound, :rightSound, :wind]) end},
       {"gml_Object_BGFireRoomNoise_Create_0", &fire_room/3},
-      {"gml_Object_BGFireRoomNoise_Other_10", fn world, self, _other -> hush(world, self, [:fire]) end},
+      {"gml_Object_BGFireRoomNoise_Other_10",
+       fn world, self, _other -> hush(world, self, [:fire]) end},
       {"gml_Object_WaterfallRoomEdges_Create_0", &waterfall_edges/3},
-      {"gml_Object_WaterfallRoomEdges_Other_10", fn world, self, _other -> hush(world, self, [:leftSound, :rightSound]) end},
-      {"gml_Object_WaterfallSounds_Create_0", fn world, self, _other -> follow(world, self, @waterfall) end},
-      {"gml_Object_DroneSounds_Create_0", fn world, self, _other -> follow(world, self, @drone) end}
+      {"gml_Object_WaterfallRoomEdges_Other_10",
+       fn world, self, _other -> hush(world, self, [:leftSound, :rightSound]) end},
+      {"gml_Object_WaterfallSounds_Create_0",
+       fn world, self, _other -> follow(world, self, @waterfall) end},
+      {"gml_Object_DroneSounds_Create_0",
+       fn world, self, _other -> follow(world, self, @drone) end}
     ] ++
-      for object <- ["CenterRoomNoises", "BGFireRoomNoise", "WaterfallRoomEdges"], event <- ["Destroy_0", "Other_5"] do
-        {"gml_Object_#{object}_#{event}", fn world, self, _other -> World.perform(world, self, :other, 10) end}
+      for object <- ["CenterRoomNoises", "BGFireRoomNoise", "WaterfallRoomEdges"],
+          event <- ["Destroy_0", "Other_5"] do
+        {"gml_Object_#{object}_#{event}",
+         fn world, self, _other -> World.perform(world, self, :other, 10) end}
       end
   end
 
@@ -77,8 +84,14 @@ defmodule Nidhox.Objects.Ambience do
 
   defp loop(world, key, sound, {x, y}) do
     case Enum.at(world.data.sounds, sound) do
-      nil -> world
-      %{name: name} -> World.emit(world, Audio.keyed(key, {:recording, name}, {x / @tile, y / @tile}, loop: true))
+      nil ->
+        world
+
+      %{name: name} ->
+        World.emit(
+          world,
+          Audio.keyed(key, {:recording, name}, {x / @tile, y / @tile}, loop: true)
+        )
     end
   end
 

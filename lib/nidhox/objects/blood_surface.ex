@@ -35,7 +35,8 @@ defmodule Nidhox.Objects.BloodSurface do
   def handlers do
     [
       {"gml_Object_BloodSurface_Create_0", &start/3},
-      {"gml_Object_BloodSurface_Other_10", fn world, self, _other -> find_surface(world, self) end},
+      {"gml_Object_BloodSurface_Other_10",
+       fn world, self, _other -> find_surface(world, self) end},
       {"gml_Object_BloodSurface_Alarm_0", &run/3},
       {"gml_Object_BloodSurface_Draw_0", &draw/3},
       {"gml_Object_BloodSurface_Other_5", &free_previous/3},
@@ -66,7 +67,11 @@ defmodule Nidhox.Objects.BloodSurface do
     |> Gml.put(self, %{active: 0})
   end
 
-  defp scaled_size(world, %Instance{sprite_index: sprite, image_xscale: xscale, image_yscale: yscale}) do
+  defp scaled_size(world, %Instance{
+         sprite_index: sprite,
+         image_xscale: xscale,
+         image_yscale: yscale
+       }) do
     case World.sprite(world, sprite) do
       nil -> {0, 0}
       definition -> {elem(definition.size, 0) * xscale, elem(definition.size, 1) * yscale}
@@ -108,7 +113,10 @@ defmodule Nidhox.Objects.BloodSurface do
   end
 
   defp put_in_bank(world, match, key, blood),
-    do: Gml.put(world, match, %{bloodbank: Map.put(Gml.var(world, match, :bloodbank, %{}), key, blood)})
+    do:
+      Gml.put(world, match, %{
+        bloodbank: Map.put(Gml.var(world, match, :bloodbank, %{}), key, blood)
+      })
 
   defp clear_surface(world, width, height) do
     {world, surface} = Surfaces.create(world, max(round(width), 1), max(round(height), 1))
@@ -137,7 +145,10 @@ defmodule Nidhox.Objects.BloodSurface do
       previous = Gml.var(world, self, :previous_blood)
       world = Surfaces.copy(world, previous, {0, 0}, blood)
       {strips, world} = strips(world, self, previous)
-      world |> Surfaces.draw(blood, strips) |> Gml.put(self, %{active: Gml.var(world, self, :active) - 1})
+
+      world
+      |> Surfaces.draw(blood, strips)
+      |> Gml.put(self, %{active: Gml.var(world, self, :active) - 1})
     else
       world
     end
