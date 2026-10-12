@@ -4,9 +4,33 @@
 
 ### Fixed
 
+- QUIT TO TITLE SCREEN chosen by a host serving the game over ssh no longer leaves the ssh
+  players' terminals stuck on the game: each of their clients is asked to quit, as their
+  own LEAVE GAME does, and the ssh server stops once they have left (or after half a
+  second), where it stopped at once and cut their sessions off.
+
+### Changed
+
+- ONLINE VERSUS: the joining machine runs its own world, following the host's
+  (`Cauldron2D.World`'s `:follow`). Only the players' joins and input cross between the
+  machines, about 170 bytes a tick, and each machine runs and draws the game itself.
+  `Nidhox.Game` gives `export/1`, `restore/1` and `checksum/1`, and a following state
+  carries out none of `Nidhox.Online`'s effects.
+
+### Removed
+
+- Sending a player on another machine the surfaces' operations, with
+  `Nidhox.Client.join_props/1` and `Nidhox.Client.received/3`.
+
+## [0.1.2]
+
+### Fixed
+
 - A player joined from another machine is sent the surfaces' operations, which their
   client replays onto its own copy, not the surfaces' pixels every frame: a frame to them
   is about 3 KB where it was about 1 MB.
+
+## [0.1.1]
 
 ### Changed
 

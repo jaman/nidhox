@@ -84,6 +84,11 @@ defmodule Nidhox.Flow do
   a finished match goes back to the ladder. OPTIONS and QUIT TO DESKTOP ask the client of
   the player who chose
   them to open the game's options or to quit (`ask/3`).
+
+  QUIT TO TITLE SCREEN chosen by the host while it serves the game over ssh asks the client
+  of each player connected that way to quit, as their own LEAVE GAME does, and shows the
+  title; the ssh server stops once they have left, or after `@ask_steps` steps, so each
+  of those players' sessions ends as their own quitting ends it.
   """
 
   alias Cauldron2D.Distribution
@@ -348,7 +353,7 @@ defmodule Nidhox.Flow do
   returned unchanged.
   """
   @spec opponent_gone(map()) :: map()
-  def opponent_gone(state), do: state |> departed() |> forfeited()
+  def opponent_gone(state), do: state |> departed() |> closed() |> forfeited()
 
   defp forfeited(%{screen: screen} = state) when screen in @played_online do
     if Online.hosting?(state) and not opponent?(state), do: forfeit(state), else: state
@@ -598,7 +603,7 @@ defmodule Nidhox.Flow do
   defp quit_to_title(state, side) do
     case remote_owner(state, side) do
       nil ->
-        state |> killed(["Match", "Tournament"]) |> title()
+        state |> killed(["Match", "Tournament"]) |> left_for_title()
 
       owner ->
         state = state |> forfeit_result() |> killed(["Match"]) |> ask(side, :quit) |> waiting()
@@ -614,6 +619,42 @@ defmodule Nidhox.Flow do
         }
     end
   end
+
+  defp left_for_title(%{online: %{ssh: ssh}} = state) when ssh != nil do
+    case ssh_players(state) do
+      [] -> title(state)
+      players -> sent_away(state, players)
+    end
+  end
+
+  defp left_for_title(state), do: title(state)
+
+  defp ssh_players(state) do
+    for {_id, %{side: side, owner: owner} = player} <- state.players,
+        side != nil and Online.remote_player?(state, player),
+        do: {side, owner}
+  end
+
+  defp sent_away(state, players) do
+    state = Enum.reduce(players, state, fn {side, _owner}, state -> ask(state, side, :quit) end)
+    owners = Enum.map(players, &elem(&1, 1))
+
+    online = %{
+      state.online
+      | quitting: owners ++ state.online.quitting,
+        closing: state.steps + @ask_steps
+    }
+
+    enter(%{state | screen: :title, menu: nil, timer: 0, online: online}, :title)
+  end
+
+  defp closed(%{online: %{closing: nil}} = state), do: state
+
+  defp closed(%{online: %{closing: until, quitting: quitting} = online} = state)
+       when quitting == [] or state.steps > until,
+       do: offline(%{state | online: %{online | closing: nil, quitting: []}})
+
+  defp closed(state), do: state
 
   defp remote_owner(state, side) do
     Enum.find_value(state.players, fn {_id, player} ->

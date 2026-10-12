@@ -22,6 +22,9 @@ defmodule Nidhox.Online do
     * `ssh_port` — the port to offer for serving over ssh, `nil` for any free one
     * `quitting` — the players from another machine asked to quit (`Nidhox.Flow`), not
       counted as joining while they are still on their way out
+    * `closing` — `nil`, or the step until which hosting goes on while the players asked
+      to quit leave, so each one's session ends as their own quitting ends it; hosting
+      stops once they have all left or that step has passed (`Nidhox.Flow`)
 
   Effects:
 
@@ -67,7 +70,8 @@ defmodule Nidhox.Online do
             %{server: Server.t(), addresses: [String.t()], port: pos_integer()}
             | nil,
           ssh_port: pos_integer() | nil,
-          quitting: [term()]
+          quitting: [term()],
+          closing: non_neg_integer() | nil
         }
 
   @doc """
@@ -86,7 +90,8 @@ defmodule Nidhox.Online do
       port: port,
       ssh: nil,
       ssh_port: ssh_port,
-      quitting: []
+      quitting: [],
+      closing: nil
     }
 
   @doc "Whether this machine hosts ONLINE VERSUS, a player of its bouts playing from another."
@@ -102,8 +107,14 @@ defmodule Nidhox.Online do
   @spec name() :: String.t()
   def name, do: @name
 
-  @doc "`state` with its `effects` carried out and emptied, and the hosts heard refreshed."
+  @doc """
+  `state` with its `effects` carried out and emptied, and the hosts heard refreshed. A
+  state that follows a host on another machine (`following: true`, `Nidhox.Game.restore/1`)
+  has its effects emptied without carrying them out: the host carries out its own.
+  """
   @spec perform(map()) :: map()
+  def perform(%{following: true} = state), do: %{state | effects: []}
+
   def perform(%{effects: effects} = state) do
     effects
     |> Enum.reverse()
@@ -111,8 +122,9 @@ defmodule Nidhox.Online do
     |> refresh()
   end
 
-  @doc "`state` after joining the host its `online.joining` names, if any."
+  @doc "`state` after joining the host its `online.joining` names, if any; a following state joins none."
   @spec pending(map()) :: map()
+  def pending(%{following: true} = state), do: state
   def pending(%{online: %{joining: nil}} = state), do: state
 
   def pending(%{online: %{joining: {address, code, side}} = online} = state) do
