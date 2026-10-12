@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+
+- A player joined from another machine is sent the surfaces' operations, which their
+  client replays onto its own copy, not the surfaces' pixels every frame: a frame to them
+  is about 3 KB where it was about 1 MB.
+
 ### Changed
 
 - How the picture reaches a terminal is chosen by the Cauldron client

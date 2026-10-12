@@ -23,14 +23,18 @@ defmodule Nidhox.Client do
 
   The world is this machine's NidhOX world, or with the mount prop `source:
   {:node, node}` the NidhOX world of that connected node (ONLINE VERSUS's joining,
-  `Nidhox.Online`).
+  `Nidhox.Online`). The client joins with its own node (`join_props/1`), and a world on
+  another machine then sends it the surfaces' operations instead of their pixels
+  (`Nidhox.Game`); `received/3` replays them onto the client's own copy, a
+  `Cauldron2D.GameMaker.Surfaces.Mirror`, and puts its rasters in the view.
   """
 
   @behaviour Cauldron2D.Client.Game
 
   @atlas :nidhox
   alias Cauldron2D.DrawList
-  alias Cauldron2D.GameMaker.{Shapes, TileLayers}
+  alias Cauldron2D.GameMaker.{Shapes, Surfaces, TileLayers}
+  alias Cauldron2D.GameMaker.Surfaces.Mirror
   alias Nidhox.{Assets, Controls, Options, TileLayerCache, Typing}
 
   @impl true
@@ -72,6 +76,30 @@ defmodule Nidhox.Client do
 
   @impl true
   def chat?, do: false
+
+  @impl true
+  def join_props(_props), do: %{node: node()}
+
+  @impl true
+  def received(view, events, mirror) do
+    {surface_events, others} = Enum.split_with(events, &match?({:surfaces, _ops}, &1))
+    ops = Enum.flat_map(surface_events, fn {:surfaces, ops} -> ops end)
+    mirrored(view, others, ops, mirror)
+  end
+
+  defp mirrored(%{surfaces: _rasters} = view, events, _ops, mirror), do: {view, events, mirror}
+
+  defp mirrored(view, events, ops, mirror) when is_map(view) do
+    mirror = Surfaces.replay(mirror || new_mirror(), ops)
+    {Map.put(view, :surfaces, Surfaces.rasters(mirror)), events, mirror}
+  end
+
+  defp mirrored(view, events, _ops, mirror), do: {view, events, mirror}
+
+  defp new_mirror do
+    %Assets{data: data} = Assets.get()
+    Mirror.new(data, &Map.get(Assets.get().pictures, &1))
+  end
 
   @impl true
   def lobby?, do: false

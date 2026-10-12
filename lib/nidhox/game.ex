@@ -29,6 +29,13 @@ defmodule Nidhox.Game do
   `view`, `window`, `screen`, `area` — with the viewer's `side` and `ask`, what the game
   asks of the viewer's client (`Nidhox.Flow.ask/3`), or `nil`.
 
+  A player whose join props name another node as theirs (`:node`, which
+  `Nidhox.Client.join_props/1` sends) plays from another machine: their view has no
+  `surfaces`, and the surfaces' operations reach every player as `{:surfaces, ops}`
+  events instead (`Cauldron2D.GameMaker.Surfaces.take_ops/1`), the first after such a
+  join `[Surfaces.snapshot/1]`, for their client to replay (`Nidhox.Client.received/3`).
+  While no such player is joined the operations are dropped.
+
   A bout's sounds are sent as events from its objects. Each finished bout sends a
   `{:result, row}` event for every player who fought it, with the player's id and name,
   `won?`, the area and the mode. While the game is paused, and not hosting ONLINE
@@ -87,6 +94,7 @@ defmodule Nidhox.Game do
       timer: 0,
       steps: 0,
       players: %{},
+      remote: MapSet.new(),
       asks: %{},
       ask_number: 0,
       held: Map.new(@sides, &{&1, MapSet.new()}),
@@ -110,12 +118,30 @@ defmodule Nidhox.Game do
       end
 
     state = Map.update!(state, :players, &Map.put_new(&1, id, %{side: nil, owner: owner}))
-    {:ok, %{state | prefs_from: state.prefs_from || id}}
+    state = %{state | prefs_from: state.prefs_from || id}
+    {:ok, joined_from(state, id, Map.get(props, :node))}
+  end
+
+  defp joined_from(state, _id, node) when node in [nil, node()], do: state
+
+  defp joined_from(state, id, _node) do
+    state = surfaces_sent(state)
+    snapshot = {:surfaces, [Surfaces.snapshot(state.world)]}
+    %{state | remote: MapSet.put(state.remote, id), events: [snapshot | state.events]}
+  end
+
+  defp surfaces_sent(state) do
+    {ops, world} = Surfaces.take_ops(state.world)
+    state = %{state | world: world}
+
+    if ops == [] or MapSet.size(state.remote) == 0,
+      do: state,
+      else: %{state | events: [{:surfaces, ops} | state.events]}
   end
 
   @impl true
   def leave(state, id) do
-    state
+    %{state | remote: MapSet.delete(state.remote, id)}
     |> without_player(id)
     |> prefs_passed_on(id)
   end
@@ -225,10 +251,16 @@ defmodule Nidhox.Game do
     |> Map.put(:side, side)
     |> Map.put(:ask, ask(state, id))
     |> remote_pause(state, player)
+    |> without_surfaces(state, id)
+  end
+
+  defp without_surfaces(frame, state, id) do
+    if MapSet.member?(state.remote, id), do: Map.delete(frame, :surfaces), else: frame
   end
 
   @impl true
   def drain_events(state) do
+    state = surfaces_sent(state)
     {outbox, world} = World.take_outbox(state.world)
     {outbox ++ Enum.reverse(state.events), %{state | world: world, events: []}}
   end

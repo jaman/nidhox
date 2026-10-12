@@ -1,7 +1,7 @@
 defmodule Nidhox.MixProject do
   use Mix.Project
 
-  @version "0.1.1"
+  @version "0.1.2"
   @source_url "https://github.com/jaman/nidhox"
 
   def project do
@@ -43,10 +43,10 @@ defmodule Nidhox.MixProject do
 
   defp deps do
     [
-      family(:cauldron_2d, "~> 0.2.4", "../cauldron/cauldron_2d", override: true),
-      family(:cauldron_2d_gamemaker, "~> 0.2.4", "../cauldron/cauldron_2d_gamemaker", []),
-      family(:cauldron_2d_drafter, "~> 0.2.4", "../cauldron/cauldron_2d_drafter", []),
-      family(:linocut, "~> 0.2.4", "../cauldron/linocut", override: true),
+      family(:cauldron_2d, "~> 0.2.5", "../cauldron/cauldron_2d", override: true),
+      family(:cauldron_2d_gamemaker, "~> 0.2.5", "../cauldron/cauldron_2d_gamemaker", []),
+      family(:cauldron_2d_drafter, "~> 0.2.5", "../cauldron/cauldron_2d_drafter", []),
+      family(:linocut, "~> 0.2.5", "../cauldron/linocut", override: true),
       family(:drafter, "~> 0.5.1", "../drafter", override: true),
       family(:french_curve, "~> 0.2.0", "../french_curve", override: true),
       family(:tuning_fork, "~> 0.1.13", "../tuning_fork/tuning_fork", override: true),
