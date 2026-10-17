@@ -10,18 +10,23 @@ defmodule Nidhox.Bout.CameraFollow do
        (right for player 1, left for player 2); in an end room the camera's centre
        also moves down towards the first fencer's height less 20, when more than 10
        off, by 0.3 of the way, at most 8 a step, and never below 100 above the room's
-       bottom. Otherwise the match stays where it is
+       bottom. Otherwise the match moves to the camera's centre across
     3. the camera's centre moves across towards the match, at most 8 pixels a step — at
        once on the room's first frame (`firstFrameOfRoom`, then cleared) — while any
        fencer exists, and is kept inside the room
-    4. every `ParallaxObject` moves across by the camera's move since last frame ×
+    4. in the wide view of the castle stairs (`Nidhox.Bout.Spiral`) with a fencer up,
+       the camera's centre moves down towards the middle of the fencers' heights less
+       32 (half the sum of their heights with more than one up and somebody leading,
+       the one fencer's height less 32 with one up), at most 8 a step and at once on
+       the room's first frame
+    5. every `ParallaxObject` moves across by the camera's move since last frame ×
        its depth (its `overrideDepth` when that is set) / 400 × 0.7, the move measured
-       from `pCameraCenterX`; then `pCameraCenterX` and `pCameraCenterY` are the
-       camera's centre
+       from the global `parallaxCam`; then `pCameraCenterX`, `pCameraCenterY` and
+       `parallaxCam` are the camera's centre
   """
 
   alias Cauldron2D.GameMaker.{Instance, World}
-  alias Nidhox.Bout.{Camera, Outcome, RightOfWay, Spawn}
+  alias Nidhox.Bout.{Camera, Outcome, RightOfWay, Spawn, Spiral}
   alias Nidhox.Gml
 
   @ahead 64
@@ -34,16 +39,21 @@ defmodule Nidhox.Bout.CameraFollow do
   @parallax 0.7
   @per_depth 400
   @furthest_move 640_000
+  @spiral_lift 32
 
   @doc "The world after the camera follows the match `match` (`manageCamera`)."
   @spec manage(World.t(), non_neg_integer()) :: World.t()
   def manage(%World{} = world, match) do
+    first_frame? = Gml.truthy?(Gml.var(world, match, :firstFrameOfRoom))
+    lone = Spawn.one_left(world)
+
     world
     |> hold_players(match)
-    |> place_match(match)
+    |> place_match(match, lone)
     |> move_camera(match)
     |> keep_in_room()
-    |> parallax(match)
+    |> follow_height(match, lone, first_frame?)
+    |> parallax()
     |> remember(match)
   end
 
@@ -59,21 +69,24 @@ defmodule Nidhox.Bout.CameraFollow do
     if World.fetch(world, man), do: RightOfWay.stay_in_view(world, man, match), else: world
   end
 
-  defp place_match(world, match) do
+  defp place_match(world, match, lone) do
     leader = Gml.var(world, match, :leadingPlayerIndex)
 
     cond do
       Spawn.players_left(world) > 1 and leader != 0 -> between(world, match)
-      (lone = Spawn.one_left(world)) != nil -> ahead_of(world, match, lone, leader)
-      true -> world
+      lone != nil -> ahead_of(world, match, lone, leader)
+      true -> World.update(world, match, &%{&1 | x: Camera.center_x(world)})
     end
   end
 
   defp between(world, match) do
-    men = Enum.map(Gml.all(world, "Man"), &World.fetch(world, &1))
-    across = men |> Enum.map(& &1.x) |> Enum.sum()
-    down = men |> Enum.map(& &1.y) |> Enum.sum()
+    {across, down} = fencer_sums(world)
     World.update(world, match, &%{&1 | x: across / 2, y: down / 2 + @below_middle})
+  end
+
+  defp fencer_sums(world) do
+    men = Enum.map(Gml.all(world, "Man"), &World.fetch(world, &1))
+    {men |> Enum.map(& &1.x) |> Enum.sum(), men |> Enum.map(& &1.y) |> Enum.sum()}
   end
 
   defp ahead_of(world, match, lone, leader) do
@@ -118,14 +131,43 @@ defmodule Nidhox.Bout.CameraFollow do
     if Camera.right(world) > width, do: Camera.put_right(world, width), else: world
   end
 
-  defp parallax(world, match) do
-    diff = Camera.center_x(world) - Gml.var(world, match, :pCameraCenterX, Camera.center_x(world))
+  defp follow_height(world, match, lone, first_frame?) do
+    if Spiral.active?(world) and Gml.exists?(world, "Man"),
+      do: raise_to(world, wanted_height(world, match, lone), first_frame?),
+      else: world
+  end
+
+  defp wanted_height(world, match, lone) do
+    leader = Gml.var(world, match, :leadingPlayerIndex)
+
+    cond do
+      Spawn.players_left(world) > 1 and leader != 0 ->
+        {_across, down} = fencer_sums(world)
+        down / 2 - @spiral_lift
+
+      lone != nil ->
+        World.fetch(world, lone).y - @spiral_lift
+
+      true ->
+        Camera.center_y(world)
+    end
+  end
+
+  defp raise_to(world, wanted, true), do: Camera.put_center_y(world, wanted)
+
+  defp raise_to(world, wanted, false) do
+    centre = Camera.center_y(world)
+    Camera.put_center_y(world, centre + Gml.clamp(wanted - centre, -@steepest, @steepest))
+  end
+
+  defp parallax(world) do
+    diff = Camera.center_x(world) - World.global(world, :parallaxCam, Camera.center_x(world))
 
     if abs(diff) < @furthest_move and abs(diff) > 0 do
       world
       |> Gml.all("ParallaxObject")
       |> Enum.reduce(world, fn id, world ->
-        World.update(world, id, &%{&1 | x: &1.x + diff * depth(&1) / @per_depth * @parallax})
+        World.update(world, id, &%{&1 | x: &1.x + diff * (depth(&1) / @per_depth) * @parallax})
       end)
     else
       world
@@ -137,12 +179,14 @@ defmodule Nidhox.Bout.CameraFollow do
     if Gml.truthy?(override), do: override, else: depth
   end
 
-  defp remember(world, match),
-    do:
-      Gml.put(world, match, %{
-        pCameraCenterX: Camera.center_x(world),
-        pCameraCenterY: Camera.center_y(world)
-      })
+  defp remember(world, match) do
+    world
+    |> Gml.put(match, %{
+      pCameraCenterX: Camera.center_x(world),
+      pCameraCenterY: Camera.center_y(world)
+    })
+    |> World.put_global(:parallaxCam, Camera.center_x(world))
+  end
 
   defp room_width(world),
     do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(0)

@@ -9,7 +9,10 @@ defmodule Nidhox.Bout.Input do
   `record/3` is `updateMatchInput` for players at this machine: once a frame
   (`System.frame` past `Match.lastFramePolled`) it reads each player's buttons and keeps
   them in `Match.inputMap` under the frame — when the player has nothing kept yet, when
-  the frame is a multiple of 60, or when the buttons differ from the last kept.
+  the frame is a multiple of 60, or when the buttons differ from the last kept. It reads
+  nothing in a flow the game keeps no buttons in (`System.flow` other than 1, 2, 3, 4,
+  656686433, 9836834, 62831853 and 4890734). A match starts from `initial_map/0`, which
+  holds every button up at frame 0.
 
   `check/6` is `checkButton(player, button, window, pressed)`. It finds the buttons kept
   last at or before `frame − window`; with none, the button is not down. Then over the
@@ -19,8 +22,8 @@ defmodule Nidhox.Bout.Input do
     * not pressed: true if the button is down at the start or on any kept frame
 
   `down?/4` is `checkPlayerIndexButtonDown` (the current frame) and `pressed?/4`
-  `checkPlayerIndexButtonPressed` (a window of 1), each false for a button a variant
-  holds back (`variantInterrupt`): up under throws-only unless down is held, down in
+  `checkPlayerIndexButtonPressed` (a window of 1), each true for a button a variant
+  holds down (`variantInterrupt`): up under throws-only unless down is held, down in
   baby mode, and jump in skippy mode while the player's fencer is on the ground moving
   faster than 1.1 a step.
   """
@@ -38,6 +41,7 @@ defmodule Nidhox.Bout.Input do
   @up 2
   @down 3
   @jump 4
+  @recorded_flows [1, 2, 3, 4, 656_686_433, 9_836_834, 62_831_853, 4_890_734]
 
   @doc """
   The world with the buttons `held` (`%{player => MapSet of actions}`) kept for the
@@ -47,7 +51,8 @@ defmodule Nidhox.Bout.Input do
   def record(%World{} = world, match, held) do
     frame = System.get(world, :frame)
 
-    if frame > Gml.var(world, match, :lastFramePolled, -1) do
+    if System.get(world, :flow) in @recorded_flows and
+         frame > Gml.var(world, match, :lastFramePolled, -1) do
       map = Gml.var(world, match, :inputMap, %{})
       map = Enum.reduce(@players, map, &keep(&2, &1, frame, buttons(Map.get(held, &1))))
       Gml.put(world, match, %{lastFramePolled: frame, inputMap: map})
@@ -56,18 +61,22 @@ defmodule Nidhox.Bout.Input do
     end
   end
 
-  @doc "Whether `player`'s `button` is down now, unless a variant holds it back (`checkPlayerIndexButtonDown`)."
+  @doc "The kept buttons of a new match: every button up at frame 0, for both players."
+  @spec initial_map() :: %{integer() => [{integer(), tuple()}]}
+  def initial_map, do: Map.new(@players, &{&1, [{0, buttons(nil)}]})
+
+  @doc "Whether `player`'s `button` is down now, or a variant holds it down (`checkPlayerIndexButtonDown`)."
   @spec down?(World.t(), non_neg_integer(), integer(), non_neg_integer()) :: boolean()
   def down?(world, self, player, button),
     do:
-      not interrupted?(world, self, player, button) and
+      interrupted?(world, self, player, button) or
         check(world, self, player, button, 0, false)
 
-  @doc "Whether `player`'s `button` was just pressed, unless a variant holds it back (`checkPlayerIndexButtonPressed`)."
+  @doc "Whether `player`'s `button` was just pressed, or a variant holds it down (`checkPlayerIndexButtonPressed`)."
   @spec pressed?(World.t(), non_neg_integer(), integer(), non_neg_integer()) :: boolean()
   def pressed?(world, self, player, button),
     do:
-      not interrupted?(world, self, player, button) and
+      interrupted?(world, self, player, button) or
         check(world, self, player, button, 1, true)
 
   @doc "`checkButton(player, button, window, pressed)` asked by instance `self`."

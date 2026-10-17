@@ -6,9 +6,9 @@ defmodule Nidhox.Objects.Crowd do
       spectator (`o_crowd`) every 14 pixels, rows from the bottom up and from 0.25 of a
       place across, at `(x + 5 + 14i + random_range(−4, 4), y + 8 + 14j)` while `i <
       sprite_width / 14 − 1`; then, about the spectators' depth `d`, the stands as tiles
-      (`tile_add`): `bgStands` (353) filling it every 16 pixels at `d + 1`; from half a
-      tile left of it to its right edge, `fgStands` (354) 8 pixels above its bottom at
-      `d − 1` and `bgBackStands` (356) 16 above its top at `d + 2`; `bgSideStands` (355)
+      (`tile_add`): `bgStands` filling it every 16 pixels at `d + 1`; from half a
+      tile left of it to its right edge, `fgStands` 8 pixels above its bottom at
+      `d − 1` and `bgBackStands` 16 above its top at `d + 2`; `bgSideStands`
       down both sides every 8 pixels from 8 above its top at `d + 1`. A `CheerControl` at
       its middle, and it is gone
     * `o_crowd` create: its sprite's origin (`xOffset`, `yOffset`), `state` −1,
@@ -23,7 +23,7 @@ defmodule Nidhox.Objects.Crowd do
       `choose(sManCheering, sManShouting, sManHopping, sManJammin)`. It shows `frame`
   """
 
-  alias Cauldron2D.GameMaker.{Colour, Instance, World}
+  alias Cauldron2D.GameMaker.{Colour, Data, Instance, World}
   alias Nidhox.Gml
   alias Nidhox.Objects.RoomCodes
 
@@ -31,16 +31,16 @@ defmodule Nidhox.Objects.Crowd do
   @tile 16
   @side 8
   @spread 4
-  @stands 353
-  @front 354
-  @sides 355
-  @back 356
+  @stands "bgStands"
+  @front "fgStands"
+  @sides "bgSideStands"
+  @back "bgBackStands"
   @sitting 57
   @standing 34
   @cheering 6
-  @sit_sprites [175, 176]
-  @cheer_sprite 177
-  @cheers [177, 179, 180, 181]
+  @sit_sprites ["sManSitToStand", "sManSitToCheer"]
+  @cheer_sprite "sManCheering"
+  @cheers ["sManCheering", "sManShouting", "sManHopping", "sManJammin"]
   @rate 0.3
   @notice 120
 
@@ -103,7 +103,7 @@ defmodule Nidhox.Objects.Crowd do
         world ->
           World.add_tile(
             world,
-            @stands,
+            sprite(world, @stands),
             {0, 0, @tile, @tile},
             {x + column * @tile, y + row * @tile},
             depth + 1
@@ -115,13 +115,13 @@ defmodule Nidhox.Objects.Crowd do
         world ->
           world
           |> World.add_tile(
-            @front,
+            sprite(world, @front),
             {0, 0, @tile, 2 * @tile},
             {x + column * @tile, y + height - 8},
             depth - 1
           )
           |> World.add_tile(
-            @back,
+            sprite(world, @back),
             {0, 0, @tile, @tile},
             {x + column * @tile, y - @tile},
             depth + 2
@@ -131,10 +131,22 @@ defmodule Nidhox.Objects.Crowd do
     for row <- upto(-1, height / @side), reduce: world do
       world ->
         world
-        |> World.add_tile(@sides, {0, 0, @side, @side}, {x - @side, y + row * @side}, depth + 1)
-        |> World.add_tile(@sides, {0, 0, @side, @side}, {x + width, y + row * @side}, depth + 1)
+        |> World.add_tile(
+          sprite(world, @sides),
+          {0, 0, @side, @side},
+          {x - @side, y + row * @side},
+          depth + 1
+        )
+        |> World.add_tile(
+          sprite(world, @sides),
+          {0, 0, @side, @side},
+          {x + width, y + row * @side},
+          depth + 1
+        )
     end
   end
+
+  defp sprite(world, name), do: Data.index(world.data, :sprites, name)
 
   defp upto(from, below), do: from |> Stream.iterate(&(&1 + 1)) |> Enum.take_while(&(&1 < below))
 
@@ -203,12 +215,13 @@ defmodule Nidhox.Objects.Crowd do
   end
 
   defp dress(world, self, @sitting) do
-    {sprite, world} = Gml.choose(world, @sit_sprites)
+    {name, world} = Gml.choose(world, @sit_sprites)
+    sprite = sprite(world, name)
     World.update(world, self, &%{&1 | sprite_index: sprite})
   end
 
   defp dress(world, self, @cheering),
-    do: World.update(world, self, &%{&1 | sprite_index: @cheer_sprite})
+    do: World.update(world, self, &%{&1 | sprite_index: sprite(world, @cheer_sprite)})
 
   defp dress(world, _self, _state), do: world
 
@@ -238,7 +251,8 @@ defmodule Nidhox.Objects.Crowd do
     world = Gml.put(world, self, %{frame: frame})
 
     if Gml.gt?(frame, frames(world, self) - 1) do
-      {sprite, world} = Gml.choose(world, @cheers)
+      {name, world} = Gml.choose(world, @cheers)
+      sprite = sprite(world, name)
       world |> World.update(self, &%{&1 | sprite_index: sprite}) |> Gml.put(self, %{frame: 0})
     else
       world

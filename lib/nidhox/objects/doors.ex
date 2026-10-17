@@ -7,13 +7,16 @@ defmodule Nidhox.Objects.Doors do
 
     * create: `center` 6, `frame` at it (shut), `opening` 3 (shut), `maxTimer` 3 and
       `timer` at it; `DoorwayDark` is tinted `make_color_hsv(0, 0, 200)`
-    * a fencer, a shown held sword, a shown thrown sword or a cat touching a shut door
-      opens it away from itself (`opening` 0 when it is to the door's right, else 1),
-      heard (2); touching an open door keeps it open (`timer` back to `maxTimer`)
-    * user event 2, each match frame: opening 0 swings it 0.6 frames a step towards 0,
+    * user event 2, each match frame, first looks for a toucher: the first of players 1
+      and 2 (`findManByPlayerIndex`) whose fencer overlaps the door, else whose shown
+      held sword (`weapon`) does; else the first shown sword in the match's
+      `flyingWeapons` that overlaps it. A toucher of a shut door opens it away from
+      itself (`opening` 0 when it is to the door's right, else 1), heard (`sndSnap`);
+      a toucher of an open door keeps it open (`timer` back to `maxTimer`). Then
+      opening 0 swings it 0.6 frames a step towards 0,
       opening 1 0.6 towards its last frame, shut holds it at `center`; closing (any
       other `opening`) it moves back towards `center` by at most 0.45 a step, and once
-      within 0.45 it is shut, heard (2). Its frame is held to its sprite's frames. Swung
+      within 0.45 it is shut, heard (`sndSnap`). Its frame is held to its sprite's frames. Swung
       all the way while opening, it waits out `timer`; then, unless the nearest fencer
       stands within 16 pixels across or the nearest held sword, shown, within 21, it
       starts closing (`opening` −1, `timer` back to `maxTimer`). It shows `frame`
@@ -23,16 +26,19 @@ defmodule Nidhox.Objects.Doors do
   down. A fencer, or an open door, touching it sets `touchTimer` to 2.
   """
 
-  alias Cauldron2D.GameMaker.{Colour, Instance, World}
+  alias Cauldron2D.GameMaker.{Collide, Colour, Data, Instance, World}
+  alias Cauldron2D.{Overlap, Shape}
   alias Nidhox.Bout.Sound
   alias Nidhox.Gml
+  alias Nidhox.Man.Query
 
   @centre 6
   @shut 3
   @max_timer 3
   @swing 0.6
   @settle 0.75
-  @sound 2
+  @snap "sndSnap"
+  @players [1, 2]
   @man_clear 16
   @sword_clear 21
 
@@ -42,10 +48,6 @@ defmodule Nidhox.Objects.Doors do
     [
       {"gml_Object_Doorway_Create_0", &start/3},
       {"gml_Object_DoorwayDark_Create_0", &dark/3},
-      {"gml_Object_Doorway_Collision_Man", &touched/3},
-      {"gml_Object_Doorway_Collision_Cat", &touched/3},
-      {"gml_Object_Doorway_Collision_HeldWeapon", &touched_by_sword/3},
-      {"gml_Object_Doorway_Collision_FlyingWeapon", &touched_by_sword/3},
       {"gml_Object_Doorway_Other_12", &update/3},
       {"gml_Object_HideFacade_Create_0",
        fn world, self, _other -> Gml.put(world, self, %{touchTimer: 0}) end},
@@ -73,24 +75,8 @@ defmodule Nidhox.Objects.Doors do
     |> World.update(self, &%{&1 | image_blend: Colour.hsv(0, 0, 200)})
   end
 
-  defp touched(world, self, other) do
-    if Gml.var(world, self, :opening) == @shut do
-      %Instance{x: x, y: y} = World.fetch(world, self)
-      %Instance{x: other_x} = World.fetch(world, other)
-
-      world
-      |> Gml.put(self, %{opening: if(other_x >= x, do: 0, else: 1)})
-      |> Sound.play(@sound, {x, y})
-    else
-      Gml.put(world, self, %{timer: Gml.var(world, self, :maxTimer)})
-    end
-  end
-
-  defp touched_by_sword(world, self, other) do
-    if World.fetch(world, other).visible, do: touched(world, self, other), else: world
-  end
-
   defp update(world, self, _other) do
+    world = touch(world, self)
     world = swing(world, self, Gml.var(world, self, :opening))
     last = frames(world, self) - 1
     frame = Gml.clamp(Gml.var(world, self, :frame), 0, last)
@@ -117,6 +103,75 @@ defmodule Nidhox.Objects.Doors do
     end
   end
 
+  defp touch(world, self) do
+    case toucher(world, self) do
+      nil -> world
+      other -> touched(world, self, other)
+    end
+  end
+
+  defp touched(world, self, other) do
+    if Gml.var(world, self, :opening) == @shut do
+      %Instance{x: x, y: y} = World.fetch(world, self)
+      %Instance{x: other_x} = World.fetch(world, other)
+
+      world
+      |> Gml.put(self, %{opening: if(other_x >= x, do: 0, else: 1)})
+      |> play_snap({x, y})
+    else
+      Gml.put(world, self, %{timer: Gml.var(world, self, :maxTimer)})
+    end
+  end
+
+  defp toucher(world, self),
+    do: Enum.find_value(@players, &player_toucher(world, self, &1)) || flying_toucher(world, self)
+
+  defp player_toucher(world, self, player) do
+    case Query.by_player(world, player) do
+      nil -> nil
+      man -> if meets?(world, self, man), do: man, else: held_toucher(world, self, man)
+    end
+  end
+
+  defp held_toucher(world, self, man) do
+    weapon = Gml.var(world, man, :weapon, -4)
+    if shown_and_meeting?(world, self, weapon), do: weapon
+  end
+
+  defp flying_toucher(world, self) do
+    case Gml.first(world, "Match") do
+      nil ->
+        nil
+
+      match ->
+        world
+        |> Gml.var(match, :flyingWeapons, [])
+        |> Enum.find(&shown_and_meeting?(world, self, &1))
+    end
+  end
+
+  defp shown_and_meeting?(world, self, other) do
+    case World.fetch(world, other) do
+      %Instance{visible: true} -> meets?(world, self, other)
+      _absent_or_hidden -> false
+    end
+  end
+
+  defp meets?(world, self, other) do
+    with %Instance{x: x, y: y} = door <- World.fetch(world, self),
+         %Instance{x: other_x, y: other_y} = body <- World.fetch(world, other),
+         %Shape{} = mine <- Collide.shape(world, door, {x, y}),
+         %Shape{} = theirs <- Collide.shape(world, body, {other_x, other_y}) do
+      Overlap.shapes?(mine, theirs)
+    else
+      _no_overlap -> false
+    end
+  end
+
+  defp play_snap(world, position) do
+    Sound.play(world, Data.index(world.data, :sounds, @snap), position)
+  end
+
   defp swing(world, self, 0),
     do: Gml.put(world, self, %{frame: Gml.var(world, self, :frame) - @swing})
 
@@ -132,7 +187,7 @@ defmodule Nidhox.Objects.Doors do
 
     if Gml.lt?(abs(gap) - step, 0) do
       %Instance{x: x, y: y} = World.fetch(world, self)
-      world |> Gml.put(self, %{opening: @shut}) |> Sound.play(@sound, {x, y})
+      world |> Gml.put(self, %{opening: @shut}) |> play_snap({x, y})
     else
       Gml.put(world, self, %{frame: Gml.var(world, self, :frame) + Gml.clamp(gap, -step, step)})
     end

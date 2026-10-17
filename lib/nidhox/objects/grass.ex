@@ -37,7 +37,7 @@ defmodule Nidhox.Objects.Grass do
       `× (… × 0.2 + 1)`
   """
 
-  alias Cauldron2D.GameMaker.{Instance, World}
+  alias Cauldron2D.GameMaker.{Data, Instance, World}
   alias Nidhox.Bout.Camera
   alias Nidhox.Gml
   alias Nidhox.Man.Query
@@ -77,7 +77,7 @@ defmodule Nidhox.Objects.Grass do
     {width, height} = World.sprite(world, sprite).size
     object = World.object_index(world, "Grass")
 
-    Enum.reduce(0..(trunc(width * xscale / @spacing) - 1)//1, world, fn i, world ->
+    Enum.reduce(0..(ceil(width * xscale / @spacing) - 1)//1, world, fn i, world ->
       {world, blade} =
         World.create(world, object, {x + i * @spacing, y + height * yscale - raise_by})
 
@@ -255,7 +255,7 @@ defmodule Nidhox.Objects.Grass do
     end
   end
 
-  defp sprite_index(world, name), do: Enum.find_index(world.data.sprites, &(&1.name == name))
+  defp sprite_index(world, name), do: Data.index(world.data, :sprites, name)
 
   defp frames(world, sprite) do
     case World.sprite(world, sprite) do

@@ -3,17 +3,17 @@ defmodule Nidhox.Objects.Wind do
   The wind surface (`WindSurface`), as the game's code keeps it: a churning cloud texture
   in the cemetery's sky and across the title.
 
-    * create: a canvas and a copy, each `@width` × `@height`, the canvas tiled with
+    * create: a canvas and a second canvas (`canvasB`), each `@width` × `@height`, the canvas tiled with
       `bWindSurface`
     * step: the canvas is copied, then `@passes` times (`@low_passes` at `System.detail`
-      `@low_detail`) a patch of the copy is drawn back onto the canvas: its middle at
+      `@low_detail`) a patch of the second canvas is drawn back onto the canvas: its middle at
       `random(width)`, `random(height)`, nudged by `random_range(1, 3)` and
       `random_range(−2, 1)` when its `type` is `"right"`, else by `random_range(−3, 3)`
       and `random_range(−2, 2)`, each side `random_range(30, 60)`; the instance stands at
       `room_width / 2 − (room_width / 2 − cameraCenterX) × 0.8 − @width / 2`, at the
       camera's top
     * draw: the canvas added at the instance's place, blend and alpha
-    * destroy, room end and game end: its user event 15, the canvas and copy freed
+    * destroy, room end and game end: its user event 15, both canvases freed
 
   The title's menu (`MainMenu`, `Nidhox.Objects.MainMenu`) makes one as it starts, at
   alpha 0.1.
@@ -66,7 +66,7 @@ defmodule Nidhox.Objects.Wind do
 
   defp start(world, self, _other) do
     {world, canvas} = Surfaces.create(world, @width, @height)
-    {world, copy} = Surfaces.create(world, @width, @height)
+    {world, second} = Surfaces.create(world, @width, @height)
     {texture, %{size: {tile_width, tile_height}}} = Assets.sprite!(@texture)
 
     tiles =
@@ -78,25 +78,25 @@ defmodule Nidhox.Objects.Wind do
     |> Surfaces.draw(canvas, tiles)
     |> World.update(
       self,
-      &%{&1 | vars: Map.merge(&1.vars, %{canvas: canvas, copy: copy, type: "right"})}
+      &%{&1 | vars: Map.merge(&1.vars, %{canvas: canvas, canvasB: second, type: "right"})}
     )
   end
 
   defp churn(world, self, other) do
     %Instance{vars: vars} = World.fetch(world, self)
 
-    if Surfaces.exists?(world, vars.canvas) and Surfaces.exists?(world, vars.copy),
+    if Surfaces.exists?(world, vars.canvas) and Surfaces.exists?(world, vars.canvasB),
       do: churned(world, self, vars),
       else: start(world, self, other)
   end
 
-  defp churned(world, self, %{canvas: canvas, copy: copy, type: type}) do
-    world = Surfaces.draw(world, copy, [Surfaces.item(world, canvas, {0, 0})])
+  defp churned(world, self, %{canvas: canvas, canvasB: second, type: type}) do
+    world = Surfaces.draw(world, second, [Surfaces.item(world, canvas, {0, 0})])
 
     passes = if System.get(world, :detail) == @low_detail, do: @low_passes, else: @passes
 
     {patches, world} =
-      Enum.map_reduce(1..passes, world, fn _pass, world -> patch(world, copy, type) end)
+      Enum.map_reduce(1..passes, world, fn _pass, world -> patch(world, second, type) end)
 
     world = Surfaces.draw(world, canvas, Enum.reject(patches, &is_nil/1))
     room_middle = Enum.at(world.data.rooms, world.room).size |> elem(0) |> Kernel./(2)
@@ -104,7 +104,7 @@ defmodule Nidhox.Objects.Wind do
     World.update(world, self, &%{&1 | x: x, y: camera_top(world)})
   end
 
-  defp patch(world, copy, type) do
+  defp patch(world, second, type) do
     {centre_x, world} = Gml.random(world, @width)
     {centre_y, world} = Gml.random(world, @height)
     {{dx, dy}, world} = nudge(world, type)
@@ -113,7 +113,7 @@ defmodule Nidhox.Objects.Wind do
     left = centre_x - width / 2
     top = centre_y - height / 2
 
-    {Surfaces.part_item(world, copy, {left, top, width, height}, {left + dx, top + dy}), world}
+    {Surfaces.part_item(world, second, {left, top, width, height}, {left + dx, top + dy}), world}
   end
 
   defp nudge(world, "right") do
@@ -149,7 +149,7 @@ defmodule Nidhox.Objects.Wind do
   defp free(world, self, _other) do
     vars = World.fetch(world, self).vars
 
-    [Map.get(vars, :canvas), Map.get(vars, :copy)]
+    [Map.get(vars, :canvas), Map.get(vars, :canvasB)]
     |> Enum.reduce(world, fn surface, world ->
       if surface != nil and Surfaces.exists?(world, surface),
         do: Surfaces.free(world, surface),

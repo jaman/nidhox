@@ -3,12 +3,14 @@ defmodule Nidhox.Screen.Levels do
   The level select over `rLevelSelect`, the copy's painted map, as the game's
   `VsLevelSelect` runs it.
 
-    * its areas, in order: Clouds (`"Sky"`), Cemetery, Castle, Wilds, Mines; Castle
-      selected at first, every time
-    * `:up` and `:down` from either side move through them, round from the last to the
-      first; `:attack` or `:start` choose the selected area once more than 4 steps have
-      passed; with no move for 720 steps the select gives up for the main menu.
-      Nothing goes back
+    * its areas, the released levels in order: Clouds (`"Sky"`), Cemetery, Castle,
+      Wilds, Mines; Castle selected at first unless `new/2` is given another
+    * menu buttons from either side (`Nidhox.Screen.MainMenu.any_pressed?/2`): up and
+      down move through the areas, round from the last to the first; select or start
+      chooses the selected area once more than 4 steps have passed; back asks to leave
+      (`:back`)
+    * in CPU BATTLE (`new/2` with an `auto_start` count) the area is chosen by itself
+      when the count, taken down by one a step, reaches 0
     * the view eases 0.1 of the way each step towards the area's point on the map's
       camera path (path 2), its middle kept 160 from the map's sides and 100 from its
       top and bottom (`setCameraToSelectedLevel`)
@@ -20,11 +22,16 @@ defmodule Nidhox.Screen.Levels do
 
   alias Cauldron2D.GameMaker.{Data, World}
   alias Nidhox.Bout.Camera
+  alias Nidhox.Screen.MainMenu
 
   @enforce_keys [:selected]
-  defstruct [:selected, steps: 0, idle: 0]
+  defstruct [:selected, steps: 0, auto_start: -1]
 
-  @type t :: %__MODULE__{selected: String.t(), steps: non_neg_integer(), idle: non_neg_integer()}
+  @type t :: %__MODULE__{
+          selected: String.t(),
+          steps: non_neg_integer(),
+          auto_start: integer()
+        }
 
   @order ["Sky", "Cemetery", "Castle", "Wilds", "Mines"]
   @first "Castle"
@@ -36,17 +43,21 @@ defmodule Nidhox.Screen.Levels do
     "Sky" => "sClouds",
     "Wilds" => "sWilds"
   }
-  @camera_path 2
-  @plate_path 3
+  @camera_path "pLevelSelectCamera"
+  @plate_path "pLevelTitles"
   @ease 0.1
   @side_margin 160
   @top_margin 100
   @wait_steps 4
-  @idle_steps 720
 
-  @doc "A level select with Castle selected."
-  @spec new() :: t()
-  def new, do: %__MODULE__{selected: @first}
+  @doc "A level select with `selected` selected, choosing it by itself after `auto_start` steps when that is above 0."
+  @spec new(String.t(), integer()) :: t()
+  def new(selected \\ @first, auto_start \\ -1),
+    do: %__MODULE__{selected: selected, auto_start: auto_start}
+
+  @doc "The released levels' areas, in the level select's order (`releasedLevels`)."
+  @spec released() :: [String.t()]
+  def released, do: @order
 
   @doc ~s{The game's name for `area` (`getLevelName`): `"Clouds"` for `"Sky"`, else the area's own.}
   @spec name(String.t()) :: String.t()
@@ -60,32 +71,31 @@ defmodule Nidhox.Screen.Levels do
     Enum.at(@order, Integer.mod(index + step, length(@order)))
   end
 
-  @doc "The selected area."
-  @spec selected(t()) :: String.t()
-  def selected(%__MODULE__{selected: area}), do: area
-
   @doc """
-  What the players did this step: `{:choose, area}`, `:given_up` after 720
-  steps with no move, `{:moved, levels}` or `{:stay, levels}`.
+  What the players did this step: `{:choose, area}`, `:back`, `{:moved, levels}` or
+  `{:stay, levels}`.
   """
   @spec input(t(), %{1 => map(), 2 => map()}) ::
-          {:choose, String.t()} | :given_up | {:moved, t()} | {:stay, t()}
+          {:choose, String.t()} | :back | {:moved, t()} | {:stay, t()}
   def input(%__MODULE__{} = levels, players) do
-    pressed = players |> Map.values() |> Enum.flat_map(&MapSet.to_list(&1.pressed))
-    levels = %{levels | steps: levels.steps + 1, idle: levels.idle + 1}
+    levels = %{levels | steps: levels.steps + 1, auto_start: levels.auto_start - 1}
 
     cond do
-      :up in pressed ->
-        {:moved, %{moved(levels, -1) | idle: 0}}
+      MainMenu.any_pressed?(players, 2) ->
+        {:moved, moved(levels, -1)}
 
-      :down in pressed ->
-        {:moved, %{moved(levels, 1) | idle: 0}}
+      MainMenu.any_pressed?(players, 3) ->
+        {:moved, moved(levels, 1)}
 
-      levels.steps > @wait_steps and (:attack in pressed or :start in pressed) ->
+      levels.steps > @wait_steps and
+          (MainMenu.any_pressed?(players, 8) or MainMenu.any_pressed?(players, 10)) ->
         {:choose, levels.selected}
 
-      levels.idle >= @idle_steps ->
-        :given_up
+      levels.auto_start == 0 ->
+        {:choose, levels.selected}
+
+      MainMenu.any_pressed?(players, 9) ->
+        :back
 
       true ->
         {:stay, levels}
@@ -129,7 +139,7 @@ defmodule Nidhox.Screen.Levels do
   defp point(world, path, area) do
     {x, y, _speed} =
       world.data.paths
-      |> Enum.at(path)
+      |> Enum.at(Data.index(world.data, :paths, path))
       |> Map.fetch!(:points)
       |> Enum.at(Map.fetch!(@points, area))
 

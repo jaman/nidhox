@@ -6,22 +6,22 @@ defmodule Nidhox.Objects.Glass do
     * `Window` touching a fencer (`Man`) or a thrown sword (`FlyingWeapon`):
       `shattedDirection` the direction away from it (`point_direction` from the window to
       it, + 180°), and the window is gone
-    * `Window` destroy: the shatter (sound 16) at it; a `GlassFragment` every 3 pixels up
+    * `Window` destroy: the shatter (`sndGlassShatter`) at it; a `GlassFragment` every 3 pixels up
       its height from its place, each sent at `shattedDirection + random_range(−30, 30)`
       at `random_range(2, 4)`
     * `GlassFragment` create: gone in 360 steps (alarm 0), at a still frame
       `irandom(image_number)`, `spin` `random_range(−10, 10)`, gravity 0.3, friction 0.03
     * `GlassFragment` touching a `Block`: it bounces off everything
       (`action_bounce(false, true)`, `Cauldron2D.GameMaker.Collide.bounce/4`); faster than
-      2 it clinks (`choose(13, 14, 15)`); its speed falls to 0.2 of itself
+      2 it clinks (`choose(sndGlassBounce1, sndGlassBounce2, sndGlassBounce3)`); its speed falls to 0.2 of itself
   """
 
   alias Cauldron2D.GameMaker.{Collide, Instance, World}
   alias Nidhox.Bout.Sound
   alias Nidhox.Gml
 
-  @shatter 16
-  @clinks [13, 14, 15]
+  @shatter "sndGlassShatter"
+  @clinks ["sndGlassBounce1", "sndGlassBounce2", "sndGlassBounce3"]
   @every 3
   @spread 30
   @life 360
@@ -56,7 +56,7 @@ defmodule Nidhox.Objects.Glass do
     {_width, height} = World.sprite(world, sprite).size
     direction = Gml.var(world, self, :shattedDirection)
     fragment = World.object_index(world, "GlassFragment")
-    world = Sound.play(world, @shatter, {x, y})
+    world = Sound.play_named(world, @shatter, {x, y})
 
     0
     |> Stream.iterate(&(&1 + @every))
@@ -95,7 +95,7 @@ defmodule Nidhox.Objects.Glass do
     world =
       if speed > 2 do
         {sound, world} = Gml.choose(world, @clinks)
-        Sound.play(world, sound, {x, y})
+        Sound.play_named(world, sound, {x, y})
       else
         world
       end

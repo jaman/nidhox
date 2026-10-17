@@ -8,10 +8,9 @@ defmodule Nidhox.Objects.InstanceCodes do
       `rSkyRightA` `depth` 300 and 200
     * a pedestal in `rWildsRightB`: `depth` 200
     * the wind surface: `type` `"swirly"` in `rSkyLeftA` and `rSkyRightA`;
-      `image_alpha` 0.5 in `rCemeteryCenter`, 0.1 in `rMultiMenu` and `rShowLobbies`
+      `image_alpha` 0.5 in `rCemeteryCenter`, 0.1 in `rMultiMenu`
     * the smasher in `rMinesCenter`: 16 pixels lower
-    * the controls room's title: blended `{255, 160, 64}` (4235519)
-    * the example room's input buttons and dogs: `playerSlot` 2 to 4
+    * the controls room's title: blended `{255, 160, 64}` (4235519) and its `text` "player 2"
   """
 
   alias Cauldron2D.GameMaker.World
@@ -36,12 +35,7 @@ defmodule Nidhox.Objects.InstanceCodes do
     {"rSkyRightA_1", %{backgroundIndex: 1}},
     {"rSkyLeftA_0", %{type: "swirly"}},
     {"rSkyRightA_2", %{type: "swirly"}},
-    {"rExampleRoom_0", %{playerSlot: 2}},
-    {"rExampleRoom_1", %{playerSlot: 2}},
-    {"rExampleRoom_2", %{playerSlot: 3}},
-    {"rExampleRoom_4", %{playerSlot: 3}},
-    {"rExampleRoom_3", %{playerSlot: 4}},
-    {"rExampleRoom_5", %{playerSlot: 4}}
+    {"rControlsRoom_0", %{text: "player 2"}}
   ]
 
   @fields [
@@ -50,7 +44,6 @@ defmodule Nidhox.Objects.InstanceCodes do
     {"rWildsRightB_1", %{depth: 200}},
     {"rCemeteryCenter_0", %{image_alpha: 0.5}},
     {"rMultiMenu_0", %{image_alpha: 0.1}},
-    {"rShowLobbies_0", %{image_alpha: 0.1}},
     {"rControlsRoom_0", %{image_blend: {255, 160, 64}}}
   ]
 

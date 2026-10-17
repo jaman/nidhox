@@ -31,8 +31,8 @@ defmodule Nidhox.Objects.Animals do
       it means to be, below that height it climbs (−0.1, 60 in 100) leaning forward, and
       it steers towards the perch (0.025, 60 in 100), gliding forward (0.01) while
       sinking. Not flying it falls at 0.04. On the ground it stands, slowed (×0.2), and
-      takes off now and then (2 in 100, `vspd` −2); in the air it flies (sprite 10)
-      moving across faster than 0.25 and faster than down, else hovers (8). It slows
+      takes off now and then (2 in 100, `vspd` −2); in the air it flies (`sprBirdFly`)
+      moving across faster than 0.25 and faster than down, else hovers (`sprBirdHover`). It slows
       (×0.998 across, ×0.98 down), keeps to 1 each way and faces its way
     * user event 0 (into a wall): it turns back; user event 1 (into a ceiling) rising, it
       thinks of a new perch; through a doorway or a window it goes back and turns back
@@ -42,7 +42,7 @@ defmodule Nidhox.Objects.Animals do
   these animals do not use, so they go on past the edge.
   """
 
-  alias Cauldron2D.GameMaker.{Colour, Instance, World}
+  alias Cauldron2D.GameMaker.{Colour, Data, Instance, World}
   alias Nidhox.Gml
   alias Nidhox.Man.Physics
   alias Nidhox.Objects.Ear
@@ -51,13 +51,21 @@ defmodule Nidhox.Objects.Animals do
     "Squirrel" => %{
       hop: {2, 0.2, 2.25},
       wait: 0.5,
-      walk: 23,
-      run: 24,
-      stand: 25,
-      jump: 26,
+      walk: "sprSquirrelWalk",
+      run: "sprSquirrelRun",
+      stand: "sprSquirrelStand",
+      jump: "sprSquirrelJump",
       pace: 0.25
     },
-    "Cat" => %{hop: {0.5, 0.8, 9}, wait: 2, walk: 360, run: 360, stand: 373, jump: 366, pace: 1.5}
+    "Cat" => %{
+      hop: {0.5, 0.8, 9},
+      wait: 2,
+      walk: "sprCatWalk",
+      run: "sprCatWalk",
+      stand: "sprCatSit",
+      jump: "sprCatPounce",
+      pace: 1.5
+    }
   }
   @near 64
   @inside 200
@@ -65,10 +73,10 @@ defmodule Nidhox.Objects.Animals do
   @gravity 0.12
   @most_across 1
   @most_down 2.5
-  @flap 10
-  @fly 10
-  @hover 8
-  @stand 9
+  @flap "sndFlap"
+  @fly "sprBirdFly"
+  @hover "sprBirdHover"
+  @stand "sprBirdStand"
 
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
@@ -430,7 +438,10 @@ defmodule Nidhox.Objects.Animals do
     Gml.put(world, self, %{hspd: hspd, vspd: vspd})
   end
 
-  defp sprite(world, self, sprite), do: World.update(world, self, &%{&1 | sprite_index: sprite})
+  defp sprite(world, self, name) do
+    index = Data.index(world.data, :sprites, name)
+    World.update(world, self, &%{&1 | sprite_index: index})
+  end
 
   defp frames(world, self) do
     case World.sprite(world, World.fetch(world, self).sprite_index) do

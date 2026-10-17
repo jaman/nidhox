@@ -6,7 +6,7 @@ defmodule Nidhox.Game do
       Cauldron2D.World.start_link(game: Nidhox.Game, game_opts: [area: "Wilds"], hz: 60)
 
   Options: `:area` (`"Cemetery"`, `"Castle"`, `"Mines"`, `"Sky"`, `"Wilds"`; default
-  `"Cemetery"`), the area the level select starts on; `:port`, the port ONLINE VERSUS's
+  `"Cemetery"`), the area the level select starts on; `:port`, the port ONLINE's
   host listens on for the joining machine (default any free port); `:seed`, the game's
   random number seed (default the clock). `Nidhox.Assets.load/1` must have run first.
 
@@ -16,12 +16,26 @@ defmodule Nidhox.Game do
   who joins with both sides taken takes a side from a seat of another client, the seat
   then watching; anyone else joining after the first two watches. A side left free goes
   to a watching seat. Where the computer plays side 2, the input of a player on side 2
-  is not used. ONLINE VERSUS's hosting and joining are `Nidhox.Online`'s.
+  is not used. ONLINE's hosting and joining are `Nidhox.Online`'s.
 
   The game's prefs that change what it does — `System.flashing` and
-  `System.persistent_blood` — follow the options (`:flashing`, `:persistent_blood`,
-  each `true` or `false`) sent with the input of the first player to join, and when
-  that player leaves, of one of those still there.
+  `System.persistent_blood` — and its language follow the options (`:flashing`,
+  `:persistent_blood`, each `true` or `false`; `:language`) sent with the input of the
+  first player to join, and when that player leaves, of one of those still there. That
+  player's `:hype`, `:menu_seen`, `:news_seen`, `:colours` (CHANGE COLOR's choice
+  for each side, put in `System.vsColor`), `:net_id` (the player's id online),
+  `:recent` (their recent opponents) and `:search_global` are read from their first
+  input with options; after that the game changes them itself and asks that player's
+  client to keep them (`Nidhox.Flow`). A player with no `:net_id` is given one, made
+  from their name and the step they joined at.
+
+  Every player keeps their name (the join's `:username`), the round trip their machine
+  measured to this one (the join's `:round_trip`, `Cauldron2D.World`), whether they
+  joined through an invite (the join's `:invited`), and from their
+  options their `net_id`, `colours` and `recent`, which ONLINE reads
+  (`Nidhox.OnlineFlow`). A player who comes back from a lobby elsewhere joins with
+  `online:` the outcome (`Nidhox.OnlineFlow.returned/2`), or `refused: true` when the
+  lobby could not be joined.
 
   A view is the frame — `items` (room pixels), `gui` (the room's own, window pixels),
   `overlay` (the screen's, window pixels, over `gui`), `surfaces` (the rasters
@@ -35,7 +49,7 @@ defmodule Nidhox.Game do
   VERSUS, it is silent (`mute` and `unMute`): a `Cauldron2D.Audio.muted/1` event as the
   pause begins and another as it ends.
 
-  A world on another machine follows this one for ONLINE VERSUS (`Cauldron2D.World`'s
+  A world on another machine follows this one for ONLINE (`Cauldron2D.World`'s
   `:follow`): `export/1` sends it the state without the data file's parts, the picture
   lookup, the surfaces' pixels or the frame's, `restore/1` fills them in from that
   machine's own copy and marks the state `following`, so `Nidhox.Online` carries out
@@ -46,16 +60,29 @@ defmodule Nidhox.Game do
 
   @behaviour Cauldron2D.Game
 
+  import Bitwise
+
   alias Cauldron2D.Audio
   alias Cauldron2D.GameMaker.Data
   alias Cauldron2D.GameMaker.Draw
   alias Cauldron2D.GameMaker.Surfaces
   alias Cauldron2D.GameMaker.World
   alias Nidhox.{Assets, Flow, Online, Screen}
+  alias Nidhox.Bout.Spiral
   alias Nidhox.Objects.System
-  alias Nidhox.Screen.Pause
 
   @sides [1, 2]
+  @prefs %{
+    language: "en",
+    menu_seen: [],
+    news_seen: [],
+    hype: 0.75,
+    colours: [1, 2],
+    net_id: nil,
+    recent: [],
+    search_global: false
+  }
+  @kept_online [:net_id, :colours, :recent]
 
   @impl true
   def init(opts) do
@@ -102,6 +129,10 @@ defmodule Nidhox.Game do
       events: [],
       frame: nil,
       prefs_from: nil,
+      prefs_loaded: nil,
+      prefs: @prefs,
+      devices: %{1 => nil, 2 => nil},
+      net: Nidhox.OnlineFlow.new(),
       following: false
     }
     |> Flow.logos()
@@ -119,8 +150,32 @@ defmodule Nidhox.Game do
       end
 
     state = Map.update!(state, :players, &Map.put_new(&1, id, %{side: nil, owner: owner}))
-    {:ok, %{state | prefs_from: state.prefs_from || id}}
+
+    state =
+      Map.update!(
+        state,
+        :players,
+        &Map.update!(&1, id, fn player -> Map.merge(player, identity(id, props)) end)
+      )
+
+    state = %{state | prefs_from: state.prefs_from || id}
+    {:ok, returned(state, props)}
   end
+
+  defp identity(id, props) do
+    options = get_in(props, [:settings, :options]) || %{}
+
+    %{
+      name: to_string(Map.get(props, :username, id)),
+      round_trip: Map.get(props, :round_trip),
+      invited: Map.get(props, :invited) == true
+    }
+    |> Map.merge(Map.take(options, @kept_online))
+  end
+
+  defp returned(state, %{online: outcome}), do: Nidhox.OnlineFlow.returned(state, outcome)
+  defp returned(state, %{refused: true}), do: Nidhox.OnlineFlow.returned(state, :refused)
+  defp returned(state, _props), do: state
 
   @impl true
   def leave(state, id) do
@@ -155,6 +210,8 @@ defmodule Nidhox.Game do
   def handle_input(state, id, %{held: held} = input) do
     state
     |> held_by(id, held)
+    |> device_of(id, input)
+    |> identified(id, Map.get(input, :options, %{}))
     |> preferred(id, Map.get(input, :options, %{}))
     |> requested(id, Map.get(input, :request))
   end
@@ -190,17 +247,84 @@ defmodule Nidhox.Game do
     end
   end
 
-  defp preferred(%{prefs_from: id} = state, id, options) do
+  defp device_of(state, id, %{device: device} = input) do
+    case Map.fetch(state.players, id) do
+      {:ok, %{side: side}} when side != nil ->
+        put_in(state.devices[side], %{device: device, keys: Map.get(input, :keys, %{})})
+
+      _watching ->
+        state
+    end
+  end
+
+  defp device_of(state, _id, _input), do: state
+
+  defp identified(state, id, options) do
+    case {Map.fetch(state.players, id), Map.take(options, @kept_online)} do
+      {{:ok, _player}, online} when map_size(online) > 0 ->
+        update_in(state.players[id], &Map.merge(&1, online))
+
+      _none ->
+        state
+    end
+  end
+
+  defp preferred(%{prefs_from: id} = state, id, options) when map_size(options) > 0 do
+    kept = kept_prefs(options)
+    first? = state.prefs_loaded != id
+    kept = if first?, do: kept, else: Map.take(kept, [:language])
+    state = %{state | prefs: Map.merge(state.prefs, kept), prefs_loaded: id}
+    state = if first? and state.prefs.net_id == nil, do: identity_made(state, id), else: state
+
     prefs =
       for {option, variable} <- [flashing: :flashing, persistent_blood: :persistent_blood],
           is_boolean(Map.get(options, option)),
           into: %{},
           do: {variable, if(Map.fetch!(options, option), do: 1, else: 0)}
 
-    %{state | world: System.put(state.world, prefs)}
+    %{state | world: state.world |> System.put(prefs) |> coloured(kept)}
   end
 
   defp preferred(state, _id, _options), do: state
+
+  defp identity_made(state, id) do
+    name = state.players[id][:name] || to_string(id)
+    high = :erlang.phash2({name, state.steps, :high}, 1 <<< 31)
+    low = :erlang.phash2({name, state.steps, :low}, 1 <<< 31)
+    Flow.preferred(state, %{net_id: (high <<< 31) + low + 1})
+  end
+
+  defp coloured(world, %{colours: [first, second]}),
+    do: System.put(world, %{vsColor: %{1 => first, 2 => second}})
+
+  defp coloured(world, _kept), do: world
+
+  defp kept_prefs(options) do
+    for {key, value} <- Map.take(options, Map.keys(@prefs)),
+        kept?(key, value),
+        into: %{},
+        do: {key, value}
+  end
+
+  defp kept?(:language, code), do: code in Nidhox.Lang.codes()
+  defp kept?(:hype, hype), do: is_number(hype) and hype >= 0 and hype <= 1
+
+  defp kept?(:colours, [first, second]),
+    do: first in 1..8 and second in 1..8 and first != second
+
+  defp kept?(:colours, _colours), do: false
+  defp kept?(:net_id, net_id), do: is_integer(net_id) and net_id > 0
+  defp kept?(:search_global, global?), do: is_boolean(global?)
+
+  defp kept?(:recent, recent),
+    do:
+      is_list(recent) and
+        Enum.all?(
+          recent,
+          &match?(%{id: id, date: _date, name: name} when is_integer(id) and is_binary(name), &1)
+        )
+
+  defp kept?(_list, keys), do: is_list(keys) and Enum.all?(keys, &is_binary/1)
 
   @impl true
   def step(state, _dt) do
@@ -208,7 +332,6 @@ defmodule Nidhox.Game do
     state = %{state | previous: state.held, steps: state.steps + 1, timer: state.timer + 1}
 
     state
-    |> Online.pending()
     |> Flow.opponent_gone()
     |> Flow.step(players)
     |> Online.perform()
@@ -226,6 +349,9 @@ defmodule Nidhox.Game do
   end
 
   @impl true
+  def input_delay(state), do: Nidhox.OnlineFlow.input_delay(state)
+
+  @impl true
   def view(state, id) do
     player = state.players[id]
     side = with %{side: side} <- player, do: side
@@ -233,7 +359,7 @@ defmodule Nidhox.Game do
     state.frame
     |> Map.put(:side, side)
     |> Map.put(:ask, ask(state, id))
-    |> remote_pause(state, player)
+    |> Map.update!(:overlay, &(&1 ++ Screen.for_side(state, side, state.frame.window)))
   end
 
   @impl true
@@ -271,14 +397,6 @@ defmodule Nidhox.Game do
     {outbox, world} = World.take_outbox(state.world)
     {outbox ++ Enum.reverse(state.events), %{state | world: world, events: []}}
   end
-
-  defp remote_pause(frame, %{screen: :paused} = state, %{} = player) do
-    if Online.remote_player?(state, player),
-      do: %{frame | overlay: Pause.items(state.menu, frame.window, :remote)},
-      else: frame
-  end
-
-  defp remote_pause(frame, _state, _player), do: frame
 
   defp ask(state, id) do
     case Map.get(state.asks, id) do
@@ -353,7 +471,8 @@ defmodule Nidhox.Game do
           window: window,
           screen: state.screen,
           area: state.area,
-          surfaces: Surfaces.rasters(world)
+          surfaces: Surfaces.rasters(world),
+          spiral: Spiral.amounts(world)
         }
     }
   end

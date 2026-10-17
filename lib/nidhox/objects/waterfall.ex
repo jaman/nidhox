@@ -12,10 +12,10 @@ defmodule Nidhox.Objects.Waterfall do
     * destroy, and room end (its destroy event): the system and its types gone
   """
 
-  alias Cauldron2D.GameMaker.{Instance, PartSystems, World}
+  alias Cauldron2D.GameMaker.{Data, Instance, PartSystems, World}
   alias Nidhox.Gml
 
-  @mist_sprite 277
+  @mist_sprite "sSmoke"
 
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
@@ -35,13 +35,14 @@ defmodule Nidhox.Objects.Waterfall do
     {world, emitter} = PartSystems.emitter_create(world, system)
     {world, water} = PartSystems.type_create(world)
     {world, mist} = PartSystems.type_create(world)
+    smoke = Data.index(world.data, :sprites, @mist_sprite)
 
     world
     |> PartSystems.type_sprite(water, sprite, false, true, true)
     |> PartSystems.type_gravity(water, 0.33, 270)
     |> PartSystems.type_life(water, 30, 35)
     |> PartSystems.type_direction(water, 269, 271, 0, 0.1)
-    |> PartSystems.type_sprite(mist, @mist_sprite, true, true, false)
+    |> PartSystems.type_sprite(mist, smoke, true, true, false)
     |> PartSystems.type_gravity(mist, 0.01, 90)
     |> PartSystems.type_life(mist, 40, 60)
     |> PartSystems.type_direction(mist, 0, 180, 0, 0.1)

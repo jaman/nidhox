@@ -1,6 +1,66 @@
 # Changelog
 
-## Unreleased
+## [0.2.0]
+
+NidhOX follows the Nidhogg update of 13 October 2026 (Steam build 25889827).
+
+### Breaking
+
+- NidhOX plays copies updated to the Online Update of 13 October 2026. Copies still
+  on the Remix Level update of 15 September 2021 play with NidhOX 0.1.4.
+
+### Added
+
+- The update's copies load: GameMaker 2024.14 data files with QOI and bzip2 textures,
+  the object depth table and the news read from the 64-bit Windows executable or the
+  macOS build's, and the copy's `lang` files for the game's languages.
+- The new main menu (`Nidhox.Screen.MainMenu`): SINGLE PLAYER (ARCADE, TRAINING),
+  MULTIPLAYER (LOCAL, ONLINE, TOURNAMENT), OPTIONS, EXTRAS (HOW TO PLAY, CPU BATTLE,
+  CREDITS, and NidhOX's CHALLENGE), QUIT TO DESKTOP with its question, and NEWS, with
+  the "new" dots, and its windows: TRAINING, TOURNAMENT with the bracket preview,
+  VARIANTS with RESTORE DEFAULTS, NEWS.
+- TRAINING against a chosen personality and difficulty, and CPU BATTLE under HYPE, TIME
+  LIMIT and SUDDEN DEATH ONLY, round and round.
+- Button glyphs in every prompt, "press start", the tutorial's instructions and the
+  results, for each player's keys or controller (`Nidhox.Glyphs`).
+- The pause's CHANGE COLOR, VARIANTS with the restart question, INPUT DELAY, and EXIT
+  with its question.
+- ONLINE (`Nidhox.OnlineFlow`): matchmaking on the local network by ping, MATCH FOUND!,
+  the playable lobby with its ready zones and wins, the level picked by the last loser,
+  FORFEIT and LEAVE LOBBY, INVITE FRIEND and INVITE!, recent opponents, JOIN BY ADDRESS
+  for machines the network cannot hear, and the two machines playing with rollback over
+  one TCP connection (`Cauldron2D.Link`).
+- The castle stairs and the spiral warp, the room transition (`ScreenWipe`), and the
+  fencer's states the update added.
+- The picture is drawn by the graphics card where there is one (`Nidhox.Gpu`), in the
+  pane or in a window of its own, the same picture as the software one; the picture
+  options `software`, `gpu` and `window` choose.
+
+### Changed
+
+- OPTIONS has the game's look and its LANGUAGE row; menus choose with jump or start and
+  go back with `Esc`.
+- The level select lists the released levels, asks before going back to the main menu,
+  and no longer gives up after twelve idle seconds.
+- The results, the tutorial's instructions and every menu are drawn in the game's GUI
+  units.
+- The attract mode plays the released levels.
+- ONLINE VERSUS over BEAM distribution with a join code is replaced by ONLINE: nothing
+  the other machine sends can run code on this one.
+
+### Fixed
+
+- SUDDEN DEATH ONLY starts with both fencers in the sudden death room; they were never
+  brought in.
+- HOW TO PLAY runs under the tutorial's own flow (9836834), so the match makes no second
+  computer partner.
+
+### Removed
+
+- `Nidhox.Screen.MenuList`, the old wheel menus, and the HOST, JOIN and SET IP screens.
+- `Nidhox.Objects.DialogBox`: the update's tutorial no longer types its instructions.
+
+## [0.1.4]
 
 ### Fixed
 
@@ -42,7 +102,6 @@
 ### Added
 
 - `--mute` (or `CAULDRON_MUTE=1`): no sound on this machine.
-
 
 ### Added
 

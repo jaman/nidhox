@@ -10,26 +10,30 @@ defmodule Nidhox.Man.Enter do
 
     * a hit (`hitFlag`) is counted as a knockdown (`knockDowns`) and cleared
     * `frame`, `buttonHeldCounter` and `stateCounter` start again; the weapon is hidden
-    * standing up to fence (29) from a crouch, with its sword crossing an opponent who is
-      not stabbed, falling, down or stomped, it stands on the stab instead (67)
+    * taking a fencing state (29, 30 or 31) from a crouch, with its sword crossing an
+      opponent who is not stabbed, falling, down or stomped, it stands on the stab
+      instead (67)
 
   and then the new state's entry runs (`enter/3`), as the game's switch has them —
   sounds where the fencer stands, its speed and stance set, dust, blood, its weapon
   dropped, a kill counted for its opponent (`Nidhox.Objects.MatchStats`).
   """
 
-  alias Cauldron2D.GameMaker.{Instance, World}
+  alias Cauldron2D.GameMaker.{Data, Instance, World}
   alias Nidhox.Bout.Overlap
   alias Nidhox.Gml
-  alias Nidhox.Man.{Physics, Query, State, Weapon}
+  alias Nidhox.Man.{Physics, Query, Stairs, State, Weapon}
   alias Nidhox.Objects.{BloodDrop, Challenge, MatchStats, Particles, System}
 
   @noone -4
   @snap 1
-  @rings [80, 81, 82]
-  @screams 95..108
-  @thuds [83, 84]
-  @collapses [208, 209, 210, 369]
+  @fencing [29, 30, 31]
+  @rings for number <- 1..3, do: "sfxSwordRing#{number}"
+  @screams for number <- 1..14, do: "sfxScream#{number}"
+  @stabs ["sfxStab1", "sfxStab2"]
+  @thrusts ["sfxThrust1", "sfxThrust2"]
+  @groans for number <- 1..3, do: "sndHit#{number}"
+  @collapses ["sManCollapse", "sManCollapse2", "sManCollapse3", "sManCollapse4"]
 
   @doc "The world after fencer `self` takes its next state (`processNextState`)."
   @spec process(World.t(), non_neg_integer()) :: World.t()
@@ -71,7 +75,7 @@ defmodule Nidhox.Man.Enter do
   end
 
   defp stand_on_stab(world, self) do
-    with 29 <- State.get(world, self, :state),
+    with state when state in @fencing <- State.get(world, self, :state),
          true <- Gml.truthy?(State.get(world, self, :lastCrouched)),
          other when other != nil <-
            Query.by_player(world, Query.other_player(State.get(world, self, :playerIndex))),
@@ -90,7 +94,7 @@ defmodule Nidhox.Man.Enter do
 
   defp enter(world, self, 1, _previous) do
     world
-    |> sound(self, 21)
+    |> sound(self, "sndJump")
     |> ring_with_sword(self)
     |> State.put(self, %{stance: 3, vspd: -3, hspd: facing(world, self) * -3})
   end
@@ -98,11 +102,19 @@ defmodule Nidhox.Man.Enter do
   defp enter(world, self, 3, _previous),
     do: State.put(world, self, %{hspd: State.hspd(world, self) * 0.7, vspd: -1.5})
 
-  defp enter(world, self, state, _previous) when state in [4, 67] do
+  defp enter(world, self, 4, _previous) do
     world
     |> State.put(self, %{hspd: 0, vspd: 0})
     |> Query.face_opponent(self)
-    |> sound(self, 83)
+    |> sound(self, "sfxStab1")
+    |> unclean(self, :cleanSword)
+  end
+
+  defp enter(world, self, 67, _previous) do
+    world
+    |> State.put(self, %{hspd: 0, vspd: 0})
+    |> Query.face_opponent(self)
+    |> sound(self, "sfxStab1")
   end
 
   defp enter(world, self, 5, _previous) do
@@ -117,12 +129,12 @@ defmodule Nidhox.Man.Enter do
   defp enter(world, self, 8, _previous) do
     world
     |> State.put(self, %{hspd: 2 * facing(world, self), vspd: -0.75})
-    |> sound(self, 112)
+    |> sound(self, "sfxDiveKickBreath")
   end
 
   defp enter(world, self, 11, _previous) do
     world
-    |> sound(self, 21)
+    |> sound(self, "sndJump")
     |> State.put(self, %{stance: 3, vspd: -3.4})
     |> run_jump(self)
     |> dust(self)
@@ -140,8 +152,8 @@ defmodule Nidhox.Man.Enter do
 
     world
     |> State.put(self, %{hspd: 3.96 * facing(world, self), vspd: 0.75})
-    |> sound(self, 112)
-    |> sound(self, 113)
+    |> sound(self, "sfxDiveKickBreath")
+    |> sound(self, "sfxClothDivekick1")
   end
 
   defp enter(world, self, 15, _previous),
@@ -154,7 +166,7 @@ defmodule Nidhox.Man.Enter do
 
     world =
       if state == 33 do
-        {groan, world} = Gml.choose(world, [18, 19, 20])
+        {groan, world} = Gml.choose(world, @groans)
         sound(world, self, groan)
       else
         world
@@ -168,23 +180,23 @@ defmodule Nidhox.Man.Enter do
 
   defp enter(world, self, 22, _previous) do
     world
-    |> sound(self, 21)
+    |> sound(self, "sndJump")
     |> State.put(self, %{stance: 3, vspd: -3.8, hspd: facing(world, self)})
   end
 
-  defp enter(world, self, 24, _previous) do
-    world
-    |> State.put(self, %{hspd: 0})
-    |> sound(self, 116)
-    |> sound(self, 117)
+  defp enter(world, self, 24, previous) do
+    world = State.put(world, self, %{hspd: 0})
+
+    if previous in [82, 83],
+      do: world,
+      else: world |> sound(self, "sfxSlurp") |> sound(self, "sfxBloodHiss")
   end
 
   defp enter(world, self, 26, _previous),
     do: State.put(world, self, %{hspd: 0, vspd: max(State.get(world, self, :vspd), 0)})
 
   defp enter(world, self, state, _previous) when state in [27, 28, 77] do
-    world =
-      if state == 77, do: world |> drop(self) |> sound(self, 25) |> sound(self, 11), else: world
+    world = if state == 77, do: world |> drop(self) |> impact(self), else: world
 
     world = face_motion(world, self)
 
@@ -193,8 +205,9 @@ defmodule Nidhox.Man.Enter do
       else: world
   end
 
-  defp enter(world, self, 29, previous) do
-    world = world |> ring(self) |> State.put(self, %{vspd: 0}) |> show_weapon(self, true)
+  defp enter(world, self, state, previous) when state in @fencing do
+    world = if previous in @fencing, do: world, else: ring(world, self)
+    world = world |> State.put(self, %{vspd: 0}) |> show_weapon(self, true)
     world = if previous == 54, do: State.put(world, self, %{stance: 1}), else: world
     world = if previous in [9, 58], do: State.put(world, self, %{stance: 2}), else: world
 
@@ -202,9 +215,6 @@ defmodule Nidhox.Man.Enter do
     |> State.put(self, %{turnAroundTimer: 0, turnAroundFlag: 1})
     |> Query.face_opponent(self)
   end
-
-  defp enter(world, self, state, _previous) when state in [30, 31],
-    do: show_weapon(world, self, true)
 
   defp enter(world, self, 32, _previous),
     do: world |> show_weapon(self, false) |> Query.face_opponent(self)
@@ -229,7 +239,16 @@ defmodule Nidhox.Man.Enter do
         world
         |> State.put(self, %{facingXScale: facing})
         |> World.update(self, &%{&1 | x: lx - facing * 2, y: ly + 20})
-        |> State.pose(self, if(previous == 10, do: 245, else: 244))
+        |> State.pose(
+          self,
+          sprite(
+            world,
+            if(previous == 10,
+              do: "sManHangOnEdgeFromRunUpWall",
+              else: "sManHangOnEdgeFromMisJump"
+            )
+          )
+        )
     end
   end
 
@@ -244,8 +263,7 @@ defmodule Nidhox.Man.Enter do
     world =
       world
       |> drop(self)
-      |> sound(self, 25)
-      |> sound(self, 11)
+      |> impact(self)
       |> Query.face_opponent(self)
 
     world = State.put(world, self, %{hspd: -facing(world, self) * 0.8})
@@ -262,8 +280,7 @@ defmodule Nidhox.Man.Enter do
     world =
       world
       |> drop(self)
-      |> sound(self, 25)
-      |> sound(self, 11)
+      |> impact(self)
       |> Query.face_opponent(self)
 
     State.put(world, self, %{vspd: -4, hspd: -facing(world, self) * 3})
@@ -271,7 +288,7 @@ defmodule Nidhox.Man.Enter do
 
   defp enter(world, self, 43, _previous) do
     world
-    |> sound(self, 43)
+    |> sound(self, "sfxJump1")
     |> ring_with_sword(self)
     |> State.put(self, %{stance: 3, vspd: -5.4})
     |> run_jump(self)
@@ -280,7 +297,7 @@ defmodule Nidhox.Man.Enter do
 
   defp enter(world, self, 44, _previous) do
     world
-    |> sound(self, 21)
+    |> sound(self, "sndJump")
     |> State.put(self, %{stance: 3, vspd: -5.4})
     |> run_jump(self)
     |> dust(self)
@@ -292,14 +309,14 @@ defmodule Nidhox.Man.Enter do
 
     world
     |> State.put(self, %{hspd: State.hspd(world, self) + facing(world, self) * push})
-    |> sound(self, 22)
+    |> sound(self, "sndLevel")
     |> dust(self)
   end
 
   defp enter(world, self, 47, _previous) do
     world
     |> State.put(self, %{facingXScale: -facing(world, self), hspd: 0, vspd: 0})
-    |> State.pose(self, 225)
+    |> State.pose(self, sprite(world, "sManLieOnBack"))
   end
 
   defp enter(world, self, 48, _previous) do
@@ -313,10 +330,9 @@ defmodule Nidhox.Man.Enter do
     world =
       world
       |> State.put(self, %{hspd: State.hspd(world, self) + facing(world, self)})
-      |> sound(self, 74)
+      |> sound(self, "sfxWhooshSwordThrust")
 
-    {swish, world} = Gml.choose(world, [110, 111])
-    sound(world, self, swish)
+    thrust(world, self)
   end
 
   defp enter(world, self, state, _previous) when state in [49, 55] do
@@ -324,50 +340,53 @@ defmodule Nidhox.Man.Enter do
 
     world
     |> State.put(self, %{hspd: State.hspd(world, self) + facing(world, self)})
-    |> sound(self, 22)
+    |> sound(self, "sndLevel")
   end
 
   defp enter(world, self, 50, _previous) do
     world
-    |> sound(self, 21)
+    |> sound(self, "sndJump")
     |> ring_with_sword(self)
     |> State.put(self, %{stance: 3, vspd: -1.25, hspd: facing(world, self) * -1.75})
   end
 
-  defp enter(world, self, 52, _previous), do: State.put(world, self, %{vspd: 0})
+  defp enter(world, self, state, _previous) when state in [52, 80, 81],
+    do: State.put(world, self, %{vspd: 0})
 
   defp enter(world, self, 53, _previous),
-    do: world |> sound(self, 26) |> State.put(self, %{stance: 2, hspd: 0})
+    do: world |> sound(self, "sndSlide") |> State.put(self, %{stance: 2, hspd: 0})
 
   defp enter(world, self, 58, _previous) do
     world
-    |> sound(self, 26)
+    |> sound(self, "sndSlide")
     |> State.put(self, %{hspd: Gml.clamp(State.hspd(world, self) * 100, -2.75, 2.75)})
   end
 
   defp enter(world, self, 59, _previous) do
     world
     |> State.put(self, %{hspd: facing(world, self) * 2})
-    |> sound(self, 121)
+    |> sound(self, "sfxHandGround")
     |> dust(self)
   end
 
-  defp enter(world, self, 61, _previous), do: sound(world, self, 26)
+  defp enter(world, self, 61, _previous), do: sound(world, self, "sndSlide")
 
   defp enter(world, self, 62, _previous),
-    do: world |> sound(self, 26) |> State.put(self, %{hspd: 0, vspd: 0})
+    do: world |> sound(self, "sndSlide") |> State.put(self, %{hspd: 0, vspd: 0})
 
   defp enter(world, self, 63, _previous) do
     world
     |> drop(self)
-    |> stabbed_cry(self)
+    |> stab_sound(self)
+    |> scream(self)
     |> State.put(self, %{stabCounter: 0})
     |> kill_for_opponent(self)
   end
 
   defp enter(world, self, 64, _previous) do
     world
-    |> stabbed_cry(self)
+    |> stab_sound(self)
+    |> scream(self)
     |> State.put(self, %{hspd: 0, vspd: 0})
     |> kill_for_opponent(self)
   end
@@ -376,14 +395,15 @@ defmodule Nidhox.Man.Enter do
     world
     |> State.put(self, %{hspd: Gml.clamp(State.hspd(world, self), -2, 2)})
     |> drop(self)
-    |> stabbed_cry(self)
+    |> stab_sound(self)
+    |> scream_standing(self)
     |> State.put(self, %{stabCounter: 0})
     |> kill_for_opponent(self)
   end
 
   defp enter(world, self, 66, _previous) do
     turn = Gml.round(State.get(world, self, :playerIndex) + System.get(world, :frame))
-    collapse = Enum.at(@collapses, cycle(turn, 0, 3))
+    collapse = sprite(world, Enum.at(@collapses, cycle(turn, 0, 3)))
 
     State.put(world, self, %{collapseAnimation: collapse, hspd: 0, vspd: 0})
   end
@@ -396,27 +416,37 @@ defmodule Nidhox.Man.Enter do
 
     world
     |> State.put(self, %{hspd: 0, vspd: 0})
-    |> sound(self, 120)
+    |> sound(self, "sfxTearOutHeart")
+    |> unclean(self, :cleanHands)
     |> Challenge.move_completed(State.get(world, self, :playerIndex), @snap, {x, y - 32})
   end
 
   defp enter(world, self, 72, _previous), do: Query.face_opponent(world, self)
 
   defp enter(world, self, 73, _previous),
-    do: world |> Query.face_opponent(self) |> sound(self, 59)
+    do: world |> Query.face_opponent(self) |> sound(self, "sfxThrowSword")
 
   defp enter(world, self, 76, _previous) do
-    world =
-      world
-      |> drop(self)
-      |> sound(self, 25)
-      |> sound(self, 11)
+    world = world |> drop(self) |> impact(self)
 
     State.put(world, self, %{hspd: State.hspd(world, self) * 1.25})
   end
 
   defp enter(world, self, 79, _previous),
     do: State.put(world, self, %{vspd: -3, hspd: facing(world, self) * 2})
+
+  defp enter(world, self, 82, _previous) do
+    stairs = Stairs.under(world, self)
+    hspd = if stairs == nil, do: 0, else: -Stairs.dir(world, stairs)
+
+    world
+    |> State.put(self, %{hspd: hspd, vspd: 0})
+    |> face_motion(self)
+    |> sound(self, "sfxSlurp")
+    |> sound(self, "sfxBloodHiss")
+  end
+
+  defp enter(world, self, 83, _previous), do: State.put(world, self, %{hspd: 0, vspd: 0})
 
   defp enter(world, _self, _state, _previous), do: world
 
@@ -469,12 +499,39 @@ defmodule Nidhox.Man.Enter do
   defp kill_for_opponent(world, self),
     do: MatchStats.add_kill(world, Query.other_player(State.get(world, self, :playerIndex)))
 
-  defp stabbed_cry(world, self) do
-    {thud, world} = Gml.choose(world, @thuds)
-    world = sound(world, self, thud)
-    {scream, world} = Gml.choose(world, Enum.to_list(@screams))
+  defp stab_sound(world, self) do
+    {stab, world} = Gml.choose(world, @stabs)
+    sound(world, self, stab)
+  end
+
+  defp scream(world, self) do
+    {scream, world} = Gml.choose(world, @screams)
     sound(world, self, scream)
   end
+
+  defp scream_standing(world, self),
+    do: if(State.get(world, self, :stance) in 1..3, do: scream(world, self), else: world)
+
+  defp thrust(world, self) do
+    {thrust, world} = Gml.choose(world, @thrusts)
+    if State.get(world, self, :stance) in 1..3, do: sound(world, self, thrust), else: world
+  end
+
+  defp impact(world, self),
+    do: world |> sound(self, "sndPunchImpact") |> sound(self, "sndFleshyImpact")
+
+  defp unclean(world, self, flag) do
+    with 1 <- State.get(world, self, :playerIndex),
+         object when is_integer(object) <- World.object_index(world, "Match") do
+      world
+      |> World.instances_of(object)
+      |> Enum.reduce(world, &Gml.put(&2, &1, %{flag => 0}))
+    else
+      _other -> world
+    end
+  end
+
+  defp sprite(world, name), do: Data.index(world.data, :sprites, name)
 
   defp bleed_face(world, self) do
     %Instance{x: x, y: y} = World.fetch(world, self)

@@ -6,9 +6,11 @@ defmodule Nidhox.Objects.NidhoggHead do
     * create: frame 0; its parts made — `NidhoggEyeball`, `NidhoggEyebrow`,
       `NidhoggLowerJaw`, `NidhoggTongue`, `NidhoggUpperSkull`, `NidhoggUpperLip`,
       `NidhoggLowerLip`, `NidhoggInnerMouth`; a 128 × 128 surface (`headSurface`);
-      `headYScale` 1; nothing eaten (`eaten` −1); `bodyColor` white
-    * end step: it sits on the body's first segment (`Nidhogg.head`), a quarter of a
-      segment's width (`sDragonSegment`) behind it along its angle, turned as it is;
+      `headYScale` 1; nothing eaten (`eaten` −1); not simulated (`simActive` 0, `simX` and `simY` where
+      it is, `simAngle` 0); `bodyColor` white
+    * end step: unless it is simulated and nothing is eaten, it sits on the body's first
+      segment (`Nidhogg.head`), a quarter of a segment's width (`sDragonSegment`) behind it
+      along its angle, turned as it is;
       the parts move with it — skull and upper lip on it, eyeball 12 across and 17 up,
       eyebrow 12 across and 29 up, jaw, lower lip and inner mouth 26 back, tongue 16
       back. The surface is cleared and each part draws itself on it (its user event 0)
@@ -17,9 +19,16 @@ defmodule Nidhox.Objects.NidhoggHead do
       the jaw is, as the jaw is, in the eaten fencer's colour (`bodyColor`)
     * draw: the surface, turned by its angle and flipped up or down by `headYScale`,
       with its `(40, 50)` on the head
-    * a fencer touching it is eaten: `eaten` its player, `bodyColor` its body's colour,
-      the player wins (`Nidhox.Bout.Outcome.winner/2`), the bite heard (126), and the
-      fencer gone
+    * user event 2, run each match frame: a `NidhoggZone` not yet active wakes when the
+      fencer of player 1 or 2 touches it, heard (`sfxNidhoggNyah`) at each head, across
+      held 80 pixels inside the camera's edges, at the zone's height. With a zone active
+      and nothing eaten, the head is simulated: it starts at the body's place facing the
+      room's middle, then each frame turns by `0.2` of the way to the nearest fencer
+      (aiming 12 above its feet), at most 9 degrees, and moves 8 pixels along its angle.
+      It sits at that place, faces the way it moves across (`headYScale`), and a fencer
+      it touches is eaten: `eaten` its player, `bodyColor` its body's colour, the player
+      wins (`Nidhox.Bout.Outcome.winner/2`), the bite heard (`sfxBite`), and the fencer
+      gone
     * room end and destroy: the surface freed
 
   The parts, each step:
@@ -43,9 +52,12 @@ defmodule Nidhox.Objects.NidhoggHead do
     * lips run their frames at 0.2 a step, the tongue at 0.1
   """
 
-  alias Cauldron2D.GameMaker.{Draw, Instance, Surfaces, World}
-  alias Nidhox.Bout.{Outcome, Sound}
+  alias Cauldron2D.GameMaker.{Collide, Data, Draw, Instance, Surfaces, World}
+  alias Cauldron2D.Overlap
+  alias Cauldron2D.Shape
+  alias Nidhox.Bout.{Camera, Outcome, Sound}
   alias Nidhox.Gml
+  alias Nidhox.Man.Query
 
   @parts [
     eyeball: "NidhoggEyeball",
@@ -69,11 +81,18 @@ defmodule Nidhox.Objects.NidhoggHead do
   ]
   @surface_size 128
   @anchor {40, 50}
-  @segment_sprite 12
-  @eyelid 18
-  @eyebrow_sprite 17
-  @man_in_jaw 15
-  @bite 126
+  @segment_sprite "sDragonSegment"
+  @eyelid "sprEyelid"
+  @eyebrow_sprite "sprEyebrow"
+  @man_in_jaw "sManInJaw"
+  @bite "sfxBite"
+  @wake_sound "sfxNidhoggNyah"
+  @wake_margin 80
+  @aim_above 12
+  @turn_most 9
+  @sim_step 8
+  @sim_turn 0.2
+  @players [1, 2]
   @white {255, 255, 255}
 
   @doc "The compiled names this module answers for, with their functions."
@@ -83,7 +102,7 @@ defmodule Nidhox.Objects.NidhoggHead do
       {"gml_Object_NidhoggHead_Create_0", &start/3},
       {"gml_Object_NidhoggHead_Step_2", &end_step/3},
       {"gml_Object_NidhoggHead_Draw_0", &draw/3},
-      {"gml_Object_NidhoggHead_Collision_Man", &eat/3},
+      {"gml_Object_NidhoggHead_Other_12", &simulate/3},
       {"gml_Object_NidhoggHead_Other_5", &free_surface/3},
       {"gml_Object_NidhoggHead_Destroy_0", &free_surface/3},
       {"gml_Object_NidhoggEyeball_Create_0", &eyeball/3},
@@ -117,6 +136,8 @@ defmodule Nidhox.Objects.NidhoggHead do
   @spec tween(number(), number()) :: float()
   def tween(a, b), do: :math.fmod(:math.fmod(a - b, 360) + 540, 360) - 180
 
+  defp sprite(world, name), do: Data.index(world.data, :sprites, name)
+
   defp start(world, self, _other) do
     world = World.update(world, self, &%{&1 | image_index: 0.0, image_speed: 0.0})
 
@@ -127,7 +148,18 @@ defmodule Nidhox.Objects.NidhoggHead do
       end)
 
     {world, surface} = Surfaces.create(world, @surface_size, @surface_size)
-    Gml.put(world, self, %{headSurface: surface, headYScale: 1, eaten: -1, bodyColor: @white})
+    %Instance{x: x, y: y} = World.fetch(world, self)
+
+    Gml.put(world, self, %{
+      headSurface: surface,
+      headYScale: 1,
+      eaten: -1,
+      simActive: 0,
+      simX: x,
+      simY: y,
+      simAngle: 0,
+      bodyColor: @white
+    })
   end
 
   defp end_step(world, self, _other) do
@@ -138,6 +170,12 @@ defmodule Nidhox.Objects.NidhoggHead do
   end
 
   defp sit_on_segment(world, self) do
+    if Gml.truthy?(Gml.var(world, self, :simActive)) and Gml.var(world, self, :eaten) == -1,
+      do: world,
+      else: sit_on_body(world, self)
+  end
+
+  defp sit_on_body(world, self) do
     case Gml.first(world, "Nidhogg") do
       nil ->
         world
@@ -149,7 +187,7 @@ defmodule Nidhox.Objects.NidhoggHead do
   end
 
   defp sit_on(world, self, %Instance{x: x, y: y, image_angle: angle}) do
-    behind = elem(World.sprite(world, @segment_sprite).size, 0) * -0.25
+    behind = elem(World.sprite(world, sprite(world, @segment_sprite)).size, 0) * -0.25
 
     World.update(world, self, fn head ->
       %{
@@ -241,9 +279,9 @@ defmodule Nidhox.Objects.NidhoggHead do
         {anchor_x, anchor_y} = @anchor
 
         item = %{
-          picture: {:sprite, @man_in_jaw, 0},
+          picture: {:sprite, sprite(world, @man_in_jaw), 0},
           position: {jaw.x - head_x + anchor_x, jaw.y - head_y + anchor_y},
-          origin: World.sprite(world, @man_in_jaw).origin,
+          origin: World.sprite(world, sprite(world, @man_in_jaw)).origin,
           scale: {jaw.image_xscale, jaw.image_yscale},
           angle: jaw.image_angle,
           blend: Gml.var(world, self, :bodyColor, @white)
@@ -270,6 +308,146 @@ defmodule Nidhox.Objects.NidhoggHead do
       else: world
   end
 
+  defp simulate(world, self, _other) do
+    world
+    |> wake_zones()
+    |> hunt(self)
+  end
+
+  defp wake_zones(world) do
+    Enum.reduce(Gml.all(world, "NidhoggZone"), world, &wake_zone(&2, &1))
+  end
+
+  defp wake_zone(world, zone) do
+    if Gml.truthy?(Gml.var(world, zone, :active)) do
+      world
+    else
+      touched = Enum.any?(@players, &touching?(world, zone, Query.by_player(world, &1)))
+
+      if touched do
+        %Instance{y: y} = World.fetch(world, zone)
+
+        world
+        |> Gml.put(zone, %{active: 1})
+        |> sound_wake(y)
+      else
+        world
+      end
+    end
+  end
+
+  defp sound_wake(world, y) do
+    Enum.reduce(Gml.all(world, "NidhoggHead"), world, fn head, world ->
+      %Instance{x: x} = World.fetch(world, head)
+
+      across =
+        Gml.clamp(x, Camera.left(world) + @wake_margin, Camera.right(world) - @wake_margin)
+
+      Sound.play_named(world, @wake_sound, {across, y})
+    end)
+  end
+
+  defp hunt(world, self) do
+    zone = Gml.first(world, "NidhoggZone")
+
+    if (zone && Gml.truthy?(Gml.var(world, zone, :active))) and Gml.var(world, self, :eaten) == -1 do
+      world
+      |> start_simulation(self)
+      |> steer(self)
+      |> settle_on_simulation(self)
+      |> bite(self)
+    else
+      world
+    end
+  end
+
+  defp start_simulation(world, self) do
+    body = Gml.first(world, "Nidhogg")
+
+    if Gml.truthy?(Gml.var(world, self, :simActive)) or body == nil do
+      world
+    else
+      %Instance{x: x, y: y} = World.fetch(world, body)
+
+      Gml.put(world, self, %{
+        simActive: 1,
+        simX: x,
+        simY: y,
+        simAngle: Gml.point_direction({x, y}, {Camera.room_width(world) / 2, y})
+      })
+    end
+  end
+
+  defp steer(world, self) do
+    sim_x = Gml.var(world, self, :simX)
+    sim_y = Gml.var(world, self, :simY)
+
+    case nearest_fencer(world, {sim_x, sim_y}) do
+      nil ->
+        world
+
+      %Instance{x: x, y: y} ->
+        angle = Gml.var(world, self, :simAngle)
+        aim = Gml.point_direction({sim_x, sim_y}, {x, y - @aim_above})
+        angle = angle + Gml.clamp(-tween(angle, aim) * @sim_turn, -@turn_most, @turn_most)
+
+        Gml.put(world, self, %{
+          simAngle: angle,
+          simX: sim_x + Gml.lengthdir_x(@sim_step, angle),
+          simY: sim_y + Gml.lengthdir_y(@sim_step, angle)
+        })
+    end
+  end
+
+  defp nearest_fencer(world, {sim_x, sim_y}) do
+    @players
+    |> Enum.map(&Query.by_player(world, &1))
+    |> Enum.reject(&is_nil/1)
+    |> Enum.map(&World.fetch(world, &1))
+    |> Enum.reduce({nil, nil}, fn %Instance{x: x, y: y} = man, {best, best_distance} ->
+      distance = :math.sqrt(:math.pow(sim_x - x, 2) + :math.pow(sim_y - (y - @aim_above), 2))
+      if best == nil or distance < best_distance, do: {man, distance}, else: {best, best_distance}
+    end)
+    |> elem(0)
+  end
+
+  defp settle_on_simulation(world, self) do
+    angle = Gml.var(world, self, :simAngle)
+    across = Gml.lengthdir_x(1, angle)
+
+    world
+    |> World.update(self, fn head ->
+      %{head | x: Gml.var(world, self, :simX), y: Gml.var(world, self, :simY), image_angle: angle}
+    end)
+    |> face(self, across)
+  end
+
+  defp face(world, self, across) when across > 0, do: Gml.put(world, self, %{headYScale: 1})
+  defp face(world, self, across) when across < 0, do: Gml.put(world, self, %{headYScale: -1})
+  defp face(world, _self, _across), do: world
+
+  defp bite(world, self) do
+    man =
+      @players
+      |> Enum.map(&Query.by_player(world, &1))
+      |> Enum.find(&touching?(world, self, &1))
+
+    if man, do: eat(world, self, man), else: world
+  end
+
+  defp touching?(_world, _self, nil), do: false
+
+  defp touching?(world, self, man) do
+    with %Instance{x: x, y: y} = body <- World.fetch(world, self),
+         %Instance{x: man_x, y: man_y} = fencer <- World.fetch(world, man),
+         %Shape{} = mine <- Collide.shape(world, body, {x, y}),
+         %Shape{} = theirs <- Collide.shape(world, fencer, {man_x, man_y}) do
+      Overlap.shapes?(mine, theirs)
+    else
+      _no_overlap -> false
+    end
+  end
+
   defp eat(world, self, man) do
     player = Gml.var(world, man, :playerIndex)
     body = World.fetch(world, Gml.var(world, man, :flesh, -4))
@@ -278,7 +456,7 @@ defmodule Nidhox.Objects.NidhoggHead do
     world
     |> Gml.put(self, %{eaten: player, bodyColor: if(body, do: body.image_blend, else: @white)})
     |> Outcome.winner(player)
-    |> Sound.play(@bite, {x, y})
+    |> Sound.play_named(@bite, {x, y})
     |> World.destroy(man)
   end
 
@@ -288,13 +466,16 @@ defmodule Nidhox.Objects.NidhoggHead do
   end
 
   defp eyeball(world, self, _other) do
+    {distance, world} = Gml.random(world, 1)
+    {angle, world} = Gml.random(world, 360)
+
     world
     |> World.update(self, &%{&1 | image_index: 0.0, image_speed: 0.0})
     |> Gml.put(self, %{
       currentDist: 0,
       currentAngle: 0,
-      targetDist: 1,
-      targetAngle: 360,
+      targetDist: distance,
+      targetAngle: angle,
       lidPos: 0,
       lidOpening: 0,
       lidCleared: 0
@@ -381,19 +562,20 @@ defmodule Nidhox.Objects.NidhoggHead do
 
   defp draw_eyeball(world, self, _other) do
     %Instance{x: x, y: y} = World.fetch(world, self)
-    lid_frames = length(World.sprite(world, @eyelid).frames)
+    eyelid = sprite(world, @eyelid)
+    lid_frames = length(World.sprite(world, eyelid).frames)
     lid = floor(Gml.var(world, self, :lidPos) * lid_frames)
 
     world
     |> Draw.self(self)
-    |> Draw.sprite(@eyelid, lid, {x + 2, y})
+    |> Draw.sprite(eyelid, lid, {x + 2, y})
   end
 
   defp draw_eyebrow(world, self, _other) do
     %Instance{x: x, y: y} = World.fetch(world, self)
-    lid_frames = length(World.sprite(world, @eyelid).frames)
+    lid_frames = length(World.sprite(world, sprite(world, @eyelid)).frames)
     lid = Gml.var(world, Gml.first(world, "NidhoggEyeball") || -4, :lidPos)
-    Draw.sprite(world, @eyebrow_sprite, floor(lid * lid_frames), {x, y})
+    Draw.sprite(world, sprite(world, @eyebrow_sprite), floor(lid * lid_frames), {x, y})
   end
 
   defp swinging(world, self, _other, nil),

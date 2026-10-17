@@ -6,7 +6,8 @@ defmodule Nidhox.Objects.Scenery do
       `Nidhox.Objects.Wind`'s) and, each end step, is placed `@moon_follow` of the way
       from where the room puts it to the camera's centre:
       `x = xstart + @moon_follow × (cameraCenterX − xstart)`
-    * the gothic windows hold their first frame
+    * a gothic window starts on frame 0 or 1 by chance and holds it; the dark one only
+      holds its frame
     * blocks (`Block`, the ground and walls fencers stand on) are not drawn
     * an `Empty` (a place other code moves a sound with) starts at `z` 0
     * `BgColorPulsate` sets the room's colour layer (`Compatibility_Colour`) each step to
@@ -34,8 +35,8 @@ defmodule Nidhox.Objects.Scenery do
     [
       {"gml_Object_Moon_Create_0", &moon/3},
       {"gml_Object_Moon_Step_2", &moon_follow/3},
-      {"gml_Object_GothicWindowDark_Create_0", &still/3},
-      {"gml_Object_GothicWindow_Create_0", &still/3},
+      {"gml_Object_GothicWindowDark_Create_0", &dark_window/3},
+      {"gml_Object_GothicWindow_Create_0", &window/3},
       {"gml_Object_BgColorPulsate_Step_0", &pulse/3},
       {"gml_Object_Block_Draw_0", &unseen/3},
       {"gml_Object_Empty_Create_0", fn world, self, _other -> Gml.put(world, self, %{z: 0}) end},
@@ -82,8 +83,21 @@ defmodule Nidhox.Objects.Scenery do
     World.update(world, self, &%{&1 | x: &1.xstart + @moon_follow * (centre - &1.xstart)})
   end
 
-  defp still(world, self, _other),
-    do: World.update(world, self, &%{&1 | image_speed: 0.0, image_index: 0.0})
+  defp window(world, self, _other) do
+    {speed, world} = flicker_speed(world, 0.01, 0.01)
+    {frame, world} = Gml.choose(world, [0, 1])
+    World.update(world, self, &%{&1 | image_speed: speed, image_index: frame})
+  end
+
+  defp dark_window(world, self, _other) do
+    {speed, world} = flicker_speed(world, 0.05, 0.1)
+    World.update(world, self, &%{&1 | image_speed: speed})
+  end
+
+  defp flicker_speed(world, limit, target) do
+    {draw, world} = Gml.random(world, limit)
+    {if(Gml.eq?(target, draw), do: 1.0, else: 0.0), world}
+  end
 
   defp unseen(world, _self, _other), do: world
 

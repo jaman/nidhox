@@ -8,15 +8,17 @@ defmodule Nidhox.Objects.CountDowns do
           made, so the players can fight while they wait
         * step: `timer` counts down; below 0 the warm-up's match is gone, `System.flow`
           is 3 and the tournament's match starts (`Nidhox.Objects.Match.start_match/1`)
-        * draw: "players find your controller" at (160, 40) and "starting match in N..."
-          at (160, 100), `N` being `round(timer / 60)`, white in `fMenu`, centred
+        * draw GUI: "players find your controller" at (320, 80) and "starting match in N..."
+          at (320, 200) in the 640 × 400 GUI space (`Nidhox.Bout.Gui`), `N` being
+          `round(timer / 60)`, white in `fMenu`, centred both ways
     * `CountDownToQuit`, in `rShowChampion`:
         * create: `timer` 600
-        * step: `timer` counts down; once it is below 0, or on `inputdog` 10, the
+        * step: `timer` counts down; once it is below 0, or when any player presses button 10, the
           `Tournament` is gone and the main menu (`rMainMenu`) gone to
   """
 
-  alias Cauldron2D.GameMaker.{Data, Draw, World}
+  alias Cauldron2D.GameMaker.{Data, World}
+  alias Nidhox.Bout.Gui
   alias Nidhox.Gml
   alias Nidhox.Objects.{Arcade, Match}
 
@@ -25,9 +27,10 @@ defmodule Nidhox.Objects.CountDowns do
   @warm_up_flow 4_890_734
   @tournament_flow 3
   @font "fMenu"
-  @find_at {160, 40}
-  @starting_at {160, 100}
+  @find_at {320, 80}
+  @starting_at {320, 200}
   @steps_a_second 60
+  @white {255, 255, 255}
 
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
@@ -35,7 +38,7 @@ defmodule Nidhox.Objects.CountDowns do
     [
       {"gml_Object_CountDownToStart_Create_0", &start_create/3},
       {"gml_Object_CountDownToStart_Step_0", &start_step/3},
-      {"gml_Object_CountDownToStart_Draw_0", &start_draw/3},
+      {"gml_Object_CountDownToStart_Draw_64", &start_draw/3},
       {"gml_Object_CountDownToQuit_Create_0",
        fn world, self, _other -> Gml.put(world, self, %{timer: @quit_steps}) end},
       {"gml_Object_CountDownToQuit_Step_0", &quit_step/3}
@@ -63,17 +66,12 @@ defmodule Nidhox.Objects.CountDowns do
   end
 
   defp start_draw(world, self, _other) do
-    seconds = (Gml.var(world, self, :timer) / @steps_a_second) |> Float.round() |> trunc()
+    seconds = (Gml.var(world, self, :timer) / @steps_a_second) |> Gml.round()
+    style = [halign: :center, valign: :middle, colour: @white]
 
     world
-    |> Draw.text(@font, "players find your controller", @find_at,
-      halign: :center,
-      valign: :middle
-    )
-    |> Draw.text(@font, "starting match in #{seconds}...", @starting_at,
-      halign: :center,
-      valign: :middle
-    )
+    |> Gui.text(@font, "players find your controller", @find_at, style)
+    |> Gui.text(@font, "starting match in #{seconds}...", @starting_at, style)
   end
 
   defp quit_step(world, self, _other) do

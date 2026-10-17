@@ -7,17 +7,22 @@ defmodule Nidhox.Objects.Nidhogg do
       (`segmentLength`), in its `parts`; each after the first follows the one before
       (`targetObj`), set straight on it (`snapToTarget`), its frame `floor(i / 60 × 12)`;
       the first is hidden and is its `head`. Then its `NidhoggHead`
-    * `NidhoggZone`: a fencer touching it wakes the Nidhogg (`active`), heard (115) at
-      the head, across held 80 pixels inside the camera's edges
+    * `NidhoggZone` create: asleep (`active` 0); `nidhoggAutoStartTimer` 0. The head wakes
+      it (`Nidhox.Objects.NidhoggHead`)
     * `Dragable` create: no speeds or turning; `targetDist` −1; following nothing;
-      `X`, `Y` where it is; `maxSpeed` 8; `bgFrame` `irandom(3)`
+      `X`, `Y` where it is; `text` "-1"; `maxSpeed` 8; `simSpeed` 0; `bgFrame`
+      `irandom(3)`
     * `Dragable` step: a following segment aims at its place on the one before
       (`X`, `Y`: `segmentLength` behind it along its angle) — turning towards it by
       `tween × r × 0.4`, at most 30 degrees, and moving by `r` of the way, at most 30
-      pixels each way, `r` being half the first segment's speed over its `maxSpeed` —
-      and is shown upright (`image_yscale` 0.8) when it moved right, upside down
+      pixels each way, `r` being half the greater of the first segment's `speed` and `simSpeed` over its
+      `maxSpeed` — and, when more than three segment lengths from its place, put on it
+      (position and angle). It is shown upright (`image_yscale` 0.8) when it moved right, upside down
       (−0.8) when it moved left. The first segment, asleep (`NidhoggZone.active` 0),
-      stays still; awake, it chases the nearest fencer (aiming 12 above its feet,
+      stays still; awake with its head simulated (`NidhoggHead.simActive`) and nothing eaten,
+      it is put at the head's simulated place and angle (`simX`, `simY`, `simAngle`) and
+      stands still, its `simSpeed` the distance it was moved, at most `maxSpeed`; awake
+      otherwise, it chases the nearest fencer (aiming 12 above its feet,
       turning at most 9 degrees a step); with none, before eating it heads for the
       nearest `ScreenEdge` (at most 7 degrees a step), stopping within 30 pixels; after
       eating it goes straight on. Chasing or heading out it moves at `maxSpeed`; the
@@ -28,7 +33,6 @@ defmodule Nidhox.Objects.Nidhogg do
   """
 
   alias Cauldron2D.GameMaker.{Instance, World}
-  alias Nidhox.Bout.{Camera, Sound}
   alias Nidhox.Gml
   alias Nidhox.Objects.NidhoggHead
 
@@ -36,8 +40,7 @@ defmodule Nidhox.Objects.Nidhogg do
   @segment_length 15
   @frames 12
   @max_speed 8
-  @wake_sound 115
-  @wake_margin 80
+  @far_apart 3
   @aim_above 12
   @edge_stop 30
   @body_turn 30
@@ -53,8 +56,7 @@ defmodule Nidhox.Objects.Nidhogg do
       {"gml_Object_Dragable_Create_0", &segment/3},
       {"gml_Object_Dragable_Step_0", &crawl/3},
       {"gml_Object_NidhoggZone_Create_0",
-       fn world, self, _other -> Gml.put(world, self, %{active: 0}) end},
-      {"gml_Object_NidhoggZone_Collision_Man", &wake/3}
+       fn world, self, _other -> Gml.put(world, self, %{active: 0, nidhoggAutoStartTimer: 0}) end}
     ]
   end
 
@@ -143,9 +145,10 @@ defmodule Nidhox.Objects.Nidhogg do
       targetObj: -4,
       X: x,
       Y: y,
-      text: "",
+      text: "-1",
       maxSpeed: @max_speed,
-      holdSpeed: 0
+      holdSpeed: 0,
+      simSpeed: 0
     })
   end
 
@@ -174,7 +177,8 @@ defmodule Nidhox.Objects.Nidhogg do
     case Gml.var(world, Gml.first(world, "Nidhogg") || -4, :parts, []) do
       [first | _] ->
         %Instance{speed: speed} = World.fetch(world, first)
-        speed / Gml.var(world, first, :maxSpeed, @max_speed) * 0.5
+        sim_speed = Gml.var(world, first, :simSpeed, 0)
+        max(speed, sim_speed) / Gml.var(world, first, :maxSpeed, @max_speed) * 0.5
 
       [] ->
         0
@@ -196,13 +200,28 @@ defmodule Nidhox.Objects.Nidhogg do
         |> Gml.put(self, %{targetAngle: angle})
         |> turn_towards(self, angle, ratio, @body_turn)
 
-      World.update(world, self, fn segment ->
+      world
+      |> World.update(self, fn segment ->
         %{
           segment
           | x: segment.x + Gml.clamp((target_x - segment.x) * ratio, -@body_turn, @body_turn),
             y: segment.y + Gml.clamp((target_y - segment.y) * ratio, -@body_turn, @body_turn)
         }
       end)
+      |> catch_up(self, target)
+    else
+      world
+    end
+  end
+
+  defp catch_up(world, self, {target_x, target_y}) do
+    %Instance{x: x, y: y} = World.fetch(world, self)
+    length = Gml.var(world, Gml.first(world, "Nidhogg") || -4, :segmentLength, @segment_length)
+    away = :math.sqrt((target_x - x) * (target_x - x) + (target_y - y) * (target_y - y))
+
+    if away > length * @far_apart do
+      angle = Gml.var(world, self, :targetAngle)
+      World.update(world, self, &%{&1 | x: target_x, y: target_y, image_angle: angle})
     else
       world
     end
@@ -232,13 +251,35 @@ defmodule Nidhox.Objects.Nidhogg do
   defp lead(world, self, ratio) do
     if Gml.truthy?(Gml.var(world, Gml.first(world, "NidhoggZone") || -4, :active)) do
       %Instance{x: x, y: y} = World.fetch(world, self)
+      head = Gml.first(world, "NidhoggHead")
 
-      world
-      |> chase(self, Gml.nearest(world, {x, y}, "Man"), ratio)
-      |> face_head(self)
+      if (head && Gml.truthy?(Gml.var(world, head, :simActive))) and
+           not Gml.truthy?(Gml.var(world, head, :eaten)),
+         do: follow_simulation(world, self, head),
+         else:
+           world
+           |> chase(self, Gml.nearest(world, {x, y}, "Man"), ratio)
+           |> face_head(self)
     else
       World.update(world, self, &Instance.put_motion(&1, %{speed: 0}))
     end
+  end
+
+  defp follow_simulation(world, self, head) do
+    %Instance{x: x, y: y} = World.fetch(world, self)
+    sim_x = Gml.var(world, head, :simX)
+    sim_y = Gml.var(world, head, :simY)
+    angle = Gml.var(world, head, :simAngle)
+    moved = :math.sqrt((x - sim_x) * (x - sim_x) + (y - sim_y) * (y - sim_y))
+
+    world
+    |> Gml.put(self, %{simSpeed: min(moved, Gml.var(world, self, :maxSpeed))})
+    |> World.update(self, fn segment ->
+      Instance.put_motion(%{segment | x: sim_x, y: sim_y, image_angle: angle}, %{
+        direction: angle,
+        speed: 0
+      })
+    end)
   end
 
   defp chase(world, self, man, ratio) when man != nil do
@@ -306,26 +347,6 @@ defmodule Nidhox.Objects.Nidhogg do
 
       true ->
         world
-    end
-  end
-
-  defp wake(world, self, _man) do
-    if Gml.truthy?(Gml.var(world, self, :active)) do
-      world
-    else
-      %Instance{y: y} = World.fetch(world, self)
-
-      world
-      |> Gml.all("NidhoggHead")
-      |> Enum.reduce(world, fn head, world ->
-        %Instance{x: x} = World.fetch(world, head)
-
-        across =
-          Gml.clamp(x, Camera.left(world) + @wake_margin, Camera.right(world) - @wake_margin)
-
-        Sound.play(world, @wake_sound, {across, y})
-      end)
-      |> Gml.put(self, %{active: 1})
     end
   end
 end

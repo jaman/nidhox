@@ -11,8 +11,10 @@ defmodule Nidhox.Objects.System do
       `specialEffects` and `aperture` 1
     * `details` `[9000, 9001, 9002]` and `detail` the first of them; `windowed`,
       `flashing` and `persistent_blood` 1
-    * `flow` 4
-    * `priorityList` `[48, 49, 55, 29, 14, 70, 8]`
+    * `flow` 4; `humanPlayerIndex` 1; `aiDifficulty` 1; `matchStatsTimer` 480;
+      `displayMode` 0; `training` 0, `trainingPersonality` 5, `trainingDifficulty` 0.5 and
+      `cpuBattleHype` 0.75
+    * `priorityList` `[48, 49, 55, 29, 31, 30, 14, 70, 8]`
     * the variants: `throws` and `divekicks` 1; `noSwords`, `lowGravity`,
       `suddenDeathOnly`, `throwsOnly`, `babyMode`, `skippyMode`, `turboMode`,
       `slowMode`, `spineSwords`, `boomerangSwords` and `trails` 0
@@ -26,9 +28,8 @@ defmodule Nidhox.Objects.System do
   0.1 from `aperture`; and its GUI draw, while `aperture` is above 0, covers the
   320 × 200 GUI in black at alpha `aperture`, the screen coming up out of black over
   the first ten steps of every room. In a demonstration (`flow` 1, a `Match` there) the
-  GUI draw first shows the copy's `sNewTitle` at (160, 36) and, on the first 60 of every
-  120 frames, "press start" (`pressStart`) white outlined in black, its bottom middle at
-  (160, 188).
+  GUI draw first shows the copy's `sNewTitle` at (160, 36); "press start" under it
+  carries each client's glyph and is `Nidhox.Screen`'s.
 
   `create/1` makes it; `get/2` reads one of its variables.
   """
@@ -36,7 +37,6 @@ defmodule Nidhox.Objects.System do
   alias Cauldron2D.GameMaker.{Data, Draw, World}
   alias Nidhox.Bout.Frame
   alias Nidhox.Gml
-  alias Nidhox.Objects.Challenge
 
   @object "System"
   @gui_width 320
@@ -44,9 +44,6 @@ defmodule Nidhox.Objects.System do
   @demonstration 1
   @logo "sNewTitle"
   @logo_at {160, 36}
-  @press_start_at {160, 188}
-  @blink_period 120
-  @blink_shown 60
   @made ["Ear", "BackgroundObject", "Particles", "PlayerOutlines"]
 
   @start %{
@@ -69,7 +66,15 @@ defmodule Nidhox.Objects.System do
     flashing: 1,
     persistent_blood: 1,
     flow: 4,
-    priorityList: [48, 49, 55, 29, 14, 70, 8],
+    humanPlayerIndex: 1,
+    aiDifficulty: 1,
+    matchStatsTimer: 480,
+    displayMode: 0,
+    training: 0,
+    trainingPersonality: 5,
+    trainingDifficulty: 0.5,
+    cpuBattleHype: 0.75,
+    priorityList: [48, 49, 55, 29, 31, 30, 14, 70, 8],
     throws: 1,
     divekicks: 1,
     noSwords: 0,
@@ -139,7 +144,7 @@ defmodule Nidhox.Objects.System do
     do: Gml.put(world, self, %{aperture: Gml.var(world, self, :aperture) - 0.1})
 
   defp draw_gui(world, self, _other) do
-    world = if demonstration?(world, self), do: demonstration(world, self), else: world
+    world = if demonstration?(world, self), do: demonstration(world), else: world
     aperture = Gml.var(world, self, :aperture)
     if Gml.gt?(aperture, 0), do: Draw.item(world, blackout(world, aperture)), else: world
   end
@@ -147,44 +152,19 @@ defmodule Nidhox.Objects.System do
   defp demonstration?(world, self),
     do: Gml.var(world, self, :flow) == @demonstration and Gml.exists?(world, "Match")
 
-  defp demonstration(world, self) do
+  defp demonstration(world) do
     zoom = gui_zoom(world)
     logo = Data.index(world.data, :sprites, @logo)
     %{origin: origin} = World.sprite(world, logo)
     {logo_x, logo_y} = @logo_at
 
-    world =
-      Draw.item(world, %{
-        picture: {:sprite, logo, 0},
-        position: {logo_x * zoom, logo_y * zoom},
-        origin: origin,
-        scale: {zoom, zoom},
-        depth: 0
-      })
-
-    if rem(trunc(Gml.var(world, self, :frame)), @blink_period) < @blink_shown,
-      do: press_start(world, zoom),
-      else: world
-  end
-
-  defp press_start(world, zoom) do
-    {x, y} = @press_start_at
-
-    Challenge.outlined(
-      world,
-      "press start",
-      {x * zoom, y * zoom},
-      %{
-        font: "fMenu",
-        scale: {zoom, zoom},
-        angle: 0,
-        colour: {255, 255, 255},
-        outline: {0, 0, 0},
-        spread: zoom
-      },
-      halign: :center,
-      valign: :bottom
-    )
+    Draw.item(world, %{
+      picture: {:sprite, logo, 0},
+      position: {logo_x * zoom, logo_y * zoom},
+      origin: origin,
+      scale: {zoom, zoom},
+      depth: 0
+    })
   end
 
   defp gui_zoom(%World{data: %{general: %{window: {width, _height}}}}), do: width / @gui_width

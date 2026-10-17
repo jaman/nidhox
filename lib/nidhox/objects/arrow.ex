@@ -4,7 +4,8 @@ defmodule Nidhox.Objects.Arrow do
   the fencer with the right of way runs. It sits in the screen's pixels (the game's
   320 × 200 GUI surface), drawn over the play.
 
-    * create: `xPos`, `yOffset`, `xSpeed` 0; ±1 when somebody already leads
+    * create: `xPos`, `yOffset`, `xSpeed` 0, but `xPos` −1 when player 1 leads; `surf` of
+      players 1 and 2 −1
     * end step: `xPos` held to ±0.9, then shown (`image_alpha` 1) and, with a match:
       nobody leading, hidden with `xPos` 0; player 1 leading, `xPos` 1 and frame 1;
       player 2, `xPos` −1 and frame 2. Its place: across `160 + xPos × 124 −
@@ -12,17 +13,17 @@ defmodule Nidhox.Objects.Arrow do
     * draw: outside a demonstration (`System.flow` 1), with a match neither in sudden
       death nor finished and somebody leading: in the leader's colour — in a
       tournament the colour of the tournament's player leading (`currentPlayer[leader] + 1`), in a single player run the
-      computer's when player 2 leads. First its shadow in black, the whole frame at
-      `(x − 1 ± sin(System.frame / 30), y − 1 + cos(System.frame / 50) / 2)` (+ for
-      player 1); then the arrow in bands 5 pixels tall, band `i` (from its top) in the
-      colour merged towards that colour 5% darkened by `0.5 + sin(i² / 10 +
+      computer's when a computer (`Brain`) plays the leader. First its shadow in black, the
+      whole frame at `(x − 0.5 ± sin(System.frame / 30), y − 0.5 + cos(System.frame / 50) /
+      2)` (+ for player 1); then the arrow in bands 5 pixels tall, band `i` (from its top)
+      in the colour merged towards that colour 5% darkened by `0.5 + sin((2i)² / 10 +
       System.frame / 4) × 0.5`
   """
 
   alias Cauldron2D.GameMaker.{Colour, Draw, Instance, World}
   alias Nidhox.Bout.{Camera, PlayerColour}
   alias Nidhox.Gml
-  alias Nidhox.Objects.{Match, System}
+  alias Nidhox.Objects.{Brain, Match, System}
 
   @reach 124
   @middle 160
@@ -43,18 +44,13 @@ defmodule Nidhox.Objects.Arrow do
   end
 
   defp start(world, self, _other) do
-    x_pos =
-      case Match.get(world, :leadingPlayerIndex) do
-        1 -> 1
-        2 -> -1
-        _nobody -> 0
-      end
+    x_pos = if Match.get(world, :leadingPlayerIndex) == 1, do: -1, else: 0
 
     Gml.put(world, self, %{
       xPos: x_pos,
       yOffset: 0,
       xSpeed: 0,
-      surf: -1,
+      surf: %{1 => -1, 2 => -1},
       yellowKillStreak: 0,
       orangeKillStreak: 0
     })
@@ -111,7 +107,7 @@ defmodule Nidhox.Objects.Arrow do
 
   defp colour_index(world, leader) do
     cond do
-      Gml.exists?(world, "ArcadeMode") and leader == 2 ->
+      Gml.exists?(world, "ArcadeMode") and Brain.for_player(world, leader) != nil ->
         @computer
 
       (tournament = Gml.first(world, "Tournament")) != nil ->
@@ -135,7 +131,8 @@ defmodule Nidhox.Objects.Arrow do
         sprite,
         leader,
         {0, 0, width, height},
-        {left + x - 1 + toward * :math.sin(frame / 30), top + y - 1 + :math.cos(frame / 50) / 2},
+        {left + x - 0.5 + toward * :math.sin(frame / 30),
+         top + y - 0.5 + :math.cos(frame / 50) / 2},
         {0, 0, 0}
       )
 
@@ -143,7 +140,7 @@ defmodule Nidhox.Objects.Arrow do
 
     bands =
       for band <- 0..(height - 1)//@band do
-        shade = 0.5 + :math.sin(band * band / 10 + frame / 4) * 0.5
+        shade = 0.5 + :math.sin(band * 2 * (band * 2) / 10 + frame / 4) * 0.5
 
         part(
           sprite,

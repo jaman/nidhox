@@ -3,8 +3,8 @@ defmodule Nidhox.Objects.Background do
   The moving paper-like backdrop of every screen (`BackgroundObject`), made by `System`
   when the game starts and kept across rooms.
 
-  It keeps `@squares` surfaces, each 320 × 200 and first painted with background 357
-  (`bLevelSelect`) at its corner, and a final surface the same size:
+  It keeps `@squares` surfaces, each 320 × 200 and first painted with the sprite
+  `bLevelSelect` at its corner, and a final surface the same size:
 
     * begin step: any missing surface is made again; `timer` counts down
     * draw: when `timer` has run out it is set to 1, 2 or 3 again and every square `i`
@@ -23,14 +23,14 @@ defmodule Nidhox.Objects.Background do
   y, x scale, y scale and angle; the timer is `choose(1, 2, 3)`.
   """
 
-  alias Cauldron2D.GameMaker.{Draw, Surfaces, World}
+  alias Cauldron2D.GameMaker.{Data, Draw, Surfaces, World}
   alias Nidhox.Gml
 
   @squares 3
   @copies 10
   @width 320
   @height 200
-  @painting 357
+  @painting "bLevelSelect"
   @square_alpha 0.3
   @final_alpha 0.15
   @white {255, 255, 255}
@@ -91,7 +91,12 @@ defmodule Nidhox.Objects.Background do
   end
 
   defp paint({world, id}) do
-    painting = %{picture: {:sprite, @painting, 0}, position: {0, 0}, origin: {0, 0}}
+    painting = %{
+      picture: {:sprite, Data.index(world.data, :sprites, @painting), 0},
+      position: {0, 0},
+      origin: {0, 0}
+    }
+
     {Surfaces.draw(world, id, [painting]), id}
   end
 

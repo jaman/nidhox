@@ -1,7 +1,7 @@
 defmodule Nidhox.MixProject do
   use Mix.Project
 
-  @version "0.1.4"
+  @version "0.2.0"
   @source_url "https://github.com/jaman/nidhox"
 
   def project do
@@ -43,12 +43,13 @@ defmodule Nidhox.MixProject do
 
   defp deps do
     [
-      family(:cauldron_2d, "~> 0.2.6", "../cauldron/cauldron_2d", override: true),
-      family(:cauldron_2d_gamemaker, "~> 0.2.6", "../cauldron/cauldron_2d_gamemaker", []),
-      family(:cauldron_2d_drafter, "~> 0.2.6", "../cauldron/cauldron_2d_drafter", []),
-      family(:linocut, "~> 0.2.6", "../cauldron/linocut", override: true),
-      family(:drafter, "~> 0.5.1", "../drafter", override: true),
-      family(:french_curve, "~> 0.2.0", "../french_curve", override: true),
+      family(:cauldron_2d, "~> 0.3.0", "../cauldron/cauldron_2d", override: true),
+      family(:cauldron_2d_gamemaker, "~> 0.3.0", "../cauldron/cauldron_2d_gamemaker", []),
+      family(:cauldron_2d_drafter, "~> 0.3.0", "../cauldron/cauldron_2d_drafter", []),
+      family(:cauldron_gpu, "~> 0.3.0", "../cauldron/cauldron_gpu", []),
+      family(:linocut, "~> 0.3.0", "../cauldron/linocut", override: true),
+      family(:drafter, "~> 0.5.6", "../drafter", override: true),
+      family(:french_curve, "~> 0.2.1", "../french_curve", override: true),
       family(:tuning_fork, "~> 0.1.13", "../tuning_fork/tuning_fork", override: true),
       family(:tuning_fork_speaker, "~> 0.1.13", "../tuning_fork/tuning_fork_speaker", []),
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},

@@ -11,10 +11,34 @@ defmodule Nidhox.Man.Behave do
   alias Nidhox.Man.States.{Air, Attack, Hurt, Move, Stand}
 
   @stand [29, 78, 32, 7, 8, 30, 31, 23]
-  @move [52, 54, 9, 58, 59, 61, 62, 53, 36, 22, 11, 10, 50, 51]
+  @move [52, 80, 81, 54, 9, 58, 59, 61, 62, 53, 36, 22, 11, 10, 50, 51]
   @air [43, 44, 18, 19, 27, 28, 1, 2, 3, 35, 14, 15, 16, 79]
   @attack [48, 49, 55, 45, 70, 72, 73, 69, 4, 5]
-  @hurt [13, 17, 38, 40, 41, 47, 33, 76, 77, 65, 63, 64, 66, 20, 26, 24, 39, 37, 67, 68, 46]
+  @hurt [
+    13,
+    17,
+    38,
+    40,
+    41,
+    47,
+    33,
+    76,
+    77,
+    65,
+    63,
+    64,
+    66,
+    20,
+    26,
+    24,
+    39,
+    37,
+    67,
+    68,
+    46,
+    82,
+    83
+  ]
 
   @doc "The world after fencer `self`'s behaviour in its state `state` (`stateBehavior`)."
   @spec run(World.t(), non_neg_integer(), integer()) :: World.t()

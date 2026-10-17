@@ -6,63 +6,63 @@ defmodule Nidhox.Flow do
 
     * `:logos` — `Nidhox.Screen.Logos` over `rLogos`; when they end, or on any press,
       the title
-    * `:title` — `rMainMenu` under the logo, the camera swaying across the room
-      (`room_width / 2 + sin(frame / 500) × (room_width / 2 − 160)`); "press start"
-      until a press, then the game's menus, each a `Nidhox.Screen.MenuList`, all in
-      this room: the main menu — MULTIPLAYER, TOURNAMENT, OPTIONS, CREDITS, QUIT TO
-      DESKTOP, HOW TO PLAY, SINGLE PLAYER and NidhOX's CHALLENGE, MULTIPLAYER selected
-      at first; SINGLE PLAYER — BEGIN; MULTIPLAYER — OFFLINE VERSUS, ONLINE VERSUS,
-      VARIANTS; ONLINE VERSUS — HOST, JOIN, SET IP; TOURNAMENT — PLAYERS (3 to 8, left
-      and right), MAP (left and right), VARIANTS, START TOURNAMENT; VARIANTS — the game's
-      variants (`Nidhox.Rules`), chosen one by one. A move plays `sfxChangeLevel1`, a
-      choice `sndLevel`. `:jump` goes back to the menu before, selecting what opened
-      it, and on the main menu selects QUIT TO DESKTOP. On the menus before ONLINE
-      VERSUS's choices, the machine neither hosts nor looks for hosts
-    * `:hosting` — hosting (`Nidhox.Online`), the address and join code shown, until a
-      player on a client of their own takes a side, then the level select; `:jump` or
-      `:pause` (`Esc`) goes back, hosting stopped
-    * `:ssh_hosting` — HOST OVER SSH: the client of the player who chose it is asked for
-      the port to serve on (`Nidhox.Typing`; empty, or not a port, for any free one,
-      started with `ssh_port` when set), then the game served over ssh there
-      (`Nidhox.Online`) and the command to connect with shown, until a player connecting that way takes a side,
-      then the level select; `:jump` or `:pause` (`Esc`) goes back, serving stopped
-    * `:join` — the hosts heard on the local network; choosing one asks for its code
-    * `:address` — SET IP: the client of the player who chose it is asked to type the
-      host's address (`Nidhox.Typing`, started with this machine's network part), then
-      the code
-    * `:code` — the client of the player joining is asked to type the host's join code;
-      what they type (`typed/4`) joins, and that client is asked to enter the host's
-      world. On both screens `:start` or `:attack` — pressed again once every player has
-      let go of both since the typing closed — asks for the typing again and
-      `:jump` or `:pause` (`Esc`) goes back
-    * `:demo` — the title's attract mode (`MainMenu`'s `autoStartTimer`): after 1200
-      steps on the title with no press, a match in one of the areas at random
-      (`choose(20, 21, 22, 23, 25)`) played by the computer on both sides (`System.flow`
+    * `:title` — `rMainMenu` with the game's main menu (`Nidhox.Screen.MainMenu`), the
+      camera swaying across the room (`room_width / 2 + sin(frame / 500) ×
+      (room_width / 2 − 160)`). Its windows — TRAINING, TOURNAMENT (with VARIANTS),
+      NEWS and QUIT TO DESKTOP? — open over it and take the input while open. Coming to
+      the main menu ends any match, run and tournament and sets what the game's
+      `MainMenu` sets as it starts: 3 tournament players, the Castle, the variants as
+      they start, training off and `System.flow` 1. OPTIONS asks the client of the
+      player who chose it to open its options, and QUIT TO DESKTOP?'s yes asks it to
+      quit (`ask/3`); a NEWS article's link is asked onto that player's clipboard
+      (`{:clipboard, url}`). HYPE, the "new" markers seen and the articles read change
+      the prefs and are asked onto the prefs player's client (`{:options, prefs}`). A
+      move plays `sfxChangeLevel1`, a choice `sndLevel`. The machine neither hosts nor
+      looks for hosts here
+    * `:multi`, `:notice` and the rounds of mode `:online` — ONLINE (`Nidhox.OnlineFlow`)
+    * `:ssh_hosting` — HOST OVER SSH, from the online menu: the client of the player who
+      chose it is asked for the port to serve on (`Nidhox.Typing`; empty, or not a
+      port, for any free one, started with `ssh_port` when set), then the game served
+      over ssh there (`Nidhox.Online`) and the command to connect with shown, until a
+      player connecting that way takes a side, then the level select; `:jump` or
+      `:pause` (`Esc`) goes back to the online menu, serving stopped
+    * `:address` — JOIN BY ADDRESS, from the online menu: the client of the player who
+      chose it is asked to type the host's address and the port its lobby shows,
+      `address:port` (`Nidhox.Typing`, started with this machine's network part), and
+      that client is then asked to enter the lobby's world. `:start` or `:attack` —
+      pressed again once every player has let go of both since the typing closed — asks
+      for the typing again and `:jump` or `:pause` (`Esc`) goes back
+    * `:demo` — the title's attract mode (`MainMenu`'s `autoStartTimer`): 1200 steps
+      after the main menu began, with no move on its lists since, a match in one of the
+      released levels at random played by the computer on both sides (`System.flow`
       1), with the logo and "press start" over it (`Nidhox.Objects.System`); any press,
       or the match ending, goes to the main menu
     * `:levels` — `Nidhox.Screen.Levels` over `rLevelSelect`: its chosen area begins a
-      versus bout under the variants chosen; with no move for 720 steps, the main menu, except while
-      this machine hosts ONLINE VERSUS
+      bout under the variants chosen; back asks BACK TO MAIN MENU?
+      (`Nidhox.Screen.Confirm`), the level select still while it is open
     * `:tournament` — the tournament's own rooms, run by the game's objects
       (`Nidhox.Objects.Tournament`, `Nidhox.Objects.CountDowns`): the ladder
       (`rShowLadder`), the warm-up before each match (`rPreMatch`, where `:start`
       pauses) and the champion (`rShowChampion`). Its match's start leads to `:bout`,
       and the main menu, once the champion's countdown goes there, to the main menu
     * `:tutorial` — HOW TO PLAY: `rTutorial` with the game's own `Tutorial` (`System.flow`
-      656686433); it ends at the main menu once the tutorial is gone
+      9836834); it ends at the main menu, at HOW TO PLAY, once the tutorial is gone
     * `:challenge` — CHALLENGE: `rChallengeMode` with the game's own `ChallengeMode`
       (`Nidhox.Objects.Challenge`), until QUIT TO TITLE SCREEN from its pause
-    * `:credits` — `Nidhox.Screen.Credits` over `rCredits`, until `:attack` or `:start`
+    * `:credits` — `Nidhox.Screen.Credits` over `rCredits`, until `:attack` or `:start`,
+      then the main menu at CREDITS
     * `:bout` — the match (`Nidhox.Bout`), run by the game's own objects from its
       faceoff on under the rules chosen on the level select (`Nidhox.Rules`), until its
       `Match` is gone; `:start` or `:pause` (`Esc`) pauses it
     * `:paused` — `Nidhox.Screen.Pause`; UNPAUSE GAME goes back to the bout, CHANGE LEVEL
-      ends the match (its music with it) for the level select, and QUIT TO TITLE SCREEN
-      ends the match and any tournament for the title — except when chosen by the
-      player from another machine while this machine hosts: then a bout in progress is
-      the host's by forfeit, the match ends, that player's client is asked to quit
-      (`ask/3`), and the hosting screen comes back, still hosting, saying "the other
-      player quit"
+      ends the match (its music with it) for the level select, VARIANTS changes the
+      variants of the match being played — restarting it when asked — CHANGE COLOR
+      changes `System.vsColor` and keeps it in the prefs (`colours`), OPTIONS asks the
+      chooser's client to open its options, and EXIT ends the match and any tournament
+      for the main menu — except when chosen by the player from another machine while
+      this machine hosts: then a bout in progress is the host's by forfeit, the match
+      ends, that player's client is asked to quit (`ask/3`), and the hosting screen
+      comes back, still hosting, saying "the other player quit"
     * `:results` — `Nidhox.Screen.Results` over `rMatchStats`: a press goes on to the
       level select, or with "watch replay" turned up, to the replay. In a single player
       run the run's own step moves on at a press
@@ -70,15 +70,21 @@ defmodule Nidhox.Flow do
       recorded input (the computer's as it chose them), then back to the results;
       `:start` (SKIP THIS) ends it early
 
-  SINGLE PLAYER is the game's own run (`Nidhox.Objects.Arcade`) against the computer
+  TRAINING is a versus bout against the computer on side 2 (`System.training`), its
+  personality and difficulty chosen in the TRAINING window; the level select and results
+  follow as for LOCAL. CPU BATTLE is the computer against itself (`System.flow`
+  62831853) under the HYPE (`System.cpuBattleHype`), TIME LIMIT and SUDDEN DEATH ONLY
+  chosen: a level select on a released level at random that chooses by itself after
+  2700 steps, the bout, and results that go on to the next level select by themselves
+  after 900 steps, round until a player leaves from the pause or the level select.
+
+  ARCADE is the game's own run (`Nidhox.Objects.Arcade`) against the computer
   (the match's `Brain`) on side 2: `:arcade` is its progress screen in
   `rArcadeProgress`, from which the run starts each bout; after a bout a press on the
   results leads back to it — a loss to the same level, a win to the next — and after the
   last win to `:arcade_complete` (`rBeatGameStats`), from which a press goes to the main
-  menu. The main menu ends any run and match (`kill(ArcadeMode)`, `kill(Match)`). OFFLINE VERSUS is the two sides against each other
-  in the area chosen. ONLINE VERSUS is the same with side 2 a player joined from
-  another machine: the host's world is the one both play in, and CONTINUE after a bout
-  goes back to the level select. TOURNAMENT is the game's single elimination tournament
+  menu. The main menu ends any run and match (`kill(ArcadeMode)`, `kill(Match)`). LOCAL is the two sides against each other
+  in the area chosen. ONLINE is `Nidhox.OnlineFlow`'s. TOURNAMENT is the game's single elimination tournament
   (`Nidhox.Tournament`) of its menu's PLAYERS in its MAP (`Nidhox.Bout.start_tournament/4`),
   each match a bout under the variants chosen, the first of its two players on side 1;
   a finished match goes back to the ladder. OPTIONS and QUIT TO DESKTOP ask the client of
@@ -91,34 +97,39 @@ defmodule Nidhox.Flow do
   of those players' sessions ends as their own quitting ends it.
   """
 
-  alias Cauldron2D.Distribution
   alias Cauldron2D.GameMaker.Data
   alias Cauldron2D.GameMaker.Rooms
   alias Cauldron2D.GameMaker.Step
   alias Cauldron2D.GameMaker.World
-  alias Nidhox.{Assets, Bout, Online}
-  alias Nidhox.Bout.Sound
+  alias Nidhox.{Assets, Bout, Online, OnlineFlow}
+  alias Nidhox.Bout.{Sound, Variants}
+  alias Nidhox.Brain.Personality
   alias Nidhox.Gml
-  alias Nidhox.Objects.Grass
+  alias Nidhox.Objects.{Grass, System, Tournament}
   alias Nidhox.Rules
-  alias Nidhox.Screen.{Credits, Levels, Logos, MenuList, Pause, Results, Title}
+  alias Nidhox.Screen.{Confirm, Context, Credits, Levels, Logos, MainMenu, News}
+  alias Nidhox.Screen.{Pause, Results, Title, TournamentMenu, Training}
 
   @no_keys %{held: MapSet.new(), pressed: MapSet.new(), released: MapSet.new()}
   @areas ["Cemetery", "Castle", "Mines", "Sky", "Wilds"]
-  @tutorial_flow 656_686_433
+  @tutorial_flow 9_836_834
   @ask_steps 30
   @sway_period 500
   @sway_margin 160
-  @move_sound 65
+  @move_sound "sfxChangeLevel1"
   @attract_steps 1200
-  @attract_levels [20, 21, 22, 23, 25]
-  @choose_sound 22
-  @fewest_entrants 3
+  @choose_sound "sndLevel"
+  @menu_entrants 3
+  @menu_area "Castle"
+  @menu_level 20
+  @cpu_battle_start 2700
+  @cpu_battle_results 900
+  @kept_prefs [:hype, :menu_seen, :news_seen, :colours, :net_id, :recent, :search_global]
   @played_online [:levels, :bout, :paused, :results, :replay]
-  @most_entrants 8
   @rooms %{
     logos: "rLogos",
     title: "rMainMenu",
+    multi: "rMultiMenu",
     levels: "rLevelSelect",
     credits: "rCredits",
     tutorial: "rTutorial",
@@ -133,13 +144,25 @@ defmodule Nidhox.Flow do
 
   @doc "The state after one step on its screen with `players`' input."
   @spec step(map(), %{1 => map(), 2 => map()}) :: map()
+  def step(%{screen: screen} = state, players) when screen in [:multi, :notice],
+    do: OnlineFlow.step(state, players)
+
+  def step(%{mode: :online, screen: screen} = state, players)
+      when screen in [:bout, :levels, :results, :paused],
+      do: OnlineFlow.round(state, players)
+
   def step(%{screen: :logos} = state, players) do
     state = scenery(state, players)
     if Title.continue?(players) or Logos.done?(state.timer), do: title(state), else: state
   end
 
   def step(%{screen: :title} = state, players) do
-    state = state |> idled(players) |> titled(players)
+    state = state |> scenery(players) |> sway()
+    context = Context.of(state)
+    {menu, events} = MainMenu.step(state.menu, players, context)
+    {menu, window_events} = windowed(menu, players, context)
+    state = %{state | menu: menu, idle: state.idle + 1}
+    state = Enum.reduce(events ++ window_events, state, &on_menu(&2, &1)) |> OnlineFlow.menus()
     if state.screen == :title and state.idle > @attract_steps, do: demo(state), else: state
   end
 
@@ -149,13 +172,23 @@ defmodule Nidhox.Flow do
       else: advance(state, players)
   end
 
+  def step(%{screen: :levels, menu: %Confirm{} = box} = state, players) do
+    state = scenery(state, players)
+
+    case Confirm.step(box, players, %{}) do
+      {:open, box, _events} -> %{state | menu: box}
+      {:closed, [{:yes, :leave}]} -> main_menu(state)
+      {:closed, _no} -> %{state | menu: nil}
+    end
+  end
+
   def step(%{screen: :levels} = state, players) do
     state = scenery(state, players)
 
     case Levels.input(state.levels, players) do
       {:choose, area} -> chosen(state, area)
-      :given_up -> given_up(state)
-      {:moved, levels} -> %{state | levels: levels, world: Levels.pan(levels, state.world)}
+      :back -> %{state | menu: leave_box(players)}
+      {:moved, levels} -> moved_levels(state, levels)
       {:stay, levels} -> %{state | levels: levels, world: Levels.pan(levels, state.world)}
     end
   end
@@ -169,7 +202,7 @@ defmodule Nidhox.Flow do
         met(state)
 
       backing_out?(players) ->
-        online_menu(state)
+        online_menu(state, state.typer || 1)
 
       again != nil and state.typing_armed and state.online.ssh == nil ->
         typing(%{state | typer: again})
@@ -179,35 +212,12 @@ defmodule Nidhox.Flow do
     end
   end
 
-  def step(%{screen: :hosting} = state, players) do
-    state = scenery(state, players)
-
-    cond do
-      joined?(state) -> met(state)
-      backing_out?(players) -> online_menu(state)
-      true -> state
-    end
-  end
-
-  def step(%{screen: :join} = state, players) do
-    state = scenery(state, players)
-
-    case MenuList.input(found_menu(state), players) do
-      {:choose, {:host, address}, side} -> code_entry(state, address, side)
-      {:choose, :disabled, _side} -> state
-      {:back, _side} -> online_menu(state)
-      {:moved, menu} -> sound(%{state | menu: menu}, @move_sound)
-      {:stay, menu} -> %{state | menu: menu}
-      {:change, _option, _step, _side} -> state
-    end
-  end
-
-  def step(%{screen: screen} = state, players) when screen in [:address, :code] do
+  def step(%{screen: :address} = state, players) do
     state = state |> scenery(players) |> armed(players)
     again = Enum.find([1, 2], &(:start in players[&1].pressed or :attack in players[&1].pressed))
 
     cond do
-      backing_out?(players) -> online_menu(state)
+      backing_out?(players) -> online_menu(state, state.typer || 1)
       again != nil and state.typing_armed -> typing(%{state | typer: again})
       true -> state
     end
@@ -215,48 +225,45 @@ defmodule Nidhox.Flow do
 
   def step(%{screen: :tournament} = state, players) do
     if in_room?(state.world, "rPreMatch") and pausing?(players),
-      do: %{state | screen: :paused, menu: Pause.menu(:tournament, false)},
+      do: paused(state, players),
       else: state |> scenery(players) |> followed()
   end
 
   def step(%{screen: :credits} = state, players) do
     state = scenery(state, players)
 
-    if Credits.leave?(players), do: main_menu(state), else: state
+    if Credits.leave?(players), do: main_menu(state, :credits), else: state
   end
 
   def step(%{screen: :bout} = state, players) do
     if pausing?(players),
-      do: %{state | screen: :paused, menu: Pause.menu(state.mode, Online.hosting?(state))},
+      do: paused(state, players),
       else: bout(state, players)
   end
 
   def step(%{screen: :challenge} = state, players) do
     if pausing?(players),
-      do: %{state | screen: :paused, menu: Pause.menu(:challenge, false)},
+      do: paused(state, players),
       else: advance(state, players)
   end
 
   def step(%{screen: :tutorial} = state, players) do
     cond do
       pausing?(players) ->
-        %{state | screen: :paused, menu: Pause.menu(:tutorial, false)}
+        paused(state, players)
 
       Gml.exists?(state.world, "Tutorial") ->
         advance(state, players)
 
       true ->
-        main_menu(state)
+        main_menu(state, :how_to_play)
     end
   end
 
   def step(%{screen: :paused} = state, players) do
-    case Pause.input(state.menu, players) do
-      {:choose, :unpause, _side} -> %{state | screen: resumed(state), menu: nil}
-      {:choose, :change_level, _side} -> state |> killed(["Match"]) |> levels()
-      {:choose, :title, side} -> quit_to_title(state, side)
-      {:choose, :options, side} -> ask(state, side, :menu)
-      {:stay, menu} -> %{state | menu: menu}
+    case Pause.step(state.menu, players, Context.of(state)) do
+      {:open, pause, events} -> Enum.reduce(events, %{state | menu: pause}, &on_pause(&2, &1))
+      {:closed, events} -> Enum.reduce(events, state, &on_pause(&2, &1))
     end
   end
 
@@ -285,6 +292,10 @@ defmodule Nidhox.Flow do
     end
   end
 
+  def step(%{screen: :results, mode: :cpu_battle, timer: timer} = state, _players)
+      when timer >= @cpu_battle_results,
+      do: levels(state)
+
   def step(%{screen: :results} = state, players) do
     state = scenery(state, players)
 
@@ -304,59 +315,70 @@ defmodule Nidhox.Flow do
   end
 
   @doc """
-  The state with `ask` (`:menu` or `:quit`) put to the client of the player on `side`,
-  for the next `@ask_steps` steps, under a number no earlier ask had.
+  The state with `ask` (`:menu`, `:quit`, `{:clipboard, text}` and the like) put to the
+  client of the player on `side`, for the next `@ask_steps` steps, under a number no
+  earlier ask had.
   """
-  @spec ask(map(), 1 | 2, :menu | {:menu, term()} | :quit | {:enter, map()}) :: map()
+  @spec ask(map(), 1 | 2, term()) :: map()
   def ask(state, side, ask) do
+    owners = for {_id, %{side: ^side, owner: owner}} <- state.players, do: owner
+    asked(state, owners, ask)
+  end
+
+  @doc "The state with `ask` put to the clients `owners`, as `ask/3` puts it."
+  @spec asked(map(), [term()], term()) :: map()
+  def asked(state, owners, ask) do
     number = state.ask_number + 1
-
-    asks =
-      for {_id, %{side: ^side, owner: owner}} <- state.players,
-          into: state.asks,
-          do: {owner, {number, ask, state.steps + @ask_steps}}
-
-    %{state | ask_number: number, asks: asks}
+    asks = Map.new(owners, &{&1, {number, ask, state.steps + @ask_steps}})
+    %{state | ask_number: number, asks: Map.merge(state.asks, asks)}
   end
 
   @doc """
   The state after the player on `side` typed `text` for an entry of `kind` (`:address`
-  or `:code`), or went back from it (`text` `:back`); typing for a screen no longer
+  or `:ssh_port`), or went back from it (`text` `:back`); typing for a screen no longer
   shown changes nothing.
   """
-  @spec typed(map(), 1 | 2, :address | :code, String.t() | :back) :: map()
-  def typed(%{screen: kind} = state, _side, kind, :back) when kind in [:address, :code],
-    do: online_menu(state)
+  @spec typed(map(), 1 | 2, :address | :ssh_port, String.t() | :back) :: map()
+  def typed(%{screen: :address} = state, side, :address, :back), do: online_menu(state, side)
 
-  def typed(%{screen: :ssh_hosting} = state, _side, :ssh_port, :back), do: online_menu(state)
+  def typed(%{screen: :ssh_hosting} = state, side, :ssh_port, :back),
+    do: online_menu(state, side)
 
   def typed(%{screen: :ssh_hosting} = state, _side, :ssh_port, port),
     do: %{state | typing_armed: false, effects: [{:ssh_host, ssh_port(port)} | state.effects]}
 
   def typed(%{screen: :address} = state, side, :address, ""), do: typing(%{state | typer: side})
 
-  def typed(%{screen: :address} = state, side, :address, address),
-    do: code_entry(state, address, side)
+  def typed(%{screen: :address} = state, side, :address, typed) do
+    with [address, port_text] <- String.split(typed, ":", parts: 2),
+         {port, ""} when port in 1..65_535 <- Integer.parse(port_text) do
+      state = online_menu(state, side)
 
-  def typed(%{screen: :code, address: address} = state, side, :code, code),
-    do: %{state | typing_armed: false, effects: [{:join, address, code, side} | state.effects]}
+      %{
+        state
+        | net: %{state.net | direct?: true},
+          effects: [{:join_address, address, port, side} | state.effects]
+      }
+    else
+      _bad -> typing(%{state | typer: side})
+    end
+  end
 
   def typed(state, _side, _kind, _text), do: state
 
   @doc """
-  The state after the player from another machine left the ONLINE VERSUS game this
-  machine hosts, while on the level select, in a bout, its pause, the results or the
+  The state after the player connected over ssh left the game this machine serves
+  (HOST OVER SSH), while on the level select, in a bout, its pause, the results or the
   replay: a bout in progress won by forfeit by the hosting player (a `{:result, row}`
-  event with `won?` `true`), the match ended, and the hosting screen it was hosted from
-  (`:hosting` or `:ssh_hosting`) shown again with the status "the other player left",
-  still hosting, so the next player connects as the first did. Any other state is
-  returned unchanged.
+  event with `won?` `true`), the match ended, and the serving screen (`:ssh_hosting`)
+  shown again with the status "the other player left", still serving, so the next
+  player connects as the first did. Any other state is returned unchanged.
   """
   @spec opponent_gone(map()) :: map()
   def opponent_gone(state), do: state |> departed() |> closed() |> forfeited()
 
   defp forfeited(%{screen: screen} = state) when screen in @played_online do
-    if Online.hosting?(state) and not opponent?(state), do: forfeit(state), else: state
+    if state.online.ssh != nil and not opponent?(state), do: forfeit(state), else: state
   end
 
   defp forfeited(state), do: state
@@ -366,44 +388,200 @@ defmodule Nidhox.Flow do
   @spec logos(map()) :: map()
   def logos(state), do: enter(%{state | screen: :logos, menu: nil, timer: 0}, :logos)
 
-  defp title(state),
-    do:
-      enter(
-        offline(%{state | screen: :title, menu: nil, timer: 0}),
-        :title
-      )
+  defp title(state), do: main_menu(state)
 
-  defp main_menu(state) do
-    state = %{state | world: Enum.reduce(["ArcadeMode", "Match"], state.world, &kill_all(&2, &1))}
+  @doc "The state at the main menu, opened at `resume` (`Nidhox.Screen.MainMenu.new/1`), every match, run and tournament ended."
+  @spec main_menu(map(), atom() | nil) :: map()
+  def main_menu(state, resume \\ nil) do
+    world =
+      ["ArcadeMode", "Match", "Tournament"]
+      |> Enum.reduce(state.world, &kill_all(&2, &1))
+      |> System.put(%{training: 0, flow: 1, level: @menu_level})
+      |> World.put_global(:players, @menu_entrants)
 
-    menu(state, :main, nil)
+    state = %{
+      state
+      | screen: :title,
+        menu: MainMenu.new(resume),
+        world: world,
+        mode: nil,
+        entrants: @menu_entrants,
+        area: @menu_area,
+        rules: %Rules{},
+        idle: 0,
+        timer: 0
+    }
+
+    enter(offline(state), :title)
   end
 
-  defp titled(%{menu: nil} = state, players) do
-    state = state |> scenery(players) |> sway()
-    if Title.continue?(players), do: main_menu(state), else: state
-  end
+  defp windowed(%MainMenu{window: nil} = menu, _players, _context), do: {menu, []}
 
-  defp titled(state, players) do
-    state = state |> scenery(players) |> sway()
-
-    case MenuList.input(state.menu, players) do
-      {:moved, menu} ->
-        sound(%{state | menu: menu}, @move_sound)
-
-      {:stay, menu} ->
-        %{state | menu: menu}
-
-      {:choose, option, side} ->
-        state |> sound(@choose_sound) |> chose(state.menu.key, option, side)
-
-      {:change, option, step, _side} ->
-        changed(state, state.menu.key, option, step)
-
-      {:back, _side} ->
-        back(state, state.menu.key)
+  defp windowed(%MainMenu{window: %module{} = window} = menu, players, context) do
+    case module.step(window, players, context) do
+      {:open, window, events} -> {%{menu | window: window}, events}
+      {:closed, events} -> {%{menu | window: nil}, events}
     end
   end
+
+  defp on_menu(state, {:sound, :move}), do: sound(state, @move_sound)
+  defp on_menu(state, {:sound, :choose}), do: sound(state, @choose_sound)
+  defp on_menu(state, :idle_reset), do: %{state | idle: 0}
+  defp on_menu(state, {:go, :options, side}), do: ask(state, side, :menu)
+
+  defp on_menu(state, {:go, :quit, side}),
+    do:
+      opened(
+        state,
+        Confirm.new({"quit_prompt", "QUIT TO DESKTOP?"}, {:quit, side},
+          prompt_side: state.menu.prompt_side
+        )
+      )
+
+  defp on_menu(state, {:yes, {:quit, side}}), do: ask(state, side, :quit)
+  defp on_menu(state, :no), do: state
+  defp on_menu(state, {:go, :news, _side}), do: opened(state, News.new())
+  defp on_menu(state, {:read, key}), do: remembered(state, :news_seen, key)
+  defp on_menu(state, {:link, url}), do: ask(state, state.menu.prompt_side, {:clipboard, url})
+  defp on_menu(state, {:go, :how_to_play, _side}), do: tutorial(state)
+  defp on_menu(state, {:go, :credits, _side}), do: credits(state)
+  defp on_menu(state, {:go, :arcade, _side}), do: arcade(state)
+  defp on_menu(state, {:go, :training, _side}), do: opened(state, training_window(state))
+
+  defp on_menu(state, {:begin, personality, difficulty}),
+    do: training(state, personality, difficulty)
+
+  defp on_menu(state, {:go, :local, _side}), do: levels(%{state | mode: :versus})
+  defp on_menu(state, {:go, :online, side}), do: OnlineFlow.open(state, side)
+  defp on_menu(state, {:take, _lobby} = taken), do: OnlineFlow.invite_answered(state, taken)
+  defp on_menu(state, :denied), do: OnlineFlow.invite_answered(state, :denied)
+
+  defp on_menu(state, {:go, :tournament, _side}),
+    do: state |> opened(TournamentMenu.new()) |> in_world(&Tournament.remade(&1, state.entrants))
+
+  defp on_menu(state, {:go, :begin_cpu, _side}), do: cpu_battle(state)
+  defp on_menu(state, {:go, :challenge, _side}), do: challenge(state)
+  defp on_menu(state, {:hype, hype}), do: preferred(state, %{hype: hype})
+
+  defp on_menu(state, {:time_limit, step}),
+    do: %{
+      state
+      | rules: %{state.rules | time_limit: Rules.step_time_limit(state.rules.time_limit, step)}
+    }
+
+  defp on_menu(state, :sudden_death),
+    do: %{state | rules: Rules.choose(state.rules, :suddenDeathOnly)}
+
+  defp on_menu(state, {:seen, key}), do: remembered(state, :menu_seen, key)
+  defp on_menu(state, :reset_variants), do: %{state | rules: %Rules{}}
+  defp on_menu(state, {:rules, rules}), do: %{state | rules: rules}
+  defp on_menu(state, {:lobby, _message}), do: state
+  defp on_menu(state, :tournament_held), do: in_world(state, &Tournament.held/1)
+
+  defp on_menu(state, {:entrants, entrants}),
+    do: in_world(%{state | entrants: entrants}, &Tournament.remade(&1, entrants))
+
+  defp on_menu(state, {:area, area}), do: %{state | area: area}
+  defp on_menu(state, :tournament_closed), do: in_world(state, &Tournament.remade(&1, 0))
+  defp on_menu(state, :start_tournament), do: tournament(state)
+
+  defp paused(state, players) do
+    side = Enum.find([1, 2], 1, &(:start in players[&1].pressed or :pause in players[&1].pressed))
+
+    pause =
+      Pause.new(
+        flow: System.get(state.world, :flow),
+        remote?: Context.of(state).remote?,
+        variants?: Variants.active?(state.world),
+        side: side
+      )
+
+    %{state | screen: :paused, menu: pause}
+  end
+
+  defp on_pause(state, :unpause), do: %{state | screen: resumed(state), menu: nil}
+  defp on_pause(state, :change_level), do: state |> killed(["Match"]) |> levels()
+  defp on_pause(state, {:exit, side}), do: quit_to_title(state, side)
+  defp on_pause(state, {:options, side}), do: ask(state, side, :menu)
+  defp on_pause(state, {:sound, :move}), do: sound(state, @move_sound)
+  defp on_pause(state, {:sound, :choose}), do: sound(state, @choose_sound)
+  defp on_pause(state, {:lobby, _message}), do: state
+
+  defp on_pause(state, {:rules, rules}),
+    do: %{state | rules: rules, world: System.put(state.world, Rules.system(rules))}
+
+  defp on_pause(state, :restart_match),
+    do: state |> killed(["Match"]) |> begin(state.area, state.rules)
+
+  defp on_pause(state, {:colour, side, colour}) do
+    colours = Map.put(Context.of(state).colours, side, colour)
+    %{state | world: System.put(state.world, %{vsColor: colours})}
+  end
+
+  defp on_pause(state, :colours_kept) do
+    colours = Context.of(state).colours
+    preferred(state, %{colours: [colours[1], colours[2]]})
+  end
+
+  defp opened(%{menu: %MainMenu{} = menu} = state, window),
+    do: %{state | menu: %{menu | window: window}}
+
+  defp in_world(state, change), do: %{state | world: change.(state.world)}
+
+  @doc "The state with `value` added to the prefs' list `key` and kept on the prefs player's client."
+  @spec remembered(map(), atom(), term()) :: map()
+  def remembered(state, key, value) do
+    list = Map.fetch!(state.prefs, key)
+    if value in list, do: state, else: preferred(state, %{key => list ++ [value]})
+  end
+
+  @doc "The state with `changes` merged into the prefs and kept on the prefs player's client."
+  @spec preferred(map(), map()) :: map()
+  def preferred(state, changes) do
+    state = %{state | prefs: Map.merge(state.prefs, changes)}
+
+    case state.players[state.prefs_from] do
+      %{owner: owner} -> asked(state, [owner], {:options, Map.take(state.prefs, @kept_prefs)})
+      nil -> state
+    end
+  end
+
+  defp training_window(state) do
+    chosen = System.get(state.world, :trainingPersonality, 5)
+
+    personality =
+      Enum.find_value(Personality.training(), :no_divekicks, fn {name, id} ->
+        if id == chosen, do: name
+      end)
+
+    Training.new(personality, System.get(state.world, :trainingDifficulty, 0.5))
+  end
+
+  defp training(state, personality, difficulty) do
+    {:ok, id} = Personality.training_id(personality)
+
+    world =
+      System.put(state.world, %{
+        training: 1,
+        trainingPersonality: id,
+        trainingDifficulty: difficulty
+      })
+
+    levels(%{state | world: world, mode: :training})
+  end
+
+  defp cpu_battle(state) do
+    world = System.put(state.world, %{cpuBattleHype: state.prefs.hype})
+    levels(%{state | world: world, mode: :cpu_battle})
+  end
+
+  defp leave_box(players) do
+    side = if MainMenu.pressed?(players, 2, 9), do: 2, else: 1
+    Confirm.new({"leave_prompt", "BACK TO MAIN MENU?"}, :leave, prompt_side: side)
+  end
+
+  defp moved_levels(state, levels),
+    do: sound(%{state | levels: levels, world: Levels.pan(levels, state.world)}, @move_sound)
 
   defp ssh_port(typed) do
     case Integer.parse(typed) do
@@ -418,137 +596,19 @@ defmodule Nidhox.Flow do
   defp pausing?(players),
     do: Enum.any?(Map.values(players), &(:start in &1.pressed or :pause in &1.pressed))
 
-  defp idled(state, players),
-    do: %{state | idle: if(any_press?(players), do: 0, else: state.idle + 1)}
-
   defp any_press?(players), do: Enum.any?(Map.values(players), &(MapSet.size(&1.pressed) > 0))
 
   defp demo(state) do
-    {level, world} = Gml.choose(state.world, @attract_levels)
-    area = Bout.area_of_level(level)
+    released = Levels.released()
+    {index, world} = Gml.irandom(state.world, length(released) - 1)
+    area = Enum.at(released, index)
     world = Bout.start(world, area, %Rules{}, :demo)
     %{state | screen: :demo, mode: :demo, menu: nil, area: area, world: world, idle: 0, timer: 0}
   end
 
-  defp menu(state, key, selected) do
-    state = offline(%{state | screen: :title, menu: menu_list(state, key, selected), timer: 0})
-    enter(state, :title)
-  end
-
-  defp menu_list(_state, :main, selected),
-    do:
-      MenuList.new(
-        :main,
-        nil,
-        [
-          {"MULTIPLAYER", :multi},
-          {"TOURNAMENT", :tournament},
-          {"OPTIONS", :options},
-          {"CREDITS", :credits},
-          {"QUIT TO DESKTOP", :quit},
-          {"HOW TO PLAY", :tutorial},
-          {"SINGLE PLAYER", :single},
-          {"CHALLENGE", :challenge}
-        ],
-        selected
-      )
-
-  defp menu_list(_state, :single, selected),
-    do: MenuList.new(:single, "SINGLE PLAYER", [{"BEGIN", :begin}], selected)
-
-  defp menu_list(_state, :multi, selected),
-    do:
-      MenuList.new(
-        :multi,
-        "MULTIPLAYER",
-        [{"OFFLINE VERSUS", :versus}, {"ONLINE VERSUS", :online}, {"VARIANTS", :variants}],
-        selected
-      )
-
-  defp menu_list(_state, :online, selected),
-    do:
-      MenuList.new(
-        :online,
-        "ONLINE VERSUS",
-        [{"HOST", :host}, {"HOST OVER SSH", :ssh}, {"JOIN", :join}, {"SET IP", :set_ip}],
-        selected
-      )
-
-  defp menu_list(state, :tournament, selected),
-    do:
-      MenuList.new(
-        :tournament,
-        "TOURNAMENT",
-        [
-          {"PLAYERS #{state.entrants}", :players},
-          {"MAP #{Levels.name(state.area)}", :map},
-          {"VARIANTS", :variants},
-          {"START TOURNAMENT", :start}
-        ],
-        selected
-      )
-
-  defp menu_list(state, {:variants, _from} = key, selected),
-    do:
-      MenuList.new(
-        key,
-        "VARIANTS",
-        Enum.map(Rules.entries(), &{Rules.label(state.rules, &1), &1}),
-        selected
-      )
-
-  defp chose(state, :main, :multi, _side), do: menu(state, :multi, nil)
-  defp chose(state, :main, :tournament, _side), do: menu(state, :tournament, nil)
-  defp chose(state, :main, :single, _side), do: menu(state, :single, nil)
-  defp chose(state, :main, :options, side), do: ask(state, side, :menu)
-  defp chose(state, :main, :credits, _side), do: credits(state)
-  defp chose(state, :main, :quit, side), do: ask(state, side, :quit)
-  defp chose(state, :main, :tutorial, _side), do: tutorial(state)
-  defp chose(state, :main, :challenge, _side), do: challenge(state)
-  defp chose(state, :single, :begin, _side), do: arcade(state)
-  defp chose(state, :multi, :versus, _side), do: levels(%{state | mode: :versus})
-  defp chose(state, :multi, :online, _side), do: online_menu(state)
-  defp chose(state, :multi, :variants, _side), do: menu(state, {:variants, :multi}, nil)
-  defp chose(state, :online, :host, side), do: hosting(state, side)
-  defp chose(state, :online, :ssh, side), do: ssh_hosting(state, side)
-  defp chose(state, :online, :join, _side), do: joining(state)
-  defp chose(state, :online, :set_ip, side), do: address_entry(state, side)
-  defp chose(state, :tournament, :variants, _side), do: menu(state, {:variants, :tournament}, nil)
-  defp chose(state, :tournament, :start, _side), do: tournament(state)
-  defp chose(state, :tournament, option, _side), do: changed(state, :tournament, option, 1)
-
-  defp chose(state, {:variants, _from} = key, entry, _side) do
-    state = %{state | rules: Rules.choose(state.rules, entry)}
-    %{state | menu: MenuList.relabelled(state.menu, menu_list(state, key, entry).choices)}
-  end
-
-  defp changed(state, :tournament, :players, step) do
-    entrants = state.entrants + step
-
-    entrants =
-      if entrants > @most_entrants,
-        do: @fewest_entrants,
-        else: if(entrants < @fewest_entrants, do: @most_entrants, else: entrants)
-
-    relabelled(%{state | entrants: entrants}, :tournament)
-  end
-
-  defp changed(state, :tournament, :map, step),
-    do: relabelled(%{state | area: Levels.next(state.area, step)}, :tournament)
-
-  defp changed(state, _key, _option, _step), do: state
-
-  defp relabelled(state, key),
-    do: %{state | menu: MenuList.relabelled(state.menu, menu_list(state, key, nil).choices)}
-
-  defp back(state, :main),
-    do: %{state | menu: MenuList.new(:main, nil, state.menu.choices, :quit)}
-
-  defp back(state, :online), do: menu(state, :multi, :online)
-  defp back(state, {:variants, from}), do: menu(state, from, :variants)
-  defp back(state, key), do: menu(state, :main, key)
-
-  defp sound(state, sound) do
+  @doc "The state with sound `sound` played at the `Ear`."
+  @spec sound(map(), String.t()) :: map()
+  def sound(state, sound) do
     case Gml.first(state.world, "Ear") do
       nil ->
         state
@@ -559,38 +619,34 @@ defmodule Nidhox.Flow do
           | world:
               Sound.play(
                 state.world,
-                sound,
+                Data.index(state.world.data, :sounds, sound),
                 {World.fetch(state.world, ear).x, World.fetch(state.world, ear).y}
               )
         }
     end
   end
 
-  defp given_up(state) do
-    if Online.hosting?(state),
-      do: %{state | levels: %{state.levels | idle: 0}},
-      else: main_menu(state)
+  defp levels(%{mode: :cpu_battle} = state) do
+    released = Levels.released()
+    {index, world} = Gml.irandom(state.world, length(released) - 1)
+    levels = Levels.new(Enum.at(released, index), @cpu_battle_start)
+    enter(%{state | screen: :levels, menu: nil, levels: levels, world: world, timer: 0}, :levels)
   end
 
-  defp levels(state) do
-    levels = Levels.new()
-    enter(%{state | screen: :levels, menu: nil, levels: levels, timer: 0}, :levels)
+  defp levels(%{mode: :online} = state),
+    do:
+      enter(
+        %{state | screen: :levels, menu: nil, levels: Levels.new(state.area), timer: 0},
+        :levels
+      )
+
+  defp levels(state),
+    do: enter(%{state | screen: :levels, menu: nil, levels: Levels.new(), timer: 0}, :levels)
+
+  defp online_menu(state, side) do
+    state = %{state | entry: nil, effects: [:ssh_unhost | state.effects]}
+    OnlineFlow.open(state, side)
   end
-
-  defp online_menu(state) do
-    state = offline(%{state | mode: :online, entry: nil, online: %{state.online | status: nil}})
-    menu(state, :online, nil)
-  end
-
-  defp hosting(state, side) do
-    owner =
-      Enum.find_value(state.players, fn {_id, player} -> player.side == side && player.owner end)
-
-    online = %{state.online | owner: owner, status: nil}
-    %{state | screen: :hosting, menu: nil, online: online, effects: [:host | state.effects]}
-  end
-
-  defp joined?(%{online: %{host: host}} = state), do: host != nil and opponent?(state)
 
   defp ssh_joined?(%{online: %{ssh: ssh}} = state), do: ssh != nil and opponent?(state)
 
@@ -677,8 +733,7 @@ defmodule Nidhox.Flow do
   defp waiting(%{online: %{ssh: ssh}} = state) when ssh != nil,
     do: enter(%{state | screen: :ssh_hosting, menu: nil, entry: nil, timer: 0}, :online)
 
-  defp waiting(state),
-    do: enter(%{state | screen: :hosting, menu: nil, entry: nil, timer: 0}, :online)
+  defp waiting(state), do: main_menu(state)
 
   defp met(state), do: levels(%{state | online: %{state.online | status: nil}})
 
@@ -693,7 +748,9 @@ defmodule Nidhox.Flow do
       {:result,
        %{id: owner, name: to_string(owner), won?: true, area: state.area, mode: state.mode}}
 
-  defp ssh_hosting(state, side) do
+  @doc "The state at HOST OVER SSH, the client of the player on `side` asked for the port."
+  @spec ssh_hosting(map(), 1 | 2) :: map()
+  def ssh_hosting(state, side) do
     owner =
       Enum.find_value(state.players, fn {_id, player} -> player.side == side && player.owner end)
 
@@ -710,43 +767,17 @@ defmodule Nidhox.Flow do
     })
   end
 
-  defp joining(state) do
-    state = %{state | screen: :join, effects: [:listen | state.effects]}
-    %{state | menu: found_menu(state)}
-  end
-
-  defp found_menu(%{online: %{found: found}, menu: menu}) do
-    hosts = for %{host: host} <- found, do: {host, {:host, host}}
-    choices = if hosts == [], do: [{"searching..", :disabled}], else: hosts
-
-    case menu do
-      %MenuList{key: :join, choices: ^choices} -> menu
-      _other -> MenuList.new(:join, "JOIN", choices)
-    end
-  end
-
-  defp address_entry(state, side),
+  @doc "The state at JOIN BY ADDRESS, the client of the player on `side` asked to type `address:port`."
+  @spec address_entry(map(), 1 | 2) :: map()
+  def address_entry(state, side),
     do: %{
       state
       | screen: :address,
         menu: nil,
-        entry: {:address, "SET IP", ~c"0123456789.", 15, ""},
+        entry: {:address, "ADDRESS:PORT", ~c"0123456789.:", 21, ""},
         typer: side,
         effects: [:prefill_address | state.effects]
     }
-
-  defp code_entry(state, address, side) do
-    typing(%{
-      state
-      | screen: :code,
-        menu: nil,
-        entry: {:code, "CODE", Distribution.alphabet(), Distribution.code_length(), ""},
-        address: address,
-        typer: side,
-        online: %{state.online | status: nil},
-        effects: [:unlisten | state.effects]
-    })
-  end
 
   defp typing(state),
     do: ask(%{state | typing_armed: false}, state.typer, {:menu, {:typing, state.entry}})
@@ -758,7 +789,7 @@ defmodule Nidhox.Flow do
     %{state | typing_armed: not held?}
   end
 
-  defp offline(state), do: %{state | effects: [:unhost, :ssh_unhost, :unlisten | state.effects]}
+  defp offline(state), do: %{state | effects: [:listen, :unhost, :ssh_unhost | state.effects]}
 
   defp tournament(state) do
     world = Bout.start_tournament(state.world, state.area, state.rules, state.entrants)
@@ -805,6 +836,10 @@ defmodule Nidhox.Flow do
     text = Credits.read(Assets.get().path)
     enter(%{state | screen: :credits, menu: nil, credits: text, timer: 0}, :credits)
   end
+
+  @doc "The state in the room of screen `screen` (`:logos`, `:title`, `:levels`, `:results`, `:multi` and the like)."
+  @spec room(map(), atom()) :: map()
+  def room(state, screen), do: enter(state, screen)
 
   defp enter(state, screen) do
     room = Data.index(state.world.data, :rooms, Map.fetch!(@rooms, screen))
@@ -855,7 +890,9 @@ defmodule Nidhox.Flow do
   defp in_room?(%World{room: room} = world, name),
     do: room == Data.index(world.data, :rooms, name)
 
-  defp killed(state, names),
+  @doc "The state with every instance of each object in `names` gone."
+  @spec killed(map(), [String.t()]) :: map()
+  def killed(state, names),
     do: %{state | world: Enum.reduce(names, state.world, &kill_all(&2, &1))}
 
   defp kill_all(world, name),
@@ -899,7 +936,9 @@ defmodule Nidhox.Flow do
   defp finished(state),
     do: %{state | winner: Bout.winner(state.world), stats: Bout.stats(state.world)}
 
-  defp advance(state, players),
+  @doc "The state after a step of its world under `players`' input."
+  @spec advance(map(), map()) :: map()
+  def advance(state, players),
     do: %{state | world: Step.run(state.world, Map.put(@no_keys, :players, players))}
 
   defp record(%{recording: %{inputs: inputs} = recording} = state, players),
@@ -943,7 +982,8 @@ defmodule Nidhox.Flow do
 
   defp result_events(state, winner) do
     for {id, %{side: side}} <- state.players,
-        side == 1 or (side == 2 and state.mode != :arcade) do
+        state.mode != :cpu_battle,
+        side == 1 or (side == 2 and state.mode not in [:arcade, :training]) do
       {:result,
        %{id: id, name: to_string(id), won?: side == winner, area: state.area, mode: state.mode}}
     end
@@ -960,7 +1000,9 @@ defmodule Nidhox.Flow do
 
   defp sway(state), do: state
 
-  defp scenery(state, players) do
+  @doc "The state after a step of its world under `players`' input, the grass tended."
+  @spec scenery(map(), map()) :: map()
+  def scenery(state, players) do
     world = state.world |> Step.run(Map.put(@no_keys, :players, players)) |> Grass.update_all()
     %{state | world: world}
   end

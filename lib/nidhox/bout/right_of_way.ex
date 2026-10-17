@@ -23,8 +23,11 @@ defmodule Nidhox.Bout.RightOfWay do
   The screen's edge: outside sudden death, the leader past the room's right edge
   (player 1) or left edge (player 2) — neither collapsing nor stabbed — takes the bout
   on: the spawn timer is 60, it keeps the right of way, the screen wipes
-  (`roomAdvanceTransition`) and the next or previous room follows. In sudden death
-  every fencer is kept inside the room.
+  (`roomAdvanceTransition`) and the next or previous room follows. When the `Nidhogg`
+  lies ahead of the leader (`levelEndAhead`: right of the room's middle for player 1,
+  left of it for player 2) the leader is held at the room's edge instead. In sudden death
+  every fencer is kept inside the room. A wipe is not made while another is under 10
+  steps old.
 
   Death's side: nobody leading, none; the leader, none; the other, the side behind the
   leader — left when player 1 leads, right when player 2 does. A fencer not entering
@@ -57,7 +60,8 @@ defmodule Nidhox.Bout.RightOfWay do
   @killzone_margin 16
   @killzone_delay 40
   @fell_below 32
-  @death_sound 8
+  @death_sound "sndDie"
+  @wipe_overlap 10
   @inside 8
   @far 1000
 
@@ -103,7 +107,7 @@ defmodule Nidhox.Bout.RightOfWay do
       world
       |> hand_over(match, player)
       |> count_suicide(man, player)
-      |> Sound.play(@death_sound, {x, y})
+      |> Sound.play_named(@death_sound, {x, y})
       |> Spawn.reset_timer(Gml.var(world, match, :spawnDelay))
       |> World.destroy(man)
     else
@@ -186,15 +190,19 @@ defmodule Nidhox.Bout.RightOfWay do
   end
 
   defp advance(world, man, match, 1) do
-    if World.fetch(world, man).x > room_width(world),
-      do: world |> advanced(man, match) |> Rooms.next(),
-      else: world
+    cond do
+      World.fetch(world, man).x <= room_width(world) -> world
+      level_end_ahead?(world, 1) -> World.update(world, man, &%{&1 | x: room_width(world)})
+      true -> world |> advanced(man, match) |> Rooms.next()
+    end
   end
 
   defp advance(world, man, match, 2) do
-    if World.fetch(world, man).x < 0,
-      do: world |> advanced(man, match) |> Rooms.previous(),
-      else: world
+    cond do
+      World.fetch(world, man).x >= 0 -> world
+      level_end_ahead?(world, 2) -> World.update(world, man, &%{&1 | x: 0})
+      true -> world |> advanced(man, match) |> Rooms.previous()
+    end
   end
 
   defp advance(world, _man, _match, _leader), do: world
@@ -206,8 +214,24 @@ defmodule Nidhox.Bout.RightOfWay do
     |> room_advance_transition(match)
   end
 
+  defp level_end_ahead?(world, leader) do
+    case Gml.first(world, "Nidhogg") do
+      nil ->
+        false
+
+      nidhogg ->
+        x = World.fetch(world, nidhogg).x
+        if leader == 1, do: x > room_width(world) / 2, else: x < room_width(world) / 2
+    end
+  end
+
   defp room_advance_transition(world, match) do
-    leader = Gml.var(world, match, :leadingPlayerIndex)
+    if Enum.any?(Gml.all(world, "ScreenWipe"), &(Gml.var(world, &1, :counter) < @wipe_overlap)),
+      do: world,
+      else: start_wipe(world, Gml.var(world, match, :leadingPlayerIndex))
+  end
+
+  defp start_wipe(world, leader) do
     {wipe, world} = Transition.start(world, if(leader == 2, do: 1, else: 0))
     {colour, world} = PlayerColour.of_player(world, leader)
     World.update(world, wipe, &%{&1 | image_blend: colour})
@@ -218,7 +242,7 @@ defmodule Nidhox.Bout.RightOfWay do
 
     if Map.get(vars, :state) != @entering and past?(world, x, side) do
       world
-      |> Sound.play(@death_sound, {x, y})
+      |> Sound.play_named(@death_sound, {x, y})
       |> Spawn.reset_timer(@killzone_delay)
       |> World.destroy(man)
     else

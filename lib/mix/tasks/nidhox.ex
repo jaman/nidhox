@@ -11,7 +11,7 @@ defmodule Mix.Tasks.Nidhox do
   game's usual installs under the home directory (`config/runtime.exs`). `--area` is the area fought
   across (`Cemetery`, `Castle`, `Mines`, `Sky`, `Wilds`; default `Cemetery`); `--room`
   picks the area of the room of that name. `--name` is the player's name, by default
-  `fencer`. `--port` is the port ONLINE VERSUS's host listens on
+  `fencer`. `--port` is the port an ONLINE lobby this machine hosts listens on
   for the joining machine, for a host that must open it to the internet; any free port
   without it. `--ssh-port` (or `NIDHOX_SSH_PORT`) is the port HOST OVER SSH offers to
   serve on; without it, any free port. `--picture` (or `NIDHOX_PICTURE`) is how the
@@ -60,19 +60,15 @@ defmodule Mix.Tasks.Nidhox do
     end
   end
 
-  defp failure(_path, {:no_executable, dir}),
+  defp failure(_path, {:no_executable, executable}),
     do:
-      "#{dir} has no Nidhogg.exe: the Windows build's data.win is read with the Nidhogg.exe installed beside it"
+      "there is no #{executable}: the game's data file is read with the game's executable installed with it"
 
   defp failure(_path, {:unreadable, path, reason}),
     do: "could not read #{path}: #{inspect(reason)}"
 
-  defp failure(_path, reason) when reason in [:not_windows_executable, :no_depth_table],
-    do: "this Nidhogg.exe is not a build NidhOX reads the object depths of"
-
-  defp failure(_path, {:unknown_objects, names}),
-    do:
-      "Nidhogg.exe and data.win are from different builds: the executable names objects the data file lacks (#{Enum.join(names, ", ")})"
+  defp failure(_path, reason) when reason in [:not_an_executable, :no_depth_table],
+    do: "this Nidhogg executable is not a build NidhOX reads the object depths of"
 
   defp failure(path, reason), do: "could not read #{path}: #{inspect(reason)}"
 

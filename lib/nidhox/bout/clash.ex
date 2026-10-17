@@ -5,28 +5,29 @@ defmodule Nidhox.Bout.Clash do
 
     * `weapon_to_weapon/2` (`check_HeldWeapon_to_HeldWeapon`): both fencers' swords
       shown and crossing — a disarm is tried (`disarm/2`), the two are pushed apart at 1
-      a step, and each blade's tip jumps by its gap to the other's plus `random_range(−1,
+      a step, and each blade's tip jumps by its gap to the other's, both measured from the blade's
+      height less the fencer's `stairYModifier`, plus `random_range(−1,
       1)`; `{clashed, world}`
-    * `disarm/2` (`try_to_disarm`): the fencer whose sword moved up or down this step —
-      only one of them — disarms the other when the blades are closer across than the
-      other's sword length × 1.75 (× 1.65 unless the other is lunging), neither on
-      stairs: a clang (78), the clash point, a flash, the other's sword knocked loose
+    * `disarm/2` (`try_to_disarm`): the fencer whose sword moved up or down in the
+      fencer's own frame (`weaponYRel`) this step — only one of them — disarms the other when the blades are closer across than the
+      other's sword length × 1.75 (× 1.65 unless the other is lunging): a clang (53), the clash point, a flash, the other's sword knocked loose
       (2 back from the disarmer's facing, 4 up) and the other disarmed (13)
     * `held_to_flying/3` (`check_HeldWeapon_to_FlyingWeapons(weapon)`): a sword shown
-      crossing a thrown sword knocks it down: its tip drops 5, a flash and a clash, and
+      crossing a thrown sword knocks it down: its tip drops to 5 below the blade's height
+      (less the fencer's `stairYModifier`), a flash and a clash, and
       the thrown sword falls as a `DroppedWeapon` (a quarter of its speed, 3 up)
     * `flying_to_flesh/2` (`check_FlyingWeapon_to_FleshCollisionMask(flesh)`): a thrown
       sword of the other player reaching a fencer not entering, stabbed or falling
-      strikes it (83) and is gone; `{struck, world}`
+      strikes it (98) and is gone, unless the room is the online lobby (`weapons_harmless?/1`); `{struck, world}`
     * `flying_to_flying/2` (`check_FlyingWeapons_to_FlyingWeapons`): two thrown swords
       in a row of the match's list meeting both fall and clash
     * `collapse_by_flying/2` (`collapsePlayerByFlying`): the struck fencer loses its
       sword and, from frame 0, is hit in the air (37) or standing (39)
-    * `clash_at/2` (`clashXY`): the `ClashPosition` moved to the point and a clash (75,
-      76 or 77) heard there
+    * `clash_at/2` (`clashXY`): the `ClashPosition` moved to the point and a clash (107,
+      108 or 109) heard there
     * `priority/2` (`getPriority`): where the fencer's state stands in
-      `System.priorityList`, 100000000 when not in it; `pushable?/2` (`isPushable`):
-      fencing or unarmed (29, 78)
+      `System.priorityList`, 99999999 when not in it; `pushable?/2` (`isPushable`):
+      fencing (29, 30, 31) or unarmed (78)
   """
 
   alias Cauldron2D.GameMaker.{Instance, World}
@@ -36,10 +37,10 @@ defmodule Nidhox.Bout.Clash do
   alias Nidhox.Objects.{Challenge, Effects, System}
 
   @noone -4
-  @clang 78
-  @clashes [75, 76, 77]
-  @struck 83
-  @unlisted 100_000_000
+  @clang 53
+  @clashes [107, 108, 109]
+  @struck 98
+  @unlisted 99_999_999
   @parry 6
   @throw 7
   @dodge 8
@@ -97,7 +98,8 @@ defmodule Nidhox.Bout.Clash do
          man when man != @noone <- Gml.var(world, flesh, :mother, @noone),
          true <- Gml.var(world, man, :state) != 23,
          false <- Query.stabbed?(world, man),
-         false <- Query.collapsing?(world, man) do
+         false <- Query.collapsing?(world, man),
+         false <- weapons_harmless?(world) do
       player = Gml.var(world, man, :playerIndex)
 
       world
@@ -115,6 +117,11 @@ defmodule Nidhox.Bout.Clash do
     count = length(list)
     if count >= 2, do: pairs(world, list, 1, count), else: world
   end
+
+  @doc "Whether swords hurt nobody in the current room: the online lobby (`weaponsHarmless`)."
+  @spec weapons_harmless?(World.t()) :: boolean()
+  def weapons_harmless?(%World{data: data, room: room}),
+    do: Enum.at(data.rooms, room).name == "rOnlineLobby"
 
   @doc "The world with fencer `man` struck by a thrown sword (`collapsePlayerByFlying`)."
   @spec collapse_by_flying(World.t(), non_neg_integer()) :: World.t()
@@ -156,7 +163,7 @@ defmodule Nidhox.Bout.Clash do
   @doc "Whether fencer `man` may be shoved by the other (`isPushable`)."
   @spec pushable?(World.t(), non_neg_integer()) :: boolean()
   def pushable?(%World{} = world, man),
-    do: World.fetch(world, man) != nil and Gml.var(world, man, :state) in [29, 78]
+    do: World.fetch(world, man) != nil and Gml.var(world, man, :state) in [29, 30, 31, 78]
 
   defp weapon(world, man), do: Gml.var(world, man, :weapon, @noone)
 
@@ -182,18 +189,25 @@ defmodule Nidhox.Bout.Clash do
   end
 
   defp jump_tip(world, sword, other) do
-    %Instance{y: y} = World.fetch(world, sword)
-    gap = Gml.var(world, other, :tipY) - Gml.var(world, sword, :tipY)
+    own_y = lifted_y(world, sword)
+    other_y = lifted_y(world, other)
+    own_tip = Gml.var(world, sword, :tipY) - own_y
+    other_tip = Gml.var(world, other, :tipY) - other_y
     {wobble, world} = Gml.random_range(world, -1, 1)
-    Gml.put(world, sword, %{tipY: y + gap + wobble})
+    Gml.put(world, sword, %{tipY: own_y + (other_tip - own_tip) + wobble})
   end
 
-  defp moved?(world, man) do
-    case World.fetch(world, weapon(world, man)) do
-      %Instance{y: y} -> not Gml.eq?(y, Gml.var(world, man, :weaponYPrevious, y))
-      nil -> false
-    end
+  defp lifted_y(world, sword) do
+    %Instance{y: y} = World.fetch(world, sword)
+    y + Gml.var(world, Gml.var(world, sword, :mother, @noone), :stairYModifier, 0)
   end
+
+  defp moved?(world, man),
+    do:
+      not Gml.eq?(
+        Gml.var(world, man, :weaponYRel, 0),
+        Gml.var(world, man, :weaponYRelPrevious, 0)
+      )
 
   defp try_disarm(world, disarmer, victim) do
     disarmer_sword = World.fetch(world, weapon(world, disarmer))
@@ -201,19 +215,18 @@ defmodule Nidhox.Bout.Clash do
     apart = abs(disarmer_sword.x - victim_sword.x)
     reach = if Gml.var(world, victim, :state) == 48, do: 1.75, else: 1.65
 
-    if not on_stairs?(world, victim) and not on_stairs?(world, disarmer) and
-         apart < abs(sprite_width(world, victim_sword) * reach) - 1.0e-5 do
+    if apart < abs(sprite_width(world, victim_sword) * reach) - 1.0e-5 do
       %Instance{x: vx, y: vy} = World.fetch(world, victim)
       %Instance{x: dx, y: dy} = World.fetch(world, disarmer)
 
       world =
         world
-        |> Sound.play(@clang, {vx, vy})
         |> Challenge.move_completed(
           Gml.var(world, disarmer, :playerIndex),
           @parry,
           {dx, dy - @popup_rise}
         )
+        |> Sound.play(@clang, {vx, vy})
         |> clash_at({dx, dy})
         |> Effects.flash()
 
@@ -268,7 +281,7 @@ defmodule Nidhox.Bout.Clash do
 
     world
     |> Challenge.move_completed(blocker, @dodge, {weapon_x, weapon_y - @popup_rise})
-    |> Gml.put(weapon, %{tipY: weapon_y + 5})
+    |> Gml.put(weapon, %{tipY: lifted_y(world, weapon) + 5})
     |> Effects.flash()
     |> clash_at({x, y})
     |> Weapon.spawn_dropped({x, y}, Gml.var(world, thrown, :hspd) * 0.25, -3, xscale)
@@ -303,10 +316,10 @@ defmodule Nidhox.Bout.Clash do
         do: first,
         else: second
 
-    %Instance{x: second_x, y: second_y} = World.fetch(world, second)
+    %Instance{x: later_x, y: later_y} = World.fetch(world, later)
 
     world
-    |> Challenge.move_completed(Gml.var(world, later, :playerIndex), @dodge, {second_x, second_y})
+    |> Challenge.move_completed(Gml.var(world, later, :playerIndex), @dodge, {later_x, later_y})
     |> fall_from(first)
     |> fall_from(second)
     |> clash_at({x, y})
@@ -336,17 +349,6 @@ defmodule Nidhox.Bout.Clash do
     flying = World.object_index(world, "FlyingWeapon")
     object = World.fetch(world, thrown).object
     object != flying and World.descends?(world, object, flying)
-  end
-
-  defp on_stairs?(world, man) do
-    case World.fetch(world, man) do
-      %Instance{object: object, vars: vars} ->
-        World.object(world, object).name in ["YellowPlayer", "OrangePlayer"] and
-          Map.get(vars, :state) in [30, 31]
-
-      nil ->
-        false
-    end
   end
 
   defp sprite_width(world, %Instance{sprite_index: sprite, image_xscale: xscale}) do

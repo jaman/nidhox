@@ -14,7 +14,7 @@ defmodule Nidhox.Objects.Blocks do
       both bottom corners (`x ± sprite_width / 2`), the `SpikeSmoosher` its middle —
       then stop; climbing they slow by 0.1 a step until back at their starting height,
       then fall again; `vspd` is held between −4 and 8. A `Smoosher` that lands is
-      heard (129) and waits 60 steps (`timer`) before climbing; a `SpikeSmoosher`
+      heard (`sfxSmoosh`) and waits 60 steps (`timer`) before climbing; a `SpikeSmoosher`
       climbs at once. Each keeps a hidden `BloodSurface` (`blood`) stretched over its
       sprite (its create run again at that size) and moved with it, gone when it is
   """
@@ -26,7 +26,7 @@ defmodule Nidhox.Objects.Blocks do
 
   @falling 3
   @climbing 2
-  @landing_sound 129
+  @landing_sound "sfxSmoosh"
   @landed_wait 60
   @conveyor_depth 99
 
@@ -149,7 +149,7 @@ defmodule Nidhox.Objects.Blocks do
         do:
           world
           |> Gml.put(self, %{vspd: 0, timer: @landed_wait})
-          |> Sound.play(@landing_sound, {x, y}),
+          |> Sound.play_named(@landing_sound, {x, y}),
         else: world
 
     if Gml.var(world, self, :timer) < 0,

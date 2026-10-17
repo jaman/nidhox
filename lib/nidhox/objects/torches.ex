@@ -6,8 +6,9 @@ defmodule Nidhox.Objects.Torches do
   emitter on an ellipse 2 × 2 pixels about it and, on a `prob(15)`, bursts one
   particle there.
 
-    * `Torch` (the tall candle): flames at `(x, y − 24)`, `(x − 6, y − 21)` and
-      `(x + 6, y − 20)`
+    * `Torch` (the tall candle): create, `lit` 1 (a `ReadyZone` sets it to its `occupied`
+      for the torches near it); only while `lit`, flames at `(x, y − 24)`,
+      `(x − 6, y − 21)` and `(x + 6, y − 20)`
     * `WallTorch`: one flame at its place
     * `TorchDark`: a `Torch` blended `{64, 64, 64}`
     * `BallLight`, a lamp on a chain from the room's top: create, the parallax object's
@@ -37,8 +38,9 @@ defmodule Nidhox.Objects.Torches do
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
   def handlers do
     [
-      {"gml_Object_Torch_Step_0",
-       fn world, self, _other -> burn(world, self, @candle_flames) end},
+      {"gml_Object_Torch_Create_0",
+       fn world, self, _other -> Gml.put(world, self, %{lit: 1}) end},
+      {"gml_Object_Torch_Step_0", &candle/3},
       {"gml_Object_WallTorch_Step_0",
        fn world, self, _other -> burn(world, self, @wall_flames) end},
       {"gml_Object_TorchDark_Create_0", &dark/3},
@@ -47,6 +49,12 @@ defmodule Nidhox.Objects.Torches do
       {"gml_Object_BallLight_Step_0", &swing/3},
       {"gml_Object_BallLight_Draw_0", &lamp_draw/3}
     ]
+  end
+
+  defp candle(world, self, _other) do
+    if Gml.truthy?(Gml.var(world, self, :lit, 0)),
+      do: burn(world, self, @candle_flames),
+      else: world
   end
 
   defp lamp(world, self, _other) do

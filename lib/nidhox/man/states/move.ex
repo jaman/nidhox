@@ -2,61 +2,67 @@ defmodule Nidhox.Man.States.Move do
   @moduledoc """
   A fencer's moving states, each step as `stateBehavior` runs them:
 
-    * run (52): at full speed (2.5) the run (255); faster than 1.3 hunched (257); faster
-      than 0.1 starting (267), its frames cycling at `|hspd| × 0.3`; slower resting (266),
+    * run (52): with stairs under it on the ground it takes the run state `Stairs.run_state/2`
+      names. At full speed (2.5) the run (308); faster than 1.3 hunched (311); faster
+      than 0.1 starting (331), its frames cycling at `|hspd| × 0.3`; slower resting (330),
       its frame `|hspd| ÷ 0.1` of the way through. Pressing against its motion it skids
-      (259) at the frame `|hspd| ÷ 2.5` of the way through. With a sword the throw
+      (318) at the frame `|hspd| ÷ 2.5` of the way through. With a sword the throw
       combination throws (72). Footsteps and skids sound; off the ground it grabs a ledge
       or falls; it runs (`moveLeftAndRightAccelFric` 0.2, 0.2), lands in a crawl or slide
       holding down, jumps (43), and with nothing held eases by 0.2 into its stance; up held
       with a sword, throws allowed, cocks the sword (54); attack stomps or punches (49) or
       lunges or butts
-    * running cocked (54): footsteps; the cocked run (256) cycling at `|hspd| × 0.25`,
-      skidding (259, `|hspd| ÷ 2.25` of the way) when pressing against its motion; runs,
+    * run up stairs (80) and run down stairs (81): the run (52) with poses 312 up and 310 down
+      cycling at `|hspd| × 0.3`. Without stairs under it runs (52); it takes 80 or 81 as its
+      heading (`hspd`, or its facing when still) matches the way the stairs rise. Letting
+      go of the direction at a walking pace, it fences (`Stairs.fencing_state/2`) with a
+      sword and stands (78) without
+    * running cocked (54): footsteps; the cocked run (309) cycling at `|hspd| × 0.25`,
+      skidding (318, `|hspd| ÷ 2.25` of the way) when pressing against its motion; runs,
       easing by 0.1 with nothing held; letting go of up runs (52); attack stomps or throws
       (72); jump jumps cocked (44); with nothing held it eases by 0.2 into throw ready (32)
-    * crawl (9): 237 cycling at `|hspd| × 0.36`; letting go of down stands; crawls
+    * crawl (9): 240 cycling at `|hspd| × 0.36`; letting go of down stands; crawls
       (`moveLeftAndRightAccelFric` 0.25, 0.1), counting `buttonHeldCounter` while barely
       moving; a pressed direction turns it; with nothing held it eases by 0.1 and faces its
       opponent; jump jumps from the crouch (11); attack stomps or sweeps (70); unarmed
       holding down it picks up a sword
-    * slide (58): 260 cycling at `|hspd| × 0.3`; letting go of down stands; pressing
+    * slide (58): 319 cycling at `|hspd| × 0.3`; letting go of down stands; pressing
       against its motion crawls; while faster than 0.55 it eases by 0.03 with nothing
       held, jumps from the crouch (11), sweeps (70), or kicks up dust and picks up a sword
       unarmed holding down; slower it crawls
-    * hop up (59): `hspd` 3 ahead; 261 played once at 0.6. Pressing forward or down marks
+    * hop up (59): `hspd` 3 ahead; 320 played once at 0.6. Pressing forward or down marks
       another hop (`buttonHeldCounter` 1). While it plays: jump jumps (43), unarmed it
       picks up a sword, back runs (52), attack punches or lunges. When it ends the speed
       halves and a marked hop plays again with down let go, else it runs
-    * slide start (61): 264 played once at 0.6 then slides (58); letting go of down hops
+    * slide start (61): 323 played once at 0.6 then slides (58); letting go of down hops
       (59); unarmed it picks up a sword; attack stomps or sweeps
-    * wall slide (62): 263; gravity 0.02475, `vspd` held to at most 2; dust. Against a
+    * wall slide (62): 322; gravity 0.02475, `vspd` held to at most 2; dust. Against a
       wall ahead holding forward, jump pushes off (1); else it drops off backwards (18).
       On the ground it runs
-    * run up a wall (53): 258 with dust at its feet; a ledge in reach is grabbed. With no
+    * run up a wall (53): 313 with dust at its feet; a ledge in reach is grabbed. With no
       wall 10 pixels up ahead it grabs a ledge (keeping 0.75 of its facing as speed,
       `vspd` 0) or drops from the crouch (10). Against the wall it climbs (`vspd` −2):
       down slides down the wall (62, not in baby mode); jump pushes off (1); letting go of
-      forward falls back (18) at half `vspd` and 2 back; else when 258 has played once at
+      forward falls back (18) at half `vspd` and 2 back; else when 313 has played once at
       0.6 it slides down at half `vspd`
-    * hanging (36): its pose played once at 0.6, then idle (246). Holding back it leans
-      away (248), else up looks up (247). Down lets go into a wall slide (62, not in baby
+    * hanging (36): its pose played once at 0.6, then idle (268). Holding back it leans
+      away (270), else up looks up (269). Down lets go into a wall slide (62, not in baby
       mode); jump climbs up (22), or holding back flips off (1)
-    * climb up (22) and jump from the crouch (11): 242 and 239 cycling at 0.4; up held with
+    * climb up (22) and jump from the crouch (11): 260 and 242 cycling at 0.4; up held with
       a sword, throws allowed, readies a throw in the air (19); falling it drops from the
       crouch (10); else it steers (0.25, 0.1)
-    * drop from the crouch (10): 238; past the lowest platform it falls (27); up held with
+    * drop from the crouch (10): 241; past the lowest platform it falls (27); up held with
       a sword, throws allowed, readies a throw in the air (19); cycling at 0.4, it steers in
       the air, and on landing lands in a crawl or slide, else crawls
-    * push off (50): 253 played once at 0.6, then falls (27)
-    * roll landing (51): 254 played once at 0.6, then runs (52); holding down slides from
+    * push off (50): 304 played once at 0.6, then falls (27)
+    * roll landing (51): 307 played once at 0.6, then runs (52); holding down slides from
       the start (61); off the ground it grabs a ledge or falls
   """
 
   alias Cauldron2D.GameMaker.{Instance, World}
   alias Nidhox.Bout.Variants
   alias Nidhox.Gml
-  alias Nidhox.Man.{Actions, Physics, Query, State, Weapon}
+  alias Nidhox.Man.{Actions, Physics, Query, Stairs, State, Weapon}
   alias Nidhox.Objects.Particles
 
   @left 0
@@ -69,17 +75,23 @@ defmodule Nidhox.Man.States.Move do
   @back 9
   @run_max 2.5
   @cocked_max 2.25
-  @skid 259
-  @resting 266
+  @skid 318
+  @resting 330
+  @cock_sound "sfxSwordCockRing"
 
   @doc "The world after fencer `self`'s step in moving state `state`."
   @spec behave(World.t(), non_neg_integer(), integer()) :: World.t()
-  def behave(world, self, 52) do
-    world = world |> run_pose(self) |> run_frame(self) |> skid(self, @run_max)
+  def behave(world, self, state) when state in [52, 80, 81] do
+    world = world |> run_stairs(self, state) |> run_pose(self, state) |> run_frame(self, state)
+    world = skid(world, self, @run_max)
 
     if State.armed?(world, self) and State.combo?(world, self),
       do: State.go(world, self, 72),
-      else: world |> Actions.footsteps(self) |> Actions.skids(self) |> grounded(self, &run/2)
+      else:
+        world
+        |> Actions.footsteps(self)
+        |> Actions.skids(self)
+        |> grounded(self, &run(&1, &2, state))
   end
 
   def behave(world, self, 54) do
@@ -87,7 +99,7 @@ defmodule Nidhox.Man.States.Move do
     {_past, world} = State.animate(world, self, abs(State.hspd(world, self)) * 0.25, true)
 
     world
-    |> State.pose(self, 256)
+    |> State.pose(self, 309)
     |> skid(self, @cocked_max)
     |> grounded(self, &run_cocked/2)
   end
@@ -95,7 +107,7 @@ defmodule Nidhox.Man.States.Move do
   def behave(world, self, 9) do
     {_past, world} =
       world
-      |> State.pose(self, 237)
+      |> State.pose(self, 240)
       |> State.animate(self, abs(State.hspd(world, self)) * 0.36, true)
 
     cond do
@@ -108,7 +120,7 @@ defmodule Nidhox.Man.States.Move do
   def behave(world, self, 58) do
     {_past, world} =
       world
-      |> State.pose(self, 260)
+      |> State.pose(self, 319)
       |> State.animate(self, abs(State.hspd(world, self)) * 0.3, true)
 
     cond do
@@ -124,7 +136,7 @@ defmodule Nidhox.Man.States.Move do
     world =
       world
       |> State.put(self, %{hspd: State.get(world, self, :facingXScale) * 3})
-      |> State.pose(self, 261)
+      |> State.pose(self, 320)
 
     if State.on_ground?(world, self),
       do: hop(world, self),
@@ -132,7 +144,7 @@ defmodule Nidhox.Man.States.Move do
   end
 
   def behave(world, self, 61) do
-    world = State.pose(world, self, 264)
+    world = State.pose(world, self, 323)
 
     if State.on_ground?(world, self) do
       {past, world} = State.animate(world, self, 0.6, false)
@@ -148,7 +160,7 @@ defmodule Nidhox.Man.States.Move do
   def behave(world, self, 62) do
     world =
       world
-      |> State.pose(self, 263)
+      |> State.pose(self, 322)
       |> Physics.apply_gravity(self, 0.02475)
 
     world = State.put(world, self, %{vspd: min(State.get(world, self, :vspd), 2)})
@@ -161,7 +173,7 @@ defmodule Nidhox.Man.States.Move do
   def behave(world, self, 53) do
     %Instance{x: x, y: y} = World.fetch(world, self)
     facing = State.get(world, self, :facingXScale)
-    world = world |> State.pose(self, 258) |> Particles.dust_at({x + facing, y})
+    world = world |> State.pose(self, 313) |> Particles.dust_at({x + facing, y})
 
     case Physics.try_grab_ledge(world, self) do
       {true, world} -> world
@@ -174,7 +186,7 @@ defmodule Nidhox.Man.States.Move do
     {past, world} = world |> State.pose(self, sprite) |> State.animate(self, 0.6, false)
 
     world =
-      if past, do: world |> State.put(self, %{frame: 0}) |> State.pose(self, 246), else: world
+      if past, do: world |> State.put(self, %{frame: 0}) |> State.pose(self, 268), else: world
 
     world
     |> hang_pose(self)
@@ -182,13 +194,13 @@ defmodule Nidhox.Man.States.Move do
   end
 
   def behave(world, self, state) when state in [22, 11] do
-    sprite = if state == 22, do: 242, else: 239
+    sprite = if state == 22, do: 260, else: 242
     {_past, world} = world |> State.pose(self, sprite) |> State.animate(self, 0.4, true)
     climb_or_steer(world, self)
   end
 
   def behave(world, self, 10) do
-    world = State.pose(world, self, 238)
+    world = State.pose(world, self, 241)
 
     cond do
       Physics.past_lowest_platform?(world, self) -> State.go(world, self, 27)
@@ -198,12 +210,12 @@ defmodule Nidhox.Man.States.Move do
   end
 
   def behave(world, self, 50) do
-    {past, world} = world |> State.pose(self, 253) |> State.animate(self, 0.6, false)
+    {past, world} = world |> State.pose(self, 304) |> State.animate(self, 0.6, false)
     if past, do: State.go(world, self, 27), else: world
   end
 
   def behave(world, self, 51) do
-    {past, world} = world |> State.pose(self, 254) |> State.animate(self, 0.6, false)
+    {past, world} = world |> State.pose(self, 307) |> State.animate(self, 0.6, false)
 
     cond do
       past -> State.go(world, self, 52)
@@ -219,21 +231,50 @@ defmodule Nidhox.Man.States.Move do
       else: Physics.grab_ledge_or_fall(world, self)
   end
 
-  defp run_pose(world, self) do
+  defp run_stairs(world, self, 52) do
+    if State.on_ground?(world, self) and Stairs.under(world, self) != nil,
+      do: State.go(world, self, Stairs.run_state(world, self)),
+      else: world
+  end
+
+  defp run_stairs(world, self, state) do
+    case Stairs.under(world, self) do
+      nil ->
+        State.go(world, self, 52)
+
+      stairs ->
+        turn_run_state(world, self, state, run_heading(world, self) == Stairs.dir(world, stairs))
+    end
+  end
+
+  defp run_heading(world, self) do
+    hspd = State.hspd(world, self)
+
+    if Gml.eq?(hspd, 0), do: State.get(world, self, :facingXScale), else: Gml.sign(hspd)
+  end
+
+  defp turn_run_state(world, self, 81, true), do: State.go(world, self, 80)
+  defp turn_run_state(world, self, 80, false), do: State.go(world, self, 81)
+  defp turn_run_state(world, _self, _state, _up), do: world
+
+  defp run_pose(world, self, 52) do
     speed = abs(State.hspd(world, self))
 
     sprite =
       cond do
-        abs(speed - @run_max) <= 1.0e-5 -> 255
-        speed - (@run_max - (@run_max - 0.1) * 0.5) > 1.0e-5 -> 257
-        speed - 0.1 > 1.0e-5 -> 267
+        abs(speed - @run_max) <= 1.0e-5 -> 308
+        speed - (@run_max - (@run_max - 0.1) * 0.5) > 1.0e-5 -> 311
+        speed - 0.1 > 1.0e-5 -> 331
         true -> @resting
       end
 
     State.pose(world, self, sprite)
   end
 
-  defp run_frame(world, self) do
+  defp run_pose(world, self, state),
+    do: State.pose(world, self, if(state == 80, do: 312, else: 310))
+
+  defp run_frame(world, self, 52) do
     speed = abs(State.hspd(world, self))
 
     if World.fetch(world, State.get(world, self, :flesh)).sprite_index == @resting do
@@ -242,6 +283,11 @@ defmodule Nidhox.Man.States.Move do
       {_past, world} = State.animate(world, self, speed * 0.3, true)
       world
     end
+  end
+
+  defp run_frame(world, self, _state) do
+    {_past, world} = State.animate(world, self, abs(State.hspd(world, self)) * 0.3, true)
+    world
   end
 
   defp skid(world, self, top_speed) do
@@ -254,16 +300,16 @@ defmodule Nidhox.Man.States.Move do
        else: world
   end
 
-  defp run(world, self) do
+  defp run(world, self, state) do
     world = Physics.move_left_and_right(world, self, 0.2, 0.2)
 
     case Actions.slide_or_crawl(world, self) do
       {true, world} -> world
-      {false, world} -> run_buttons(world, self)
+      {false, world} -> run_buttons(world, self, state)
     end
   end
 
-  defp run_buttons(world, self) do
+  defp run_buttons(world, self, state) do
     cond do
       State.pressed?(world, self, @jump) ->
         State.go(world, self, 43)
@@ -272,7 +318,7 @@ defmodule Nidhox.Man.States.Move do
         world = Physics.apply_horizontal_friction(world, self, 0.2)
 
         if abs(State.hspd(world, self)) - 4 < -1.0e-5,
-          do: State.stand(world, self),
+          do: settle(world, self, state),
           else: run_attack(world, self)
 
       true ->
@@ -280,10 +326,18 @@ defmodule Nidhox.Man.States.Move do
     end
   end
 
+  defp settle(world, self, 52), do: State.stand(world, self)
+
+  defp settle(world, self, _stairs_state) do
+    if State.armed?(world, self),
+      do: State.go(world, self, Stairs.fencing_state(world, self)),
+      else: State.go(world, self, 78)
+  end
+
   defp run_attack(world, self) do
     cond do
       readies_throw?(world, self) ->
-        world |> State.sound(self, 79) |> State.go(self, 54)
+        world |> Actions.play(self, @cock_sound) |> State.go(self, 54)
 
       State.pressed?(world, self, @attack) ->
         {_stomped, world} = Actions.try_stomp(world, self)
@@ -505,10 +559,10 @@ defmodule Nidhox.Man.States.Move do
 
     cond do
       State.down?(world, self, @back) ->
-        if sprite in [246, 247], do: State.pose(world, self, 248), else: world
+        if sprite in [268, 269], do: State.pose(world, self, 270), else: world
 
       State.down?(world, self, @up) ->
-        if sprite in [246, 248], do: State.pose(world, self, 247), else: world
+        if sprite in [268, 270], do: State.pose(world, self, 269), else: world
 
       true ->
         world

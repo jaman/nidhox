@@ -10,8 +10,8 @@ defmodule Nidhox.Brain.Moves do
       jumps at a log it would otherwise run into while a log separates it from its
       opponent, at a wall 64 pixels ahead (4 above its feet), and at a gap with no ground
       32 pixels ahead; otherwise it lets go of jump
-    * `ideal_stance/4` (`idealStance(man, stance)`): out of the fencing stance (29) every
-      button let go; in it, up or down towards `stance` (1 high, 3 middle, 2 low)
+    * `ideal_stance/4` (`idealStance(man, stance)`): out of a fencing state (29, 30, 31)
+      every button let go; in one, up or down towards `stance` (1 high, 3 middle, 2 low)
     * `guard_against/4` (`playerGuardAgainst`): up or down towards the height of the
       opponent's sword; whether the two swords are within 4 pixels of each other
     * `look_for_opening/4` (`playerLookForOpeningAgainst`): with the swords at different
@@ -19,8 +19,8 @@ defmodule Nidhox.Brain.Moves do
       towards the middle, and whether an opening is there; against a ducking opponent, down
       (by turns, to keep pressing it); otherwise a random change of height
     * `footwork/2`: on every half beat of the state (70 in 100), back when closer than
-      24, forward when further than 64, else either; forward always without a sword;
-      whether it stepped
+      24, forward when further than 64, else either; forward again when the opponent
+      holds no sword; whether it stepped
     * `closest_weapon/3` (`playerFindClosestWeaponSafeFrom(a, b)`): the nearest sword on
       the ground (`PickupContainer`, the first twelve) on screen and in the room that is
       not at `b`'s sword point and lies where `a` can reach it before `b`; `-4` for none.
@@ -41,7 +41,6 @@ defmodule Nidhox.Brain.Moves do
   @jump 4
   @forward 8
   @back 9
-  @fencing 29
   @high 1
   @low 2
   @middle 3
@@ -76,7 +75,7 @@ defmodule Nidhox.Brain.Moves do
   @doc "The world with `Brain` `self` moving fencer `man`'s stance towards `stance` (`idealStance`)."
   @spec ideal_stance(World.t(), non_neg_integer(), number(), 1 | 2 | 3) :: World.t()
   def ideal_stance(%World{} = world, self, man, stance) do
-    if Gml.var(world, man, :state) == @fencing,
+    if Sense.fencing_state?(Gml.var(world, man, :state)),
       do: towards(world, self, Gml.var(world, man, :stance), stance),
       else: Buttons.release_all(world, self, [@up, @down, @left, @right, @jump, 5])
   end
@@ -116,9 +115,9 @@ defmodule Nidhox.Brain.Moves do
          {true, world} <- Gml.prob(world, @footwork_chance) do
       {step, world} = footwork_way(world, Gml.var(world, self, :opponentDist))
       world = Buttons.press(world, self, step)
-      man = Gml.var(world, self, :player, @noone)
+      other = Gml.var(world, self, :opponent, @noone)
 
-      if Sense.weapon_type(world, man) != @sword,
+      if Sense.weapon_type(world, other) != @sword,
         do: {true, Buttons.press(world, self, @forward)},
         else: {true, world}
     else

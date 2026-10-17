@@ -4,12 +4,14 @@ defmodule Nidhox.Objects.FireClouds do
   from fire, made by drawing its last picture back onto itself a little wider and higher
   each step and adding new puffs at the bottom.
 
-    * create: two clear 600 × 400 surfaces (`surfA`, `surfB`), `delay` 1
-    * begin step: each surface made again if it was lost
+    * create: two clear 600 × 400 surfaces (`surfA`, `surfB`), `delay` 1, then 120 step
+      events run at once so the smoke is already risen, then the begin step
+    * begin step: when either surface was lost, both are freed and made again and 120
+      step events run at once
     * step: when `delay` runs down to 0 (every step, back to 1): `surfB` cleared and
       `surfA` drawn onto it 1.025 wide, `(1 − 1.025) × 600 / 2 + random_range(−1, 1)`
       across and 5 up; `surfA` cleared and `surfB` drawn onto it; then `choose(3, 4)`
-      puffs (sprite 57, `sCloud`) at `random_range(0, 600)` across, 50 above the
+      puffs (`sCloud`) at `random_range(0, 600)` across, 50 above the
       bottom, in `make_color_hsv(random_range(0, 25), 220, 200)` (each also drawing
       `random_range(0, 360)`, which nothing uses). Every step it stands across at
       `room_width / 2 − (room_width / 2 − cameraCenterX) × 0.7 − 300` and is shown
@@ -18,7 +20,7 @@ defmodule Nidhox.Objects.FireClouds do
     * destroy, room end and game end: its user event 15, the surfaces freed
   """
 
-  alias Cauldron2D.GameMaker.{Colour, Draw, Instance, Surfaces, World}
+  alias Cauldron2D.GameMaker.{Colour, Data, Draw, Instance, Surfaces, World}
   alias Nidhox.Bout.Camera
   alias Nidhox.Gml
 
@@ -26,10 +28,12 @@ defmodule Nidhox.Objects.FireClouds do
   @height 400
   @widen 1.025
   @rise -5
-  @puff 57
+  @puff "sCloud"
+  @warm_up 120
   @puff_lift 50
   @white {255, 255, 255}
   @follow 0.7
+  @surfaces [:surfA, :surfB]
 
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
@@ -51,8 +55,16 @@ defmodule Nidhox.Objects.FireClouds do
   defp start(world, self, _other) do
     {world, a} = clear_surface(world)
     {world, b} = clear_surface(world)
-    Gml.put(world, self, %{surfA: a, surfB: b, delay: 1})
+
+    world
+    |> Gml.put(self, %{surfA: a, surfB: b, delay: 1})
+    |> warm_up(self)
+    |> World.perform(self, :step, 1)
   end
+
+  defp warm_up(world, self),
+    do:
+      Enum.reduce(1..@warm_up, world, fn _step, world -> World.perform(world, self, :step, 0) end)
 
   defp clear_surface(world) do
     {world, surface} = Surfaces.create(world, @width, @height)
@@ -60,15 +72,23 @@ defmodule Nidhox.Objects.FireClouds do
   end
 
   defp keep_surfaces(world, self, _other) do
-    Enum.reduce([:surfA, :surfB], world, fn name, world ->
-      if Surfaces.exists?(world, Gml.var(world, self, name, -1)) do
-        world
-      else
-        {world, surface} = clear_surface(world)
-        Gml.put(world, self, %{name => surface})
-      end
-    end)
+    if Enum.all?(@surfaces, &Surfaces.exists?(world, Gml.var(world, self, &1, -1))),
+      do: world,
+      else: rebuild(world, self)
   end
+
+  defp rebuild(world, self) do
+    world = Enum.reduce(@surfaces, world, &free_surface(&2, Gml.var(&2, self, &1, -1)))
+    {world, a} = clear_surface(world)
+    {world, b} = clear_surface(world)
+
+    world
+    |> Gml.put(self, %{surfA: a, surfB: b})
+    |> warm_up(self)
+  end
+
+  defp free_surface(world, surface),
+    do: if(Surfaces.exists?(world, surface), do: Surfaces.free(world, surface), else: world)
 
   defp burn(world, self, _other) do
     delay = Gml.var(world, self, :delay) - 1
@@ -103,10 +123,11 @@ defmodule Nidhox.Objects.FireClouds do
     {x, world} = Gml.random_range(world, 0, @width)
     {hue, world} = Gml.random_range(world, 0, 25)
     world = world |> Gml.random_range(0, 360) |> elem(1)
-    origin = World.sprite(world, @puff).origin
+    puff = Data.index(world.data, :sprites, @puff)
+    origin = World.sprite(world, puff).origin
 
     {%{
-       picture: {:sprite, @puff, 0},
+       picture: {:sprite, puff, 0},
        position: {x, @height - @puff_lift},
        origin: origin,
        blend: Colour.hsv(hue, 220, 200),
@@ -125,10 +146,6 @@ defmodule Nidhox.Objects.FireClouds do
 
   defp user_15(world, self, _other), do: World.perform(world, self, :other, 25)
 
-  defp free(world, self, _other) do
-    Enum.reduce([:surfA, :surfB], world, fn name, world ->
-      surface = Gml.var(world, self, name, -1)
-      if Surfaces.exists?(world, surface), do: Surfaces.free(world, surface), else: world
-    end)
-  end
+  defp free(world, self, _other),
+    do: Enum.reduce(@surfaces, world, &free_surface(&2, Gml.var(&2, self, &1, -1)))
 end

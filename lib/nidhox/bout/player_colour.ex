@@ -14,6 +14,10 @@ defmodule Nidhox.Bout.PlayerColour do
   | 123456 | the computer's colour in a single player run: by its personality for the run's level (`ArcadeMode.personalityMap[ArcadeMode.level]`) — 5 → 2, 6 → 3, 2 → 4, 9 → 5, 1 → 6, 4 → 7, 8 → 8, any other → 10 — or 2 when player 2's colour is picked |
 
   Any other index is black. A picked colour is GameMaker's `0xBBGGRR`.
+
+  In a versus match (`System.flow` 4) with `System.vsColor` set, index 1 or 2 gives the colour
+  of the index `System.vsColor[index]` instead when that differs from `index`: yellow for 1,
+  orange for 2, else that index's colour as above.
   """
 
   alias Cauldron2D.GameMaker.{Colour, Instance, World}
@@ -35,26 +39,42 @@ defmodule Nidhox.Bout.PlayerColour do
   @doc "`{colour, world}`: colour index `index` as `getPlayerColor`, asked by instance `self`."
   @spec get(World.t(), non_neg_integer() | nil, number()) :: {{byte(), byte(), byte()}, World.t()}
   def get(%World{} = world, self, @computer), do: get(world, self, computer_index(world))
-  def get(%World{} = world, _self, 0), do: {{0, 0, 0}, world}
 
-  def get(%World{} = world, _self, 1),
+  def get(%World{} = world, self, index) when index in [1, 2] do
+    case chosen(world, index) do
+      nil -> get_plain(world, self, index)
+      choice -> {palette(world, choice), world}
+    end
+  end
+
+  def get(%World{} = world, self, index), do: get_plain(world, self, index)
+
+  defp get_plain(%World{} = world, _self, 0), do: {{0, 0, 0}, world}
+
+  defp get_plain(%World{} = world, _self, 1),
     do: {picked(world, :miscPref_p1color, {255, 255, 0}), world}
 
-  def get(%World{} = world, _self, 2),
+  defp get_plain(%World{} = world, _self, 2),
     do: {picked(world, :miscPref_p2color, {255, 160, 64}), world}
 
-  def get(%World{} = world, _self, index) when is_map_key(@photoshop, index) do
+  defp get_plain(%World{} = world, _self, index) when is_map_key(@photoshop, index) do
     {hue, saturation, value} = @photoshop[index]
     {Colour.hsv(hue / 360 * 255, saturation / 100 * 255, value / 100 * 255), world}
   end
 
-  def get(%World{} = world, _self, 9), do: {{255, 255, 255}, world}
-  def get(%World{} = world, self, @rainbow), do: rainbow(world, self)
-  def get(%World{} = world, _self, _index), do: {{0, 0, 0}, world}
+  defp get_plain(%World{} = world, _self, 9), do: {{255, 255, 255}, world}
+  defp get_plain(%World{} = world, self, @rainbow), do: rainbow(world, self)
+  defp get_plain(%World{} = world, _self, _index), do: {{0, 0, 0}, world}
 
   @doc "Colour index `index`'s colour where nothing random is drawn: every index but 10 and the computer's."
   @spec fixed(World.t(), number()) :: {byte(), byte(), byte()}
   def fixed(%World{} = world, index), do: world |> get(nil, index) |> elem(0)
+
+  @doc "Colour `index` of the palette CHANGE COLOR offers (`playerPaletteColor`): 1 yellow, 2 orange, 3 to 8 as `get/3` gives them."
+  @spec palette(World.t(), number()) :: {byte(), byte(), byte()}
+  def palette(_world, 1), do: {255, 255, 0}
+  def palette(_world, 2), do: {255, 160, 64}
+  def palette(world, choice), do: world |> get(nil, choice) |> elem(0)
 
   @doc "`{colour, world}`: player `player`'s plain colour (`getColorPlayerIndex`) — yellow, orange, else a random hue."
   @spec of_player(World.t(), number()) :: {{byte(), byte(), byte()}, World.t()}
@@ -65,6 +85,20 @@ defmodule Nidhox.Bout.PlayerColour do
     {hue, world} = Gml.random(world, 255)
     {Colour.hsv(hue, 255, 255), world}
   end
+
+  defp chosen(world, index) do
+    with 4 <- System.get(world, :flow),
+         colours when colours != nil <- System.get(world, :vsColor, nil),
+         choice when choice != index <- vs_colour(colours, index) do
+      choice
+    else
+      _none -> nil
+    end
+  end
+
+  defp vs_colour(colours, index) when is_list(colours), do: Enum.at(colours, index)
+  defp vs_colour(colours, index) when is_map(colours), do: Map.get(colours, index)
+  defp vs_colour(_colours, _index), do: nil
 
   defp computer_index(world) do
     if World.global(world, :miscPref_p2color, -1) >= 0 do

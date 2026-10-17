@@ -11,14 +11,15 @@ defmodule Nidhox.Brain.Sense do
       ground over it
     * `separated_by_log?/3` (`menSeparatedByLog`): one is in a log while the other is on
       it, or only one of them is on a log
-    * `in_front?/3` (`manInFrontOfMan(a, b)`): `a` leads and is past `b` on its way to
-      its goal (player 1 to the right, player 2 to the left)
+    * `in_front?/3` (`manInFrontOfMan(a, b)`): `b` leads and `a` is past `b` on `b`'s way
+      to its goal (player 1 to the right, player 2 to the left)
     * `running_to_goal?/2` (`manRunningTowardsGoalSide`): moving towards its own goal
     * `on_wall?/2` (`playerIsOnWall`): running up a wall (53), on one (62) or hanging
       from an edge (36)
     * `jumping?/2` (`playerIsJumping`): in states 43, 44, 18, 19, 14, 15, 27, 10 or 11
-    * `fencing?/2` (`isOnGroundFencingInSomeWay`): on the ground with a sword, fencing
-      (29), lunging (48) or at least not ducking
+    * `fencing_state?/1` (`isFencingState`): state 29, 30 or 31
+    * `fencing?/2` (`isOnGroundFencingInSomeWay`): on the ground with a sword, in a
+      fencing state, lunging (48) or at least not ducking
     * `under_low_area?/2` (`playerUnderLowArea`): a `Block` 32 pixels above it
     * `dangerous_sword/2` (`dangerousFlyingSwordNearby`): the first of the other
       player's thrown swords within 64 pixels of the fencer's chest (13 above its feet)
@@ -35,7 +36,7 @@ defmodule Nidhox.Brain.Sense do
   @high_ground 8
   @wall_states [53, 62, 36]
   @jump_states [43, 44, 18, 19, 14, 15, 27, 10, 11]
-  @fencing 29
+  @fencing_states [29, 30, 31]
   @lunging 48
   @sword 2
   @low_area 32
@@ -80,12 +81,12 @@ defmodule Nidhox.Brain.Sense do
       not Gml.eq?(a_on, b_on)
   end
 
-  @doc "Whether fencer `a` leads and is past fencer `b` towards its goal (`manInFrontOfMan`)."
+  @doc "Whether fencer `b` leads and fencer `a` is past `b` towards `b`'s goal (`manInFrontOfMan`)."
   @spec in_front?(World.t(), number(), number()) :: boolean()
   def in_front?(%World{} = world, a, b) do
     with %Instance{x: ax} <- World.fetch(world, a),
          %Instance{x: bx} <- World.fetch(world, b),
-         player = Gml.var(world, a, :playerIndex),
+         player = Gml.var(world, b, :playerIndex),
          true <- Gml.eq?(player, Match.get(world, :leadingPlayerIndex)) do
       if Gml.eq?(player, 1), do: Gml.gt?(ax, bx), else: Gml.lt?(ax, bx)
     else
@@ -113,11 +114,17 @@ defmodule Nidhox.Brain.Sense do
   @spec jumping?(World.t(), number()) :: boolean()
   def jumping?(%World{} = world, man), do: Gml.var(world, man, :state, -1) in @jump_states
 
+  @doc "Whether `state` is a fencing state (`isFencingState`): 29, 30 or 31."
+  @spec fencing_state?(number()) :: boolean()
+  def fencing_state?(state), do: state in @fencing_states
+
   @doc "Whether fencer `man` stands fencing in some way (`isOnGroundFencingInSomeWay`)."
   @spec fencing?(World.t(), number()) :: boolean()
   def fencing?(%World{} = world, man) do
+    state = Gml.var(world, man, :state)
+
     Gml.truthy?(Gml.var(world, man, :onGround)) and weapon_type(world, man) == @sword and
-      (Gml.var(world, man, :state) in [@fencing, @lunging] or not Query.ducking?(world, man))
+      (fencing_state?(state) or state == @lunging or not Query.ducking?(world, man))
   end
 
   @doc "Whether a `Block` is 32 pixels above fencer `man` (`playerUnderLowArea`)."

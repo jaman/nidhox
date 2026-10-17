@@ -8,11 +8,11 @@ defmodule Nidhox.Brain.Combat do
   | action | name | does |
   | --- | --- | --- |
   | 5 | block dive kick | steps back on the quarter beat, high stance on the beat; under a diving opponent, thrusts up (not personality 6); done once either lands, failed after 180 frames or unarmed |
-  | 6 | block thrown sword | with a sword, raises the stance against a high sword or, in the air, hands over to a throw (suggests 29); unarmed, ducks a high sword or jumps a low one within 64 |
+  | 6 | block thrown sword | with a sword, in a fencing state raises the stance against a high sword, else in the air hands over to a throw (suggests 29); unarmed, ducks a high sword or jumps a low one within 64 |
   | 9 | dive kick | on the ground, walks up within 100 and jumps (failed under a ceiling); in the air, holds jump, steers to keep 50 degrees from the opponent and kicks when close or above it |
   | 10 | find weapon | runs to the nearest safe sword and ducks over it within 48; failed without one |
   | 11 | finish him | walks up and punches within 24 a knocked down opponent |
-  | 15 | guard | footwork, then matches the opponent's sword height on the beat until level |
+  | 15 | guard | in a fencing state against an opponent with a sword: footwork, then matches the opponent's sword height on the beat until level; failed out of a fencing state or without an opponent, done against an unarmed one |
   | 16 | jump over other player | while leading behind the opponent, runs at it, jumps and kicks on the way down |
   | 17 | kick | nothing, until it is no longer on the ground within 64 |
   | 18 | look for opening | footwork, then on the beat changes height until there is an opening (suggests 19) |
@@ -42,7 +42,6 @@ defmodule Nidhox.Brain.Combat do
   @sword 2
   @high 1
   @low 2
-  @fencing 29
   @knocked_down 47
   @lunging 48
   @dive_states [14, 15, 16]
@@ -139,18 +138,23 @@ defmodule Nidhox.Brain.Combat do
   end
 
   defp parry_sword(world, self, man, {sx, sy}, {x, y}) do
+    if Sense.fencing_state?(Gml.var(world, man, :state)),
+      do: raise_stance(world, self, man, sy),
+      else: hand_over(world, self, man, {sx, sy}, {x, y})
+  end
+
+  defp raise_stance(world, self, man, sword_y) do
     weapon_y = World.fetch(world, Gml.var(world, man, :weapon)).y
 
-    cond do
-      Gml.var(world, man, :state) == @fencing and Gml.lt?(sy, weapon_y - 3) ->
-        Moves.ideal_stance(world, self, man, @high)
+    if Gml.lt?(sword_y, weapon_y - 3),
+      do: Moves.ideal_stance(world, self, man, @high),
+      else: world
+  end
 
-      not on_ground?(world, man) and Gml.lt?(abs(sy - y), 40) and Gml.lt?(abs(sx - x), 72) ->
-        Gml.put(world, self, %{actionCompleted: 1, suggestedAction: 29})
-
-      true ->
-        world
-    end
+  defp hand_over(world, self, man, {sx, sy}, {x, y}) do
+    if not on_ground?(world, man) and Gml.lt?(abs(sy - y), 40) and Gml.lt?(abs(sx - x), 72),
+      do: Gml.put(world, self, %{actionCompleted: 1, suggestedAction: 29}),
+      else: world
   end
 
   defp dive_kick(world, self) do
@@ -294,9 +298,9 @@ defmodule Nidhox.Brain.Combat do
     other = opponent(world, self)
 
     cond do
-      Gml.var(world, man, :state) != @fencing -> done(world, self, true)
+      not Sense.fencing_state?(Gml.var(world, man, :state)) -> done(world, self, true)
       not Sense.present?(other) -> done(world, self, true)
-      Sense.weapon_type(world, man) != @sword -> done(world, self, false)
+      Sense.weapon_type(world, other) != @sword -> done(world, self, false)
       true -> world |> step_away(self) |> hold_guard(self, man, other)
     end
   end
@@ -392,7 +396,7 @@ defmodule Nidhox.Brain.Combat do
 
     cond do
       not Sense.present?(other) -> done(world, self, true)
-      Gml.var(world, man, :state) != @fencing -> done(world, self, true)
+      not Sense.fencing_state?(Gml.var(world, man, :state)) -> done(world, self, true)
       true -> world |> step_in(self) |> seek_opening(self, man, other)
     end
   end

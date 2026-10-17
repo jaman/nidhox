@@ -8,7 +8,8 @@ defmodule Nidhox.Man.Physics do
     * `begin_step/2` (`grandmaPhysicsBeginStep`): `XACCEL` is the change of `hspd`
       since the last step; standing (`checkBelow`), a change over 0.1 kicks up dust
       (`makeDustAt`), and what it stands on (`checkMoving`) carries it by that one's
-      `hspd + conveyor` and `vspd`
+      `hspd + conveyor` and `vspd`. Of several things it stands on, the one with the
+      lowest `round(x × 100) × 1000000 + round(y × 100)` is the one that carries it
     * `end_step/2` (`grandmaPhysicsEndStep`): moved by what carries it, then by its
       speed a pixel at a time against `Block`s, the fractions kept in `h_counter` and
       `v_counter` (rounded halves to even). Across: a free pixel ahead, on the ground
@@ -24,15 +25,17 @@ defmodule Nidhox.Man.Physics do
     * `move_left_and_right/4` (`moveLeftAndRightAccelFric(accel, fric)`): holding left,
       a fencer moving right slows by `fric`, else it faces left; then `hspd` falls by
       `accel`; holding right, the same the other way
-    * `clamp_run/2` (`clampHorizRunBasedOnWeapon`): `hspd` held to ±2.5 with a sword,
-      ±2.9 without
     * `collide_x/2` and `collide_y/2` (`manCollideX`, `manCollideY`): a fencer's user
-      events 0 and 1
+      events 0 and 1. Running into a wall while holding the run button in a running
+      state (`isRunState`: 52, 80, 81; or 54, 58, 43, 44, 18, 19) turns the fencer to
+      the wall
     * `grab_ledge_or_fall/2` (`grabLedgeOrFall`): `tryToGrabALedge`, else falling
       (state 27)
   """
 
   alias Cauldron2D.GameMaker.{Collide, Instance, World}
+  alias Cauldron2D.Overlap
+  alias Cauldron2D.Shape
   alias Nidhox.Bout.{Input, Variants}
   alias Nidhox.Gml
   alias Nidhox.Objects.Particles
@@ -40,7 +43,7 @@ defmodule Nidhox.Man.Physics do
   @noone -4
   @force_out_tries 200
   @mask_height 26
-  @runner_states [52, 54, 58, 43, 44, 18, 19]
+  @runner_states [52, 80, 81, 54, 58, 43, 44, 18, 19]
   @falling_states [27, 10, 18]
 
   @doc "The compiled names this module answers for, with their functions."
@@ -187,13 +190,6 @@ defmodule Nidhox.Man.Physics do
     |> then(&push(&1, self, Input.down?(&1, self, player, 1), 1, accel, fric))
   end
 
-  @doc "`clampHorizRunBasedOnWeapon` for fencer `self`."
-  @spec clamp_run(World.t(), non_neg_integer()) :: World.t()
-  def clamp_run(%World{} = world, self) do
-    limit = if weapon_type(world, self) == 1, do: 2.9, else: 2.5
-    Gml.put(world, self, %{hspd: Gml.clamp(Gml.var(world, self, :hspd), -limit, limit)})
-  end
-
   @doc "`get_weapon_type`: the type of fencer `self`'s weapon, 1 (fists) without one."
   @spec weapon_type(World.t(), non_neg_integer()) :: number()
   def weapon_type(%World{} = world, self) do
@@ -291,10 +287,41 @@ defmodule Nidhox.Man.Physics do
   defp moving_ground(world, self) do
     %Instance{x: x, y: y} = World.fetch(world, self)
 
-    if meeting?(world, self, {x, y + 1}, "PassThroughBlock") and
-         not meeting?(world, self, {x, y}, "PassThroughBlock"),
-       do: place(world, self, {x, y + 1}, "o_block_moving"),
-       else: place(world, self, {x, y + 1}, "Block")
+    name =
+      if meeting?(world, self, {x, y + 1}, "PassThroughBlock") and
+           not meeting?(world, self, {x, y}, "PassThroughBlock"),
+         do: "o_block_moving",
+         else: "Block"
+
+    world
+    |> touching(self, {x, y + 1}, name)
+    |> Enum.min_by(&ground_rank(world, &1), fn -> nil end)
+  end
+
+  defp ground_rank(world, ground) do
+    %Instance{x: x, y: y} = World.fetch(world, ground)
+    Gml.round(x * 100) * 1_000_000 + Gml.round(y * 100)
+  end
+
+  defp touching(world, self, position, name) do
+    with object when is_integer(object) <- World.object_index(world, name),
+         %Instance{} = instance <- World.fetch(world, self),
+         %Shape{} = mine <- Collide.shape(world, instance, position) do
+      world
+      |> World.instances_of(object)
+      |> Enum.filter(&(&1 != self and overlaps?(world, mine, &1)))
+    else
+      _none -> []
+    end
+  end
+
+  defp overlaps?(world, mine, other) do
+    %Instance{x: x, y: y} = instance = World.fetch(world, other)
+
+    case Collide.shape(world, instance, {x, y}) do
+      %Shape{} = theirs -> Overlap.shapes?(mine, theirs)
+      nil -> false
+    end
   end
 
   defp slide(world, _self, _step, 0), do: {world, false}
@@ -426,13 +453,6 @@ defmodule Nidhox.Man.Physics do
     case World.object_index(world, name) do
       nil -> false
       object -> Collide.meeting?(world, self, position, object)
-    end
-  end
-
-  defp place(world, self, position, name) do
-    case World.object_index(world, name) do
-      nil -> nil
-      object -> Collide.place(world, self, position, object)
     end
   end
 end

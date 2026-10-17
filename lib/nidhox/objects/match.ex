@@ -8,46 +8,52 @@ defmodule Nidhox.Objects.Match do
       pickups; both players' swords (`yellowSword`, `orangeSword`) 1; kill streaks 0;
       `spawnDelay` 100 and the spawn timer at it; nobody leading, now or before;
       `change_animation`, `wrongWay`, `wrongWayCounter` 0; the camera's centre
-      remembered (`pCameraCenterX`, `pCameraCenterY`); `System.frame` 0;
-      `roomFrame` 0; `firstFrameOfRoom` 1; a faceoff of 120 steps; `idleTime` and
-      `finished` 0; the clock from `System.time_limit` (`useCountDownTimer` when it is
-      set, `countDownTimer` its frames); not in sudden death; no buttons kept
-      (`inputMap`, `lastFramePolled` −1); `faceoffWinner` 0; `cleanHands`, `cleanFeet`,
-      `cleanSword`, `perfect` 1; no comeback for either player. A demonstration
-      (`System.flow` 1) has the computer play both players (`Brain`s for 1 and 2), a
-      single player game (2) player 2. In flows 1 to 4 (and 790474) it makes the music
-      (`LayeredMusic`)
+      remembered (`pCameraCenterX`, `pCameraCenterY` and the global `parallaxCam`);
+      `System.frame` 0; `roomFrame` 0; `firstFrameOfRoom` 1; a faceoff of 120 steps;
+      `idleTime`, `finished`, `winner`, `finishTimer` and `matchOver` 0; the clock from
+      `Nidhox.Bout.Variants.match_time_limit/1` (`useCountDownTimer` when it is set,
+      `countDownTimer` its frames); not in sudden death; the buttons kept
+      (`inputMap`, from `Nidhox.Bout.Input.initial_map/0`, `lastFramePolled` −1);
+      `faceoffWinner` 0; `cleanHands`, `cleanFeet`, `cleanSword`, `perfect` 1; no
+      comeback for either player; `prometheus` 1 for both players. The computer plays by
+      flow: both players in a demonstration (`System.flow` 1) and flow 62831853, the side
+      opposite `System.humanPlayerIndex` in a single player game (2) and the tutorial
+      (656686433), player 2 in a versus match (4) with `System.training`. In flows 1 to 4
+      and 62831853 it makes the music (`LayeredMusic`). Without the tutorial the camera
+      goes to the room's left
     * room start: the camera at the room's left (unless in the tutorial); the right of
       way's arrow (`Arrow`) and the clash point (`ClashPosition`) made; the spawn timer
-      from `spawnDelay`. In a room with entry points, a faceoff warps both players in
-      64 pixels above their match entry points (`Nidhox.Bout.Spawn.warp_in/3`);
-      otherwise the leader comes in at its room entry point, holding a sword when it
-      had one leaving the last room, dropped to the ground. Then the camera's centre
-      in the middle of the room, remembered; `firstFrameOfRoom` 1; and with sudden
-      death only (`suddenDeathOnlyEnabled`) and not yet in it, sudden death begins
-    * step: where the `Ear` is; while not finished, `MatchStats.frames` is
-      `System.frame`; the first leader is the faceoff's winner (`faceoffWinner`); a
-      perfect match (`perfect`) is lost once player 2 leads, or once nobody does after
-      the faceoff was won
+      from `spawnDelay`, or after a screen advance (the global `screenAdvanceFrame`)
+      from what is left of it, at least 1. In a room with entry points, a faceoff warps
+      both players in 64 pixels above their match entry points
+      (`Nidhox.Bout.Spawn.warp_in/3`); otherwise the leader comes in at its room entry
+      point, holding a sword when it had one leaving the last room, dropped to the
+      ground. Then, unless in the tutorial, the camera's centre in the middle of the
+      room; the centre remembered; `firstFrameOfRoom` 1; with sudden death only
+      (`suddenDeathOnlyEnabled`) and not yet in it, sudden death begins; and `prometheus`
+      is 1 for player 2 in the castle's and the castle stairs' left B rooms, and for
+      player 1 in their right B rooms, 0 otherwise
+    * step: with `matchOver` the match is gone; otherwise it is where the `Ear` is and,
+      while not finished, `MatchStats.frames` is `System.frame`
     * room end: whether each player's fencer leaves holding a sword (`yellowSword`,
       `orangeSword`); no thrown swords or pickups are kept; without persistent blood
       (`System.persistent_blood`) the blood bank's surfaces are freed (its `Other_20`,
       `Nidhox.Objects.BloodSurface.free_bank/2`)
-    * alarm 0: the match is over and gone
     * destroy: its computer players (`Brain`), its music (`LayeredMusic`) and the
       tutorial (`Tutorial`) gone with it
-    * draw: outside a demonstration and the faceoff, the clock or "SUDDEN DEATH" on
-      the screen's bottom middle (160, 185) over its grey shadow one pixel lower — red
-      (`make_color_hsv(0, 200, 255)`) in sudden death and in the last 600 frames,
-      else white — the clock as `getTime(countDownTimer + 1)`, shown only with a time
-      limit, frames left and outside an end room
+    * draw: outside a demonstration and the faceoff, the clock or "SUDDEN DEATH" on the
+      screen's bottom middle (GUI units (320, 370), `Nidhox.Bout.Gui`) over its grey
+      shadow 2 units lower — red (`make_color_hsv(0, 200, 255)`) in sudden death and in
+      the last 600 frames, else white — the clock as `getTime(countDownTimer + 1)`, shown
+      only with a time limit, frames left and outside an end room
 
-  `create/1` makes one; `start_match/1` starts a match (`startMatch`); `get/2` reads a
-  variable of the first `Match`.
+  `create/1` makes one; `start_match/2` starts a match (`startMatch`); `track_leader/2` is
+  the leader tracking `updateMatchFrame` does each frame; `get/3` reads a variable of the
+  first `Match`.
   """
 
-  alias Cauldron2D.GameMaker.{Data, Draw, Instance, World}
-  alias Nidhox.Bout.{Camera, Outcome, Spawn, Variants}
+  alias Cauldron2D.GameMaker.{Data, Instance, World}
+  alias Nidhox.Bout.{Camera, Gui, Input, Outcome, Spawn, Variants}
   alias Nidhox.Gml
   alias Nidhox.Man.{Physics, Weapon}
   alias Nidhox.Objects.{BloodSurface, Ear, System}
@@ -58,21 +64,27 @@ defmodule Nidhox.Objects.Match do
   @warp_height 64
   @sword 2
   @demonstration 1
-  @single_player 2
-  @music_flows [1, 2, 3, 4, 790_474]
+  @versus 4
+  @both_computer_flows [1, 62_831_853]
+  @opposite_computer_flows [2, 656_686_433]
+  @music_flows [1, 2, 3, 4, 62_831_853]
   @font "fMenu"
-  @text_at {160, 185}
+  @text_at {320, 370}
+  @shadow_drop 2
   @red {255, 55, 55}
   @white {255, 255, 255}
   @grey {128, 128, 128}
   @last_frames 600
   @gui_depth -1_000_000
+  @left_b_rooms ["rCastleLeftB", "rCastleStairsLeftB"]
+  @right_b_rooms ["rCastleRightB", "rCastleStairsRightB"]
   @centres %{
     25 => "rCemeteryCenter",
     20 => "rCastleCenter",
     22 => "rSkyCenter",
     23 => "rWildsCenter",
-    21 => "rMinesCenter"
+    21 => "rMinesCenter",
+    26 => "rCastleStairsCenter"
   }
 
   @doc "The compiled names this module answers for, with their functions."
@@ -83,7 +95,6 @@ defmodule Nidhox.Objects.Match do
       {"gml_Object_Match_Other_4", &room_start/3},
       {"gml_Object_Match_Step_0", &step/3},
       {"gml_Object_Match_Other_5", &room_end/3},
-      {"gml_Object_Match_Alarm_0", fn world, self, _other -> World.destroy(world, self) end},
       {"gml_Object_Match_Destroy_0", &gone/3},
       {"gml_Object_Match_Draw_0", &draw/3},
       {"gml_Object_Match_Other_20",
@@ -100,23 +111,23 @@ defmodule Nidhox.Objects.Match do
 
   @doc """
   The world with a match started as the game's `startMatch` starts one: the level
-  select (`VsLevelSelect`) and any match gone, a new `Match`, a room transition
-  (`FinalFantasyVIIITransition`), the music's `firstChoice` 1, and the centre room of
-  `System.level`'s area gone to (`World.goto/2`). `System.level` must be an area's
-  level: castle 20, mines 21, sky 22, wilds 23 or cemetery 25.
+  select (`VsLevelSelect`) and any match gone, a new `Match`, a room wipe
+  (`ScreenWipe`), the music's `firstChoice` 1, and the centre room of `System.level`'s
+  area gone to (`World.goto/2`). `System.level` must be an area's level: castle 20,
+  mines 21, sky 22, wilds 23, cemetery 25 or castle stairs 26; for any other the world is
+  left at the new match. With `room` (a room index), that room is gone to instead.
   """
-  @spec start_match(World.t()) :: World.t()
-  def start_match(%World{} = world) do
+  @spec start_match(World.t(), non_neg_integer() | nil) :: World.t()
+  def start_match(%World{} = world, room \\ nil) do
     world = world |> kill_every("VsLevelSelect") |> kill_every("Match")
     {_match, world} = create(world)
-    centre = Map.fetch!(@centres, round(System.get(world, :level)))
 
     world
-    |> make("FinalFantasyVIIITransition")
+    |> make("ScreenWipe")
     |> then(fn world ->
       Enum.reduce(Gml.all(world, "LayeredMusic"), world, &Gml.put(&2, &1, %{firstChoice: 1}))
     end)
-    |> World.goto(Data.index(world.data, :rooms, centre))
+    |> go_to_start(room)
   end
 
   @doc "Variable `name` of the first `Match`, `default` without one."
@@ -128,8 +139,27 @@ defmodule Nidhox.Objects.Match do
     end
   end
 
+  @doc """
+  The world with the match's leader tracked as `updateMatchFrame` does each frame: the
+  first leader becomes `faceoffWinner`, and `perfect` is lost once player 2 leads or once
+  nobody leads after the faceoff was won.
+  """
+  @spec track_leader(World.t(), non_neg_integer()) :: World.t()
+  def track_leader(%World{} = world, match) do
+    world =
+      if Gml.var(world, match, :faceoffWinner) == 0,
+        do: Gml.put(world, match, %{faceoffWinner: Gml.var(world, match, :leadingPlayerIndex)}),
+        else: world
+
+    leader = Gml.var(world, match, :leadingPlayerIndex)
+
+    if leader == 2 or (leader == 0 and Gml.var(world, match, :faceoffWinner) != 0),
+      do: Gml.put(world, match, %{perfect: 0}),
+      else: world
+  end
+
   defp start(world, self, _other) do
-    limit = System.get(world, :time_limit)
+    limit = Variants.match_time_limit(world)
 
     world
     |> kill_every("Man")
@@ -163,10 +193,13 @@ defmodule Nidhox.Objects.Match do
       faceoffTimer: @faceoff_steps,
       idleTime: 0,
       finished: 0,
+      winner: 0,
+      finishTimer: 0,
+      matchOver: 0,
       useCountDownTimer: Gml.clamp(limit, 0, 1),
       countDownTimer: limit,
       sudden_death: 0,
-      inputMap: %{},
+      inputMap: Input.initial_map(),
       lastFramePolled: -1,
       faceoffWinner: 0,
       cleanHands: 1,
@@ -174,11 +207,26 @@ defmodule Nidhox.Objects.Match do
       cleanSword: 1,
       perfect: 1,
       sound: -1,
-      comeback: %{1 => 0, 2 => 0}
+      comeback: %{1 => 0, 2 => 0},
+      prometheus: %{1 => 1, 2 => 1}
     })
+    |> World.put_global(:parallaxCam, Camera.center_x(world))
     |> zero_frame()
     |> brains()
     |> music()
+    |> place_camera()
+  end
+
+  defp place_camera(world),
+    do: if(Gml.exists?(world, "Tutorial"), do: world, else: Camera.put_left(world, 0))
+
+  defp go_to_start(world, room) when is_integer(room), do: World.goto(world, room)
+
+  defp go_to_start(world, nil) do
+    case Map.fetch(@centres, round(System.get(world, :level))) do
+      {:ok, centre} -> World.goto(world, Data.index(world.data, :rooms, centre))
+      :error -> world
+    end
   end
 
   defp kill_every(world, name),
@@ -193,9 +241,21 @@ defmodule Nidhox.Objects.Match do
 
   defp brains(world) do
     case System.get(world, :flow) do
-      @demonstration -> world |> brain(1) |> brain(2)
-      @single_player -> brain(world, 2)
-      _versus -> world
+      flow when flow in @both_computer_flows -> world |> brain(1) |> brain(2)
+      flow when flow in @opposite_computer_flows -> brain(world, opposite_index(world))
+      @versus -> training_brain(world)
+      _other -> world
+    end
+  end
+
+  defp training_brain(world),
+    do: if(Gml.truthy?(System.get(world, :training)), do: brain(world, 2), else: world)
+
+  defp opposite_index(world) do
+    case System.get(world, :humanPlayerIndex, 1) do
+      1 -> 2
+      2 -> 1
+      _other -> -1
     end
   end
 
@@ -209,17 +269,55 @@ defmodule Nidhox.Objects.Match do
   end
 
   defp room_start(world, self, _other) do
-    world =
-      if Gml.exists?(world, "Tutorial"), do: world, else: Camera.put_left(world, 0)
+    world = place_camera(world)
+    {delay, world} = room_spawn_delay(world, self)
 
     world
     |> make("Arrow")
-    |> Spawn.reset_timer(Gml.var(world, self, :spawnDelay))
+    |> Spawn.reset_timer(delay)
     |> make("ClashPosition")
     |> enter_fencers(self)
-    |> settle_camera(self)
+    |> centre_camera()
+    |> remember_camera(self)
     |> sudden_death_only(self)
+    |> mark_prometheus(self)
   end
+
+  defp room_spawn_delay(world, match) do
+    delay = Gml.var(world, match, :spawnDelay)
+    advance = World.global(world, :screenAdvanceFrame, -1)
+
+    if advance >= 0 and Gml.exists?(world, "System"),
+      do:
+        {max(delay - (System.get(world, :frame) - advance), 1),
+         World.put_global(world, :screenAdvanceFrame, -1)},
+      else: {delay, world}
+  end
+
+  defp centre_camera(world) do
+    if Gml.exists?(world, "Tutorial"),
+      do: world,
+      else: Camera.put_center_x(world, room_width(world) * 0.5)
+  end
+
+  defp remember_camera(world, match) do
+    world
+    |> World.put_global(:parallaxCam, Camera.center_x(world))
+    |> Gml.put(match, %{
+      pCameraCenterX: Camera.center_x(world),
+      pCameraCenterY: Camera.center_y(world),
+      firstFrameOfRoom: 1
+    })
+  end
+
+  defp mark_prometheus(world, match) do
+    name = world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:name)
+    Gml.put(world, match, %{prometheus: Map.merge(%{1 => 0, 2 => 0}, prometheus_for(name))})
+  end
+
+  defp prometheus_for(name) when name in @left_b_rooms, do: %{2 => 1}
+  defp prometheus_for(name) when name in @right_b_rooms, do: %{1 => 1}
+  defp prometheus_for(_name), do: %{}
 
   defp make(world, name),
     do: world |> World.create(World.object_index(world, name), {0, 0}) |> elem(0)
@@ -260,7 +358,13 @@ defmodule Nidhox.Objects.Match do
   end
 
   defp enter_at(world, match, point, player, instance, sword) do
-    %Instance{x: x, y: y} = World.fetch(world, Gml.first(world, point))
+    case Gml.first(world, point) do
+      nil -> world
+      entry -> enter_from(world, match, World.fetch(world, entry), player, instance, sword)
+    end
+  end
+
+  defp enter_from(world, match, %Instance{x: x, y: y}, player, instance, sword) do
     {man, world} = Spawn.player(world, {x, y}, player)
     world = Gml.put(world, match, %{instance => man})
 
@@ -275,16 +379,6 @@ defmodule Nidhox.Objects.Match do
       else: world |> World.update(man, &%{&1 | y: &1.y + 1}) |> drop_to_ground(man)
   end
 
-  defp settle_camera(world, match) do
-    world = Camera.put_center_x(world, room_width(world) * 0.5)
-
-    Gml.put(world, match, %{
-      pCameraCenterX: Camera.center_x(world),
-      pCameraCenterY: Camera.center_y(world),
-      firstFrameOfRoom: 1
-    })
-  end
-
   defp sudden_death_only(world, match) do
     if not Gml.truthy?(Gml.var(world, match, :sudden_death)) and
          Variants.sudden_death_only?(world),
@@ -293,15 +387,13 @@ defmodule Nidhox.Objects.Match do
   end
 
   defp step(world, self, _other) do
-    {x, y} = Ear.position(world)
-    world = World.update(world, self, &%{&1 | x: x, y: y})
-    world = if Gml.truthy?(Gml.var(world, self, :finished)), do: world, else: count_frames(world)
-    world = first_leader(world, self)
-    leader = Gml.var(world, self, :leadingPlayerIndex)
-
-    if leader == 2 or (leader == 0 and Gml.var(world, self, :faceoffWinner) != 0),
-      do: Gml.put(world, self, %{perfect: 0}),
-      else: world
+    if Gml.truthy?(Gml.var(world, self, :matchOver)) do
+      World.destroy(world, self)
+    else
+      {x, y} = Ear.position(world)
+      world = World.update(world, self, &%{&1 | x: x, y: y})
+      if Gml.truthy?(Gml.var(world, self, :finished)), do: world, else: count_frames(world)
+    end
   end
 
   defp count_frames(world) do
@@ -309,12 +401,6 @@ defmodule Nidhox.Objects.Match do
       nil -> world
       stats -> Gml.put(world, stats, %{frames: System.get(world, :frame)})
     end
-  end
-
-  defp first_leader(world, self) do
-    if Gml.var(world, self, :faceoffWinner) == 0,
-      do: Gml.put(world, self, %{faceoffWinner: Gml.var(world, self, :leadingPlayerIndex)}),
-      else: world
   end
 
   defp room_end(world, self, _other) do
@@ -369,13 +455,11 @@ defmodule Nidhox.Objects.Match do
 
   defp shadowed(world, text, colour) do
     {x, y} = @text_at
-    left = Camera.left(world)
-    top = Camera.top(world)
     options = [halign: :center, valign: :bottom, depth: @gui_depth]
 
     world
-    |> Draw.text(@font, text, {left + x, top + y + 1}, [{:colour, @grey} | options])
-    |> Draw.text(@font, text, {left + x, top + y}, [{:colour, colour} | options])
+    |> Gui.view_text(@font, text, {x, y + @shadow_drop}, [{:colour, @grey} | options])
+    |> Gui.view_text(@font, text, {x, y}, [{:colour, colour} | options])
   end
 
   @doc "Frames `frames` as the game shows a time (`getTime(frames, 0)`): `[h:]mm:ss`."

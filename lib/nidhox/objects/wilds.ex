@@ -6,7 +6,7 @@ defmodule Nidhox.Objects.Wilds do
       frame `irandom(image_number)`, flipped `choose(−1, 1)` across and down,
       `imageSpeed` `0.15 + random(0.05)`; step: its frames run at `imageSpeed`
     * `Rain` create: a particle system it updates and draws itself, an emitter and a drop
-      (`sRainDrop` at a random frame, speed 13, life `screenHeight × 1.5 / 14`, hue and
+      (`sRainDrop` at a random frame, speed 13–13.5, life `screenHeight × 1.5 / 14`, hue and
       saturation 0, value 50–255); `intensity` 1. Step: with `a` `270 + 5 ×
       sin(frame / 190)`, drops head `a ± 2` and are turned `270 + a ± 2`, both wiggling
       0.1; the emitter on a line from 160 pixels left of the camera to 160 right of it, 8
@@ -15,13 +15,14 @@ defmodule Nidhox.Objects.Wilds do
       system gone
   """
 
-  alias Cauldron2D.GameMaker.{Draw, Instance, PartSystems, World}
+  alias Cauldron2D.GameMaker.{Data, Draw, Instance, PartSystems, World}
   alias Nidhox.Bout.Camera
   alias Nidhox.Gml
   alias Nidhox.Objects.System
 
-  @drop_sprite 104
+  @drop_sprite "sRainDrop"
   @drop_speed 13
+  @drop_speed_spread 0.5
   @margin 160
   @above 8
 
@@ -60,10 +61,11 @@ defmodule Nidhox.Objects.Wilds do
     {world, emitter} = PartSystems.emitter_create(world, system)
     {world, drop} = PartSystems.type_create(world)
     life = Camera.height(world) * 1.5 / (@drop_speed + 1)
+    sprite = Data.index(world.data, :sprites, @drop_sprite)
 
     world
-    |> PartSystems.type_sprite(drop, @drop_sprite, false, false, true)
-    |> PartSystems.type_speed(drop, @drop_speed, @drop_speed, 0, 0)
+    |> PartSystems.type_sprite(drop, sprite, false, false, true)
+    |> PartSystems.type_speed(drop, @drop_speed, @drop_speed + @drop_speed_spread, 0, 0)
     |> PartSystems.type_life(drop, life, life)
     |> PartSystems.type_colour_hsv(drop, {0, 0}, {0, 0}, {50, 255})
     |> PartSystems.system_automatic_draw(system, false)

@@ -17,13 +17,13 @@ defmodule Nidhox.Objects.Smoke do
       `Nidhox.Objects.Tournament.champion/1`)
   """
 
-  alias Cauldron2D.GameMaker.{Draw, Instance, PartSystems, World}
+  alias Cauldron2D.GameMaker.{Data, Draw, Instance, PartSystems, World}
   alias Nidhox.Bout.PlayerColour
   alias Nidhox.Gml
   alias Nidhox.Objects.{System, Tournament}
 
-  @smoke_sprite 277
-  @ember_sprite 274
+  @smoke_sprite "sSmoke"
+  @ember_sprite "sEmber"
   @smoke_every 6
   @ember_every 5
 
@@ -65,7 +65,7 @@ defmodule Nidhox.Objects.Smoke do
 
     world =
       world
-      |> PartSystems.type_sprite(smoke, @smoke_sprite, true, true, false)
+      |> PartSystems.type_sprite(smoke, sprite(world, @smoke_sprite), true, true, false)
       |> PartSystems.type_orientation(smoke, 0, 360, 1, 0.1, false)
       |> PartSystems.type_speed(smoke, 0, 0.3, 0, 0)
       |> PartSystems.type_direction(smoke, 180, 360, 0, 0)
@@ -76,7 +76,7 @@ defmodule Nidhox.Objects.Smoke do
     {world, ember} = PartSystems.type_create(world)
 
     world
-    |> PartSystems.type_sprite(ember, @ember_sprite, true, false, false)
+    |> PartSystems.type_sprite(ember, sprite(world, @ember_sprite), true, false, false)
     |> PartSystems.type_life(ember, 30, 90)
     |> PartSystems.type_speed(ember, 0, 0.1, 0, 0)
     |> PartSystems.type_direction(ember, 0, 360, 0, 0.05)
@@ -88,6 +88,8 @@ defmodule Nidhox.Objects.Smoke do
       ember: ember
     })
   end
+
+  defp sprite(world, name), do: Data.index(world.data, :sprites, name)
 
   defp puff(world, self, {left, right, top, bottom}) do
     %Instance{

@@ -5,12 +5,12 @@ defmodule Nidhox.Objects.RoomCodes do
   takes them away (`global.swords` 0). The cemetery's rooms also turn their birds black
   (`with (Bird) image_blend = 0`); the sky's centre sets its first background's alpha to
   0.1 (`__background_set(14, 0, 0.1)`). The left B and right B rooms of the castle,
-  the cemetery and the wilds make a `LastScreenText` ("Final Screen"); the mines' and
-  the sky's last rooms place theirs themselves.
+  the stairs castle, the cemetery and the wilds make a `LastScreenText` ("Final Screen");
+  the mines' and the sky's last rooms place theirs themselves.
 
   | code | room |
   | --- | --- |
-  | 1 | centre (also the castle's B centre, the playground, the pre-match, the controls and challenge rooms, the tutorial, and the sky's right B) |
+  | 1 | centre (also the castle's B centre, the online lobby, the pre-match, the controls and challenge rooms, the tutorial, and the sky's right B) |
   | 2, 3, 11 | left A, left B, left C |
   | 4 | left end |
   | 5, 6, 9 | right A, right B, right C |
@@ -35,6 +35,15 @@ defmodule Nidhox.Objects.RoomCodes do
     "rCastleRightB" => {6, nil},
     "rCastleRightEnd" => {7, nil},
     "rCastleSuddenDeath" => {8, 1},
+    "rCastleStairs" => {5, nil},
+    "rCastleStairsCenter" => {1, 1},
+    "rCastleStairsLeftA" => {2, nil},
+    "rCastleStairsLeftB" => {3, nil},
+    "rCastleStairsLeftEnd" => {4, nil},
+    "rCastleStairsRightA" => {5, nil},
+    "rCastleStairsRightB" => {6, nil},
+    "rCastleStairsRightEnd" => {7, nil},
+    "rCastleStairsSuddenDeath" => {8, 1},
     "rCemeteryCenter" => {1, 1},
     "rCemeteryLeftA" => {2, nil},
     "rCemeteryLeftB" => {3, nil},
@@ -55,7 +64,7 @@ defmodule Nidhox.Objects.RoomCodes do
     "rMinesRightC" => {9, 1},
     "rMinesRightEnd" => {7, nil},
     "rMinesSuddenDeath" => {8, 1},
-    "rPlayground" => {1, 1},
+    "rOnlineLobby" => {1, 1},
     "rPreMatch" => {1, 1},
     "rSkyCenter" => {1, 1},
     "rSkyLeftA" => {2, 1},
@@ -76,7 +85,7 @@ defmodule Nidhox.Objects.RoomCodes do
     "rWildsSuddenDeath" => {8, 1}
   }
 
-  @final_screens ~w(rCastleLeftB rCastleRightB rCemeteryLeftB rCemeteryRightB rWildsLeftB rWildsRightB)
+  @final_screens ~w(rCastleLeftB rCastleRightB rCastleStairsLeftB rCastleStairsRightB rCemeteryLeftB rCemeteryRightB rWildsLeftB rWildsRightB)
 
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]

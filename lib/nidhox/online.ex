@@ -1,116 +1,164 @@
 defmodule Nidhox.Online do
   @moduledoc """
-  ONLINE VERSUS's work outside the game's state, over `Cauldron2D.Distribution`:
-  hosting, hearing hosts on the local network, and joining one. `Nidhox.Flow` lists
-  what it wants done in the state's `effects`; `Nidhox.Game` calls `perform/1` after
-  each step and `pending/1` before the next.
+  ONLINE's work outside the game's state: hosting a lobby, hearing the lobbies on the
+  local network, measuring the round trip to each, and serving the game over ssh.
+  `Nidhox.Flow` lists what it wants done in the state's `effects`; `Nidhox.Game` calls
+  `perform/1` after each step.
 
-  The state's `online` is `new/1`'s map:
+  A lobby is a `Cauldron2D.Link` listener for this machine's world, announced by a
+  `Cauldron2D.Beacon` whose fields are the game's lobby fields: `game` (`"Nidhogg"`),
+  `version` (`"77"`), `title`, `owner` (the host's id), `name` (the host's name),
+  `kind` (`"public"` for matchmaking, `"friends"` for a lobby a friend is invited to,
+  `"standby"` for the lobby kept open on the online menu), `port` (the listener's
+  port), `slots`, `players`, `avail`, `open`, and those the search publishes
+  (`region`, `anyping`, and `invite`, the invited player's id). A machine
+  that joins a lobby enters the host's world over the link (`Nidhox.Client`'s `source:
+  {:link, address, port}`), and the two worlds play with rollback.
 
-    * `host` — `Cauldron2D.Distribution.host/2`'s host while this machine hosts, else
-      `nil`
-    * `owner` — the player whose client chose to host or join
-    * `listener` — the `Cauldron2D.Beacon.Listener` while hosts are being looked for
-    * `found` — the hosts heard, each `%{host, node}`, refreshed every `@listen_every`
-      steps while looking
-    * `joining` — `{address, code, side}` to join at the start of the next step
+  The state's `online` is `new/2`'s map:
+
+    * `listener`, `port` — the link listener and its port while this machine hosts
+    * `beacon` — the beacon announcing the lobby
+    * `hosted` — the lobby's kind while hosting (`:public`, `:friends`, `:standby`),
+      else `nil`
+    * `published` — the beacon's fields as last published
+    * `ear` — the `Cauldron2D.Beacon.Listener` while lobbies are listened for
+    * `lobbies_at` — the step the lobbies were last heard at, `nil` before
+    * `lobbies` — the lobbies heard, refreshed every `@listen_every` steps, each
+      `%{owner, name, kind, address, port, players, slots, open, region, anyping,
+      invite}`
+    * `pinger`, `pings` — the `Nidhox.Pinger` measuring the lobbies heard, and its
+      latest round trips by `{address, port}`
+    * `owner` — the player whose client chose ONLINE
+    * `link_port` — the port to host on, `nil` for any free one
     * `status` — a line to show the players, or `nil`
-    * `port` — the port a host listens on for joining nodes, `nil` for any free one
-    * `ssh` — `%{server, addresses, port}` while this machine serves the game over ssh
-      (`Cauldron2D.Drafter.Server`), `addresses` the first three of
-      `Cauldron2D.Distribution.addresses/0`; else `nil`
-    * `ssh_port` — the port to offer for serving over ssh, `nil` for any free one
-    * `quitting` — the players from another machine asked to quit (`Nidhox.Flow`), not
-      counted as joining while they are still on their way out
-    * `closing` — `nil`, or the step until which hosting goes on while the players asked
-      to quit leave, so each one's session ends as their own quitting ends it; hosting
-      stops once they have all left or that step has passed (`Nidhox.Flow`)
+    * `ssh`, `ssh_port`, `quitting`, `closing` — serving over ssh
+      (`Cauldron2D.Drafter.Server`), as before: `ssh` is `%{server, addresses, port}`
+      while serving
 
   Effects:
 
-    * `:host` — host as `@name`, calling on the network as `@game`
-    * `:unhost` — stop hosting
-    * `{:ssh_host, port}` — serve the game over ssh on `port` (`0` for any free one), on
-      every IPv4 interface, so a
-      player connects with `ssh -p <port> new@<address>` (registering a name the first
-      time) and plays in this machine's world from their own terminal
-    * `:ssh_unhost` — stop serving over ssh; a player connected that way is
-      disconnected, their terminal restored and told "NidhOX: the host stopped hosting."
-    * `:listen`, `:unlisten` — start and stop looking for hosts
+    * `{:host, kind, fields}` — host a lobby of `kind` announcing `fields`; a lobby
+      already hosted is closed first
+    * `:unhost` — stop hosting, closing every connection made to the lobby
+    * `{:publish, fields}` — merge `fields` into the beacon's
+    * `:drop` — close every connection made to the lobby, which keeps hosting
+    * `:listen`, `:unlisten` — start and stop hearing lobbies and measuring them
+    * `{:join, lobby, side, invited?}` — ask the client of the player on `side` to enter
+      `lobby`'s world, joining it as invited (`netInvite`) when `invited?`
+    * `{:join_address, address, port, side}` — the same for a lobby typed by address
+    * `{:ssh_host, port}`, `:ssh_unhost` — serve the game over ssh on `port` (`0` for any
+      free one), and stop
     * `:prefill_address` — the state's `entry` started as this machine's address up to
-      its last dot, the part a host on the same network shares, and the client of the
-      player typing it (`typer`) asked to type it (`Nidhox.Typing`)
-    * `{:join, address, code, side}` — join the host at `address` with `code` at the
-      start of the next step, the status "connecting.." until then; once joined, the
-      client of the player on `side` is asked to enter the host's world
-      (`{:enter, %{source: {:node, node}}}`), and when the host cannot be reached the
-      status says so
+      its last dot, and the client of the player typing it (`typer`) asked to type it
   """
 
+  alias Cauldron2D.Beacon
   alias Cauldron2D.Beacon.Listener
   alias Cauldron2D.Distribution
   alias Cauldron2D.Drafter.Server
-  alias Nidhox.Flow
+  alias Cauldron2D.Link
+  alias Nidhox.{Flow, Pinger}
 
-  @name "nidhox"
   @game "NidhOX"
+  @lobby_game "Nidhogg"
+  @version "77"
+  @slots 2
   @listen_every 30
   @shown_addresses 3
   @ssh_closed "NidhOX: the host stopped hosting."
 
+  @type lobby :: %{
+          owner: integer(),
+          name: String.t(),
+          kind: String.t(),
+          address: :inet.ip_address(),
+          port: :inet.port_number(),
+          players: non_neg_integer(),
+          slots: non_neg_integer(),
+          open: boolean(),
+          region: String.t(),
+          anyping: boolean(),
+          invite: integer() | nil
+        }
+
   @type t :: %{
-          host: Distribution.host() | nil,
-          owner: term(),
           listener: pid() | nil,
-          found: [%{host: String.t(), node: node()}],
-          joining: {String.t(), String.t(), 1 | 2} | nil,
+          port: :inet.port_number() | nil,
+          beacon: pid() | nil,
+          hosted: :public | :friends | :standby | nil,
+          published: %{String.t() => String.t()},
+          ear: pid() | nil,
+          lobbies: [lobby()],
+          lobbies_at: non_neg_integer() | nil,
+          pinger: pid() | nil,
+          pings: %{{:inet.ip_address(), :inet.port_number()} => number() | nil},
+          owner: term(),
+          link_port: :inet.port_number() | nil,
           status: String.t() | nil,
-          port: pos_integer() | nil,
-          ssh:
-            %{server: Server.t(), addresses: [String.t()], port: pos_integer()}
-            | nil,
+          ssh: %{server: Server.t(), addresses: [String.t()], port: pos_integer()} | nil,
           ssh_port: pos_integer() | nil,
           quitting: [term()],
           closing: non_neg_integer() | nil
         }
 
-  @doc """
-  No hosting, looking or joining; a host listens on `port`, `nil` for any free port, and
-  offers `ssh_port` for serving over ssh, `nil` for any free one.
-  """
-  @spec new(pos_integer() | nil, pos_integer() | nil) :: t()
-  def new(port \\ nil, ssh_port \\ nil),
+  @doc "No hosting or listening; a lobby is hosted on `link_port` (`nil` for any free port) and ssh offered on `ssh_port`."
+  @spec new(:inet.port_number() | nil, pos_integer() | nil) :: t()
+  def new(link_port \\ nil, ssh_port \\ nil),
     do: %{
-      host: nil,
-      owner: nil,
       listener: nil,
-      found: [],
-      joining: nil,
+      port: nil,
+      beacon: nil,
+      hosted: nil,
+      published: %{},
+      ear: nil,
+      lobbies: [],
+      lobbies_at: nil,
+      pinger: nil,
+      pings: %{},
+      owner: nil,
+      link_port: link_port,
       status: nil,
-      port: port,
       ssh: nil,
       ssh_port: ssh_port,
       quitting: [],
       closing: nil
     }
 
-  @doc "Whether this machine hosts ONLINE VERSUS, a player of its bouts playing from another."
+  @doc "Whether players from another machine can be in this machine's game: it hosts a lobby or serves over ssh."
   @spec hosting?(%{online: t()}) :: boolean()
-  def hosting?(%{online: %{host: host, ssh: ssh}}), do: host != nil or ssh != nil
+  def hosting?(%{online: %{listener: listener, ssh: ssh}}), do: listener != nil or ssh != nil
 
-  @doc "Whether `player` plays from another machine while this one hosts ONLINE VERSUS."
+  @doc "Whether `player` plays from another machine while this one hosts."
   @spec remote_player?(%{online: t()}, %{owner: term()}) :: boolean()
   def remote_player?(%{online: online} = state, %{owner: owner}),
     do: hosting?(state) and owner != online.owner
 
-  @doc "The name a host's node and a joining node's take: `<name>@<address>`."
-  @spec name() :: String.t()
-  def name, do: @name
+  @doc "The round trip to `lobby` in milliseconds, `nil` while unknown."
+  @spec ping(t(), lobby()) :: number() | nil
+  def ping(online, lobby), do: Map.get(online.pings, {lobby.address, lobby.port})
+
+  @doc "The fields every hosted lobby announces, for a host named `name` with id `owner`."
+  @spec lobby_fields(integer(), String.t(), atom()) :: %{String.t() => String.t()}
+  def lobby_fields(owner, name, kind),
+    do: %{
+      "id" => Integer.to_string(owner),
+      "game" => @lobby_game,
+      "version" => @version,
+      "title" => if(kind == :public, do: "", else: name),
+      "owner" => Integer.to_string(owner),
+      "name" => name,
+      "kind" => Atom.to_string(kind),
+      "slots" => Integer.to_string(@slots),
+      "players" => "1",
+      "avail" => Integer.to_string(@slots - 1),
+      "open" => "1"
+    }
 
   @doc """
-  `state` with its `effects` carried out and emptied, and the hosts heard refreshed. A
-  state that follows a host on another machine (`following: true`, `Nidhox.Game.restore/1`)
-  has its effects emptied without carrying them out: the host carries out its own.
+  `state` with its `effects` carried out and emptied, and the lobbies heard and their
+  round trips refreshed. A state that follows a host on another machine (`following:
+  true`) has its effects emptied without carrying them out: the host carries out its own.
   """
   @spec perform(map()) :: map()
   def perform(%{following: true} = state), do: %{state | effects: []}
@@ -122,33 +170,95 @@ defmodule Nidhox.Online do
     |> refresh()
   end
 
-  @doc "`state` after joining the host its `online.joining` names, if any; a following state joins none."
-  @spec pending(map()) :: map()
-  def pending(%{following: true} = state), do: state
-  def pending(%{online: %{joining: nil}} = state), do: state
+  defp effect({:host, kind, fields}, state) do
+    state = effect(:unhost, state)
+    online = state.online
 
-  def pending(%{online: %{joining: {address, code, side}} = online} = state) do
-    state = %{state | online: %{online | joining: nil}}
+    with {:ok, listener} <- Link.listen(self(), port: online.link_port || 0),
+         port = Link.port(listener),
+         published = Map.put(fields, "port", Integer.to_string(port)),
+         {:ok, beacon} <-
+           Beacon.start_link(game: @game, host: host_name(), fields: published) do
+      Process.unlink(listener)
+      Process.unlink(beacon)
 
-    case Distribution.join(@name, address, code) do
-      {:ok, node} ->
+      %{
         state
-        |> Flow.ask(side, {:enter, %{source: {:node, node}}})
-        |> put_status("connected")
-
-      {:error, reason} ->
-        put_status(state, join_failure(reason))
-    end
-  end
-
-  defp effect(:host, %{online: %{host: nil} = online} = state) do
-    case Distribution.host(@name, game: @game, port: online.port) do
-      {:ok, host} -> %{state | online: %{online | host: host, status: nil}}
+        | online: %{
+            online
+            | listener: listener,
+              port: port,
+              beacon: beacon,
+              hosted: kind,
+              published: published,
+              status: nil
+          }
+      }
+    else
       {:error, reason} -> put_status(state, "could not host: #{inspect(reason)}")
     end
   end
 
-  defp effect(:host, state), do: state
+  defp effect(:unhost, %{online: %{listener: nil}} = state), do: state
+
+  defp effect(:unhost, %{online: online} = state) do
+    Link.drop(online.listener)
+    Link.close(online.listener)
+    if online.beacon, do: GenServer.stop(online.beacon, :normal)
+
+    %{
+      state
+      | online: %{online | listener: nil, port: nil, beacon: nil, hosted: nil, published: %{}}
+    }
+  end
+
+  defp effect({:publish, _fields}, %{online: %{beacon: nil}} = state), do: state
+
+  defp effect({:publish, fields}, %{online: online} = state) do
+    published = Map.merge(online.published, fields)
+
+    if published != online.published, do: Beacon.put(online.beacon, published)
+    %{state | online: %{online | published: published}}
+  end
+
+  defp effect(:drop, %{online: %{listener: nil}} = state), do: state
+
+  defp effect(:drop, %{online: %{listener: listener}} = state) do
+    Link.drop(listener)
+    state
+  end
+
+  defp effect(:listen, %{online: %{ear: nil} = online} = state) do
+    {:ok, ear} = Listener.start_link(game: @game, name: nil)
+    {:ok, pinger} = Pinger.start_link()
+    Process.unlink(ear)
+    Process.unlink(pinger)
+
+    %{
+      state
+      | online: %{online | ear: ear, pinger: pinger, lobbies: [], lobbies_at: nil, pings: %{}}
+    }
+  end
+
+  defp effect(:listen, state), do: state
+  defp effect(:unlisten, %{online: %{ear: nil}} = state), do: state
+
+  defp effect(:unlisten, %{online: online} = state) do
+    GenServer.stop(online.ear, :normal)
+    Pinger.stop(online.pinger)
+    %{state | online: %{online | ear: nil, pinger: nil, lobbies: [], lobbies_at: nil, pings: %{}}}
+  end
+
+  defp effect({:join, lobby, side, invited?}, state),
+    do:
+      Flow.ask(
+        state,
+        side,
+        {:enter, %{source: {:link, lobby.address, lobby.port}, invited: invited?}}
+      )
+
+  defp effect({:join_address, address, port, side}, state),
+    do: Flow.ask(state, side, {:enter, %{source: {:link, address, port}, invited: false}})
 
   defp effect({:ssh_host, port}, %{online: %{ssh: nil} = online} = state) do
     with [_first | _others] = addresses <- Enum.take(Distribution.addresses(), @shown_addresses),
@@ -169,7 +279,7 @@ defmodule Nidhox.Online do
           }
       }
     else
-      [] -> put_status(state, join_failure(:no_network))
+      [] -> put_status(state, "this machine has no network")
       {:error, reason} -> put_status(state, ssh_failure(port, reason))
     end
   end
@@ -180,27 +290,6 @@ defmodule Nidhox.Online do
   defp effect(:ssh_unhost, %{online: %{ssh: %{server: server}} = online} = state) do
     Server.stop(server, @ssh_closed)
     %{state | online: %{online | ssh: nil}}
-  end
-
-  defp effect(:unhost, %{online: %{host: nil}} = state), do: state
-
-  defp effect(:unhost, %{online: %{host: host} = online} = state) do
-    Distribution.stop(host)
-    %{state | online: %{online | host: nil}}
-  end
-
-  defp effect(:listen, %{online: %{listener: nil} = online} = state) do
-    {:ok, listener} = Listener.start_link(game: @game, name: nil)
-    %{state | online: %{online | listener: listener, found: []}}
-  end
-
-  defp effect(:listen, state), do: state
-
-  defp effect(:unlisten, %{online: %{listener: nil}} = state), do: state
-
-  defp effect(:unlisten, %{online: %{listener: listener} = online} = state) do
-    GenServer.stop(listener)
-    %{state | online: %{online | listener: nil, found: []}}
   end
 
   defp effect(:prefill_address, %{entry: {kind, label, alphabet, longest, _text}} = state) do
@@ -217,16 +306,6 @@ defmodule Nidhox.Online do
     Flow.ask(state, state.typer, {:menu, {:typing, state.entry}})
   end
 
-  defp effect({:join, address, code, side}, %{online: online} = state),
-    do: %{state | online: %{online | joining: {address, code, side}, status: "connecting.."}}
-
-  defp join_failure(:bad_address), do: "that is not an address"
-  defp join_failure(:unreachable), do: "nothing answers at that address"
-  defp join_failure(:not_hosting), do: "no game is hosting at that address"
-  defp join_failure(:refused), do: "the host refused: check the code"
-  defp join_failure(:no_network), do: "this machine has no network"
-  defp join_failure(reason), do: "could not connect: #{inspect(reason)}"
-
   defp ssh_failure(port, {:shutdown, {:failed_to_start_child, _child, :eaddrinuse}}),
     do: ssh_port_taken(port)
 
@@ -235,17 +314,69 @@ defmodule Nidhox.Online do
 
   defp ssh_port_taken(port), do: "port #{port} is taken: choose another"
 
-  defp refresh(%{online: %{listener: listener} = online, steps: steps} = state)
-       when listener != nil and rem(steps, @listen_every) == 0 do
-    found =
-      for %{host: host, node: node} <- Listener.found(listener),
-          node != nil,
-          do: %{host: host, node: node}
+  defp refresh(%{online: %{ear: ear} = online, steps: steps} = state)
+       when ear != nil and rem(steps, @listen_every) == 0 do
+    lobbies = ear |> Listener.found() |> Enum.flat_map(&lobby/1)
+    Pinger.want(online.pinger, Enum.map(lobbies, &{&1.address, &1.port}))
 
-    %{state | online: %{online | found: found}}
+    %{
+      state
+      | online: %{
+          online
+          | lobbies: lobbies,
+            lobbies_at: steps,
+            pings: Pinger.results(online.pinger)
+        }
+    }
   end
 
   defp refresh(state), do: state
+
+  defp lobby(%{fields: %{"game" => @lobby_game, "version" => @version} = fields, from: from}) do
+    with {owner, ""} <- Integer.parse(Map.get(fields, "owner", "")),
+         {port, ""} <- Integer.parse(Map.get(fields, "port", "")) do
+      [
+        %{
+          owner: owner,
+          name: Map.get(fields, "name", ""),
+          kind: Map.get(fields, "kind", "public"),
+          address: from,
+          port: port,
+          players: number(fields, "players"),
+          slots: number(fields, "slots"),
+          open: Map.get(fields, "open") == "1",
+          region: Map.get(fields, "region", "0"),
+          anyping: Map.get(fields, "anyping") == "1",
+          invite: invite(Map.get(fields, "invite"))
+        }
+      ]
+    else
+      _bad -> []
+    end
+  end
+
+  defp lobby(_server), do: []
+
+  defp number(fields, key) do
+    case Integer.parse(Map.get(fields, key, "0")) do
+      {value, ""} -> value
+      _bad -> 0
+    end
+  end
+
+  defp invite(nil), do: nil
+
+  defp invite(text) do
+    case Integer.parse(text) do
+      {id, ""} when id != 0 -> id
+      _none -> nil
+    end
+  end
+
+  defp host_name do
+    {:ok, name} = :inet.gethostname()
+    to_string(name)
+  end
 
   defp put_status(%{online: online} = state, status),
     do: %{state | online: %{online | status: status}}

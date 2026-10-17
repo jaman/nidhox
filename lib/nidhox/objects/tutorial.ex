@@ -8,12 +8,13 @@ defmodule Nidhox.Objects.Tutorial do
       a delay of 5 frames between a lesson done and the next (`maxDelay`, `delay`); a
       `Match` made, and a `Brain` playing player 2; the tutorial's music
       (`music_Castle_Drms1`) going round
-    * end step: the current lesson's instruction shown when no `DialogBox` is
-      (`Nidhox.Objects.DialogBox.show/2`). Before the last lesson the match has nobody
+    * draw GUI: the current lesson's instruction (`current_move/1`), which
+      `Nidhox.Screen` draws with each client's glyphs
+    * end step: before the last lesson the match has nobody
       leading, the camera at the room's left and the match at 0, and a yellow fencer
       missing is made at its match entry point holding a sword. With the yellow fencer
       there, the partner plays at no difficulty and the lesson is checked; a lesson done
-      waits out the delay, then the marks are cleared, the dialog gone and the next
+      waits out the delay, then the marks are cleared and the next
       lesson taken — after the last, the tutorial ends (user event 0). Moving on to the
       last lesson takes the tutorial's block away and starts the crowd cheering
       (`CheerControl` at 672, 92); moving on to picking up swords drops a sword near the
@@ -39,7 +40,7 @@ defmodule Nidhox.Objects.Tutorial do
   alias Nidhox.Bout.Camera
   alias Nidhox.Gml
   alias Nidhox.Man.{Physics, Weapon}
-  alias Nidhox.Objects.{DialogBox, Match, System}
+  alias Nidhox.Objects.{Match, System}
   alias Nidhox.Tutorial.Lessons
 
   @noone -4
@@ -95,7 +96,10 @@ defmodule Nidhox.Objects.Tutorial do
       Audio.keyed(
         {:tutorial, self},
         {:recording, @music},
-        {:level, System.get(world, :musicVol, 1), 0.0}, loop: true, music: true)
+        {:level, System.get(world, :musicVol, 1), 0.0},
+        loop: true,
+        music: true
+      )
     )
     |> Gml.put(self, %{sound: {:tutorial, self}})
   end
@@ -122,9 +126,17 @@ defmodule Nidhox.Objects.Tutorial do
     end
   end
 
+  @doc "The current lesson of the `Tutorial`, `nil` with none."
+  @spec current_move(World.t()) :: pos_integer() | nil
+  def current_move(%World{} = world) do
+    case Gml.first(world, "Tutorial") do
+      nil -> nil
+      tutorial -> if Gml.truthy?(current(world, tutorial)), do: round(current(world, tutorial))
+    end
+  end
+
   defp teach(world, self, _other) do
     world
-    |> show_instruction(self)
     |> hold_start(self)
     |> bring_learner(self)
     |> lesson(self)
@@ -133,14 +145,6 @@ defmodule Nidhox.Objects.Tutorial do
     |> keep_on_screen(self)
     |> hold_match()
     |> bring_partner(self)
-  end
-
-  defp show_instruction(world, self) do
-    move = current(world, self)
-
-    if Gml.truthy?(move) and not Gml.exists?(world, "DialogBox"),
-      do: DialogBox.show(world, Lessons.instruction(move)),
-      else: world
   end
 
   defp hold_start(world, self) do
@@ -208,9 +212,6 @@ defmodule Nidhox.Objects.Tutorial do
         check: %{0 => 0, 1 => 0, 2 => 0},
         currentMove: next
       })
-      |> then(
-        &Enum.reduce(Gml.all(&1, "DialogBox"), &1, fn box, world -> World.destroy(world, box) end)
-      )
 
     world = if next == hd(moves), do: World.perform(world, self, :other, 10), else: world
     begin_lesson(world, next, yellow)

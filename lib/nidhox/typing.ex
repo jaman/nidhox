@@ -83,7 +83,9 @@ defmodule Nidhox.Typing do
         "fMenu",
         List.to_string(after_caret),
         {caret_x + Art.text_width("fMenu", "_"), @text_y},
-        window, colour: @typed) ++
+        window,
+        colour: @typed
+      ) ++
       Art.text("fMenu", "enter to finish, esc to go back", {@centre, @hint_y}, window,
         halign: :center,
         colour: @hint

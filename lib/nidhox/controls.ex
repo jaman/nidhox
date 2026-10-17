@@ -9,12 +9,12 @@ defmodule Nidhox.Controls do
   | `:attack` | `F` | `M` | `X` |
   | `:jump` | `G` | `N` | `A` |
   | `:start` | `Enter` | `Enter` | `Start` |
-  | `:pause` | `Esc` | | |
+  | `:pause` | `Esc` | | `B` |
 
   These are the game's own defaults (`InputForPlayer1`, `InputForPlayer2`). Side 1 is the terminal's own player and side 2 a second seat at the same keyboard
   (`seat_keys/1`); either's keys can be remapped in OPTIONS (`Nidhox.Options`);
-  the first controller to report plays side 1 and the second side 2. On the title and
-  the menus, `:start` and `:attack` choose and `:jump` goes back. `:pause` pauses a match as
+  the first controller to report plays side 1 and the second side 2. On the menus
+  (`Nidhox.Glyphs`), `:jump` and `:start` choose and `:pause` goes back. `:pause` pauses a match as
   `:start` does (the game's `keyboard_check_pressed(27)`), keyboard `Esc` being no one
   side's in the game.
   """
@@ -69,7 +69,8 @@ defmodule Nidhox.Controls do
       down: [:dpad_down, {:axis, :left_y, :pos}],
       attack: [:x],
       jump: [:a],
-      start: [:start]
+      start: [:start],
+      pause: [:b]
     }
   end
 end

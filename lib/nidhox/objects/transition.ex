@@ -1,13 +1,14 @@
 defmodule Nidhox.Objects.Transition do
   @moduledoc """
-  The game's `FinalFantasyVIIITransition`, kept across rooms: the screen washing out to
-  white and wiping back as a match moves between rooms.
+  The game's `ScreenWipe`, kept across rooms: the screen washing out to white and
+  wiping back as a match moves between rooms.
 
     * create: a 320 × 200 `canvas` cleared to white and its copy (`canvasCopy`);
-      `counter` 0, `WIPE_TIME` 80, `wipeTo` 2; the wipe heard at the `Ear` (119)
-    * step: `counter` counts; past `WIPE_TIME` the transition is gone. Otherwise the
-      canvas is copied, and 40 times a strip of the copy is slid along the canvas and
-      the gap it leaves painted black, at a random column (0–320) and row (0–200):
+      `counter` 0, `WIPE_TIME` 80, `wipeTo` 2; `sfxStartMatch` heard at the `Ear`
+    * step: `counter` counts by one a step; past `WIPE_TIME` the wipe is gone.
+      Otherwise the canvas is drawn onto its copy, and 40 times a strip of the copy is
+      slid along the canvas and the gap it leaves painted black, at a random column
+      (0–320) and row (0–200):
         * `wipeTo` 0: the 6-pixel row slid 26 pixels left and up 1, the right 26
           pixels of it black
         * `wipeTo` 1: the row slid 26 pixels right and up 1, the left 26 pixels black
@@ -17,6 +18,9 @@ defmodule Nidhox.Objects.Transition do
     * draw: the canvas added onto the view at the camera's top left
     * destroy: both surfaces freed
 
+  The game counts `counter` by the step's `delta_time / 16667` held between 1 and 3.
+  NidhOX steps are 1/60 second apart, so the count is one a step.
+
   `start/2` makes one wiping towards `wipe_to`.
   """
 
@@ -25,14 +29,14 @@ defmodule Nidhox.Objects.Transition do
   alias Nidhox.Gml
   alias Nidhox.Objects.Ear
 
-  @object "FinalFantasyVIIITransition"
+  @object "ScreenWipe"
   @width 320
   @height 200
   @wipe_time 80
   @strips 40
   @strip 6
   @slide 26
-  @sound 119
+  @sound "sfxStartMatch"
   @white {255, 255, 255}
   @black {0, 0, 0}
 
@@ -67,7 +71,7 @@ defmodule Nidhox.Objects.Transition do
       WIPE_TIME: @wipe_time,
       wipeTo: 2
     })
-    |> Sound.play(@sound, Ear.position(world))
+    |> Sound.play_named(@sound, Ear.position(world))
   end
 
   defp step(world, self, _other) do
@@ -85,7 +89,6 @@ defmodule Nidhox.Objects.Transition do
     wipe_to = Gml.var(world, self, :wipeTo)
 
     if Surfaces.exists?(world, canvas) do
-      world = Surfaces.clear(world, copy, @black, 0)
       world = Surfaces.draw(world, copy, [Surfaces.item(world, canvas, {0, 0})])
       {strips, world} = strips(world, copy, wipe_to)
 

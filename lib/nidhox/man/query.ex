@@ -7,11 +7,13 @@ defmodule Nidhox.Man.Query do
     * `stabbed?/2` (`isAlreadyStabbed`): in or about to enter state 65, 63, 64, 37, 39
       or 5
     * `collapsing?/2` (`isAlreadyCollapsing`): in or about to enter state 66, 20, 26,
-      24 or 39
+      24, 39, 82 or 83
     * `knocked_down?/2` (`isKnockedDown`): in state 47
+    * `running?/2` (`isRunning`): in state 52, 80, 81 or 54
     * `attacking?/2` (`isAttacking`): in state 48, 49, 70, 14, 55, 45, 72 or 73
     * `other_player/1` (`otherPlayerIndex`, `findOppositeIndex`): 2 for 1, 1 for 2
-    * `by_player/2` (`findManByPlayerIndex`): the fencer of a player, `nil` for none
+    * `by_player/2` (`findManByPlayerIndex`): the first fencer of a player that is not
+      collapsing, else the last that is, `nil` for none
     * `opponent/2` (`playerGetOtherPlayer`): yellow's is orange and orange's yellow
     * `face_opponent/2` (`faceOpponent`): turned towards the opponent, unless it is
       collapsing
@@ -40,11 +42,15 @@ defmodule Nidhox.Man.Query do
 
   @doc "Whether fencer `id` is collapsing (`isAlreadyCollapsing`)."
   @spec collapsing?(World.t(), non_neg_integer()) :: boolean()
-  def collapsing?(world, id), do: either?(world, id, [66, 20, 26, 24, 39])
+  def collapsing?(world, id), do: either?(world, id, [66, 20, 26, 24, 39, 82, 83])
 
   @doc "Whether fencer `id` is knocked down (`isKnockedDown`)."
   @spec knocked_down?(World.t(), non_neg_integer()) :: boolean()
   def knocked_down?(world, id), do: state(world, id) == 47
+
+  @doc "Whether fencer `id` is running (`isRunning`): state 52, 80, 81 or 54."
+  @spec running?(World.t(), non_neg_integer()) :: boolean()
+  def running?(world, id), do: state(world, id) in [52, 80, 81, 54]
 
   @doc "Whether fencer `id` is attacking (`isAttacking`)."
   @spec attacking?(World.t(), non_neg_integer()) :: boolean()
@@ -55,13 +61,16 @@ defmodule Nidhox.Man.Query do
   def other_player(1), do: 2
   def other_player(2), do: 1
 
-  @doc "The fencer of player `player` (`findManByPlayerIndex`), `nil` for none."
+  @doc "The first fencer of player `player` that is not collapsing, else the last that is (`findManByPlayerIndex`); `nil` for none."
   @spec by_player(World.t(), integer()) :: non_neg_integer() | nil
   def by_player(%World{} = world, player) do
     with object when is_integer(object) <- World.object_index(world, "Man") do
-      world
-      |> World.instances_of(object)
-      |> Enum.find(&(Gml.var(world, &1, :playerIndex, -1) == player))
+      matches =
+        world
+        |> World.instances_of(object)
+        |> Enum.filter(&(Gml.var(world, &1, :playerIndex, -1) == player))
+
+      Enum.find(matches, &(not collapsing?(world, &1))) || List.last(matches)
     end
   end
 

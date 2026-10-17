@@ -2,7 +2,7 @@ defmodule Nidhox.Objects.Clouds do
   @moduledoc """
   The sky's clouds, as the game's code runs them.
 
-    * `CloudBlockArea` lays a `NewCloudBlock` every `sFancyCloudPlat` width (16 pixels)
+    * `CloudBlockArea` lays a `NewCloudBlock` every `sFancyCloudPlat` width
       along its own width and is gone
     * `NewCloudBlock`, a cloud a fencer can stand on: its `frame`
       runs on 0.3 a step while a fencer stands on it (`touched`, set by the fencer) up to
@@ -17,7 +17,7 @@ defmodule Nidhox.Objects.Clouds do
       `(x + 16i + 2 sin(i / 10), y + sprite_height + 8 + 2 cos(i / 5))`
     * `CloudPoof`, a puff: its starting scale (`startXScale`, `startYScale`) its scaled
       sprite over its sprite, `randomStart` `random(1000)`, `frame` `irandom` of its
-      frames, `touchTimer` its place in sprite sizes rounded. Each match frame, within
+      frames, `touchTimer` its place in sprite sizes rounded, modulo 7. Each match frame, within
       200 pixels of the camera's centre across: it breathes (`image_xscale` its start
       + `sin(randomStart + frame / 30) × 0.1`, `image_yscale` the same with `cos`); on
       every fourth frame (with `touchTimer`) it is `touched` when a moving fencer is
@@ -31,14 +31,14 @@ defmodule Nidhox.Objects.Clouds do
       `CloudPoof` does
   """
 
-  alias Cauldron2D.GameMaker.{Draw, Instance, World}
+  alias Cauldron2D.GameMaker.{Data, Draw, Instance, World}
   alias Nidhox.Bout.Camera
   alias Nidhox.Gml
   alias Nidhox.Objects.System
 
-  @poof 88
-  @evaporate 90
-  @plat 278
+  @poof "sCloudPoof"
+  @evaporate "sCloudEvaporate"
+  @plat "sFancyCloudPlat"
   @wear 0.3
   @mend 0.25
   @reach 200
@@ -46,6 +46,7 @@ defmodule Nidhox.Objects.Clouds do
   @dark_level 25
   @dark {28, 28, 28}
   @spacing 16
+  @touch_cycle 7
 
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
@@ -90,7 +91,7 @@ defmodule Nidhox.Objects.Clouds do
   defp lay_blocks(world, self, _other) do
     %Instance{x: x, y: y} = instance = World.fetch(world, self)
     width = scaled(world, instance) |> elem(0)
-    step = sprite_size(world, @plat) |> elem(0)
+    step = world |> sprite_named(@plat) |> then(&sprite_size(world, &1)) |> elem(0)
     block = World.object_index(world, "NewCloudBlock")
 
     0
@@ -180,7 +181,7 @@ defmodule Nidhox.Objects.Clouds do
       randomStart: start,
       frame: frame,
       touched: 0,
-      touchTimer: Gml.round(x / width + y / height),
+      touchTimer: :math.fmod(Gml.round(x / width + y / height), @touch_cycle),
       flash: 0
     })
   end
@@ -246,20 +247,22 @@ defmodule Nidhox.Objects.Clouds do
     %Instance{sprite_index: sprite} = World.fetch(world, self)
     frame = Gml.var(world, self, :frame)
     last = frames(world, self) - 1
+    poof = sprite_named(world, @poof)
+    evaporate = sprite_named(world, @evaporate)
 
     case {Gml.truthy?(Gml.var(world, self, :touched)), sprite} do
-      {true, @poof} ->
+      {true, ^poof} ->
         world
-        |> World.update(self, &%{&1 | sprite_index: @evaporate})
+        |> World.update(self, &%{&1 | sprite_index: evaporate})
         |> Gml.put(self, %{frame: 0})
 
-      {true, @evaporate} ->
+      {true, ^evaporate} ->
         Gml.put(world, self, %{frame: Gml.clamp(frame + 1, 0, last)})
 
-      {false, @evaporate} ->
+      {false, ^evaporate} ->
         mend(world, self, Gml.clamp(frame - @mend, 0, last))
 
-      {false, @poof} ->
+      {false, ^poof} ->
         Gml.put(world, self, %{frame: frame + 0.1})
 
       _other ->
@@ -269,7 +272,7 @@ defmodule Nidhox.Objects.Clouds do
 
   defp mend(world, self, frame) do
     if Gml.eq?(frame, 0) do
-      world = World.update(world, self, &%{&1 | sprite_index: @poof})
+      world = World.update(world, self, &%{&1 | sprite_index: sprite_named(world, @poof)})
       {again, world} = Gml.irandom(world, frames(world, self))
       Gml.put(world, self, %{frame: again})
     else
@@ -291,7 +294,7 @@ defmodule Nidhox.Objects.Clouds do
     {width, height} = scaled(world, instance)
     {sprite_width, sprite_height} = sprite_size(world, sprite)
     {start, world} = Gml.random(world, 1000)
-    world = World.update(world, self, &%{&1 | sprite_index: @poof})
+    world = World.update(world, self, &%{&1 | sprite_index: sprite_named(world, @poof)})
     {frame, world} = Gml.irandom(world, frames(world, self))
 
     world
@@ -309,6 +312,8 @@ defmodule Nidhox.Objects.Clouds do
     {width, height} = sprite_size(world, sprite)
     {width * xscale, height * yscale}
   end
+
+  defp sprite_named(world, name), do: Data.index(world.data, :sprites, name)
 
   defp sprite_size(world, sprite) do
     case World.sprite(world, sprite) do

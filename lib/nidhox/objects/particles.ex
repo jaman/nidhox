@@ -3,9 +3,9 @@ defmodule Nidhox.Objects.Particles do
   The game's `Particles` object, made once by `System` and kept across rooms: the torch
   and dust particle systems, updated by its step and drawn by its draw.
 
-    * torch: sprite 273, life 10–30, speed 0–0.1, any direction wiggling 0.05, gravity
+    * torch: sprite `sTorch`, life 10–30, speed 0–0.1, any direction wiggling 0.05, gravity
       0.02 upwards
-    * dust: sprite 271 animated from a random frame, size 0.3–0.5 growing 0.01 a step
+    * dust: sprite `sprFloorDust` animated from a random frame, size 0.3–0.5 growing 0.01 a step
       wiggling 0.005, life 5–30, speed 0.2–0.5 wiggling 0.025, direction 0–180 wiggling
       0.05, gravity 0.01 downwards, alpha 0 → 0.1 → 0
 
@@ -13,7 +13,7 @@ defmodule Nidhox.Objects.Particles do
   pixels wide centred on a point.
   """
 
-  alias Cauldron2D.GameMaker.{Draw, Instance, PartSystems, World}
+  alias Cauldron2D.GameMaker.{Data, Draw, Instance, PartSystems, World}
   alias Nidhox.Gml
 
   @object "Particles"
@@ -60,7 +60,7 @@ defmodule Nidhox.Objects.Particles do
 
     world =
       world
-      |> PartSystems.type_sprite(torch, 273, true, false, false)
+      |> PartSystems.type_sprite(torch, sprite(world, "sTorch"), true, false, false)
       |> PartSystems.type_life(torch, 10, 30)
       |> PartSystems.type_speed(torch, 0, 0.1, 0, 0)
       |> PartSystems.type_direction(torch, 0, 360, 0, 0.05)
@@ -78,7 +78,7 @@ defmodule Nidhox.Objects.Particles do
     {world, dust} = PartSystems.type_create(world)
 
     world
-    |> PartSystems.type_sprite(dust, 271, true, false, true)
+    |> PartSystems.type_sprite(dust, sprite(world, "sprFloorDust"), true, false, true)
     |> PartSystems.type_size(dust, 0.3, 0.5, 0.01, 0.005)
     |> PartSystems.type_life(dust, 5, 30)
     |> PartSystems.type_speed(dust, 0.2, 0.5, 0, 0.025)
@@ -94,6 +94,8 @@ defmodule Nidhox.Objects.Particles do
       dustParticle: dust
     })
   end
+
+  defp sprite(world, name), do: Data.index(world.data, :sprites, name)
 
   defp step(world, self, _other) do
     %Instance{vars: %{torchSystem: torch, dustSystem: dust}} = World.fetch(world, self)

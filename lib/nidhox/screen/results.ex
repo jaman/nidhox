@@ -1,27 +1,29 @@
 defmodule Nidhox.Screen.Results do
   @moduledoc """
   The match's statistics after a bout, over `rMatchStats`, as the game's
-  `ShowMatchStats` draws them, every line in `fMenu` centred on its x, from its top,
-  lines 7 apart:
+  `ShowMatchStats` draws them in GUI units, every line in the language's font centred
+  on its x from its top, lines 14 apart, labels from the `"match"` section:
 
-    * "time" and the bout's time (`getTime`) at y 15
-    * the copy's `sWinner` at (160, 72) by its own origin, in the winner's colour
+    * "time" and the bout's time (`getTime`) at y 30
+    * the copy's `sWinner` at (320, 144), twice its size, in the winner's colour
       (`getPlayerColor`)
-    * for each side, in its colour, at y 130, around a point 64 to its side of the
-      middle (yellow left, orange right): "kills" and its kills 32 left of the point,
-      "suicides" and its suicides (falls out of the room) 32 right of it
-    * "continue" 32 above the bottom, white
+    * for each side, in its colour, at y 260, around a point 128 to its side of the
+      middle (yellow left, orange right): "kills" and its kills 64 left of the point,
+      "suicides" and its suicides (falls out of the room) 64 right of it
+    * the select glyph and "continue" at y 336, white, with the seconds left before
+      CPU BATTLE goes on by itself in brackets (`countdownTag`), flashing red over the
+      last 3
 
-  Any of `:attack`, `:start` or `:jump` goes on. NidhOX adds the replay to it: `:up` or
-  `:down` turns the bottom line between "continue" and "watch replay", and the press
-  that goes on does what it shows (`input/2`). The statistics are
-  `Nidhox.Bout.stats/1`'s.
+  Select, start or back goes on. NidhOX adds the replay to it: up or down turns the
+  bottom line between "continue" and "watch replay", and the press that goes on does
+  what it shows (`input/2`). The statistics are `Nidhox.Bout.stats/1`'s.
   """
 
   alias Cauldron2D.GameMaker.World
   alias Nidhox.Bout.PlayerColour
+  alias Nidhox.{Glyphs, Lang}
   alias Nidhox.Objects.Match
-  alias Nidhox.Screen.Art
+  alias Nidhox.Screen.{Gui, MainMenu}
 
   @type stats :: %{
           steps: non_neg_integer(),
@@ -29,66 +31,104 @@ defmodule Nidhox.Screen.Results do
           suicides: %{1 => non_neg_integer(), 2 => non_neg_integer()}
         }
 
-  @centre 160
-  @time_top 15
-  @winner_at 72
-  @rows_top 130
-  @apart 64
-  @half_apart 32
-  @continue_rise 32
-  @view_height 200
-  @separation 7
+  @centre 320
+  @time_top 30
+  @winner_at 144
+  @rows_top 260
+  @apart 128
+  @half_apart 64
+  @continue_top 336
+  @separation 14
   @white {255, 255, 255}
+  @flash_frames 12
+  @last_seconds 3
 
   @type choice :: :continue | :replay
 
   @doc "What the players did on the results with `choice` shown: `{:go, choice}` or `{:stay, choice}`."
   @spec input(choice(), %{1 => map(), 2 => map()}) :: {:go, choice()} | {:stay, choice()}
   def input(choice, players) do
-    pressed = players |> Map.values() |> Enum.flat_map(&MapSet.to_list(&1.pressed))
-
     cond do
-      Enum.any?([:attack, :start, :jump], &(&1 in pressed)) -> {:go, choice}
-      :up in pressed or :down in pressed -> {:stay, other(choice)}
+      Enum.any?([8, 10, 9], &MainMenu.any_pressed?(players, &1)) -> {:go, choice}
+      Enum.any?([2, 3], &MainMenu.any_pressed?(players, &1)) -> {:stay, other(choice)}
       true -> {:stay, choice}
     end
   end
 
-  defp label(:continue), do: "continue"
-  defp label(:replay), do: "watch replay"
-
   defp other(:continue), do: :replay
   defp other(:replay), do: :continue
 
-  @doc "The GUI items for a bout won by side `winner` with `stats` and `choice` on the bottom line, coloured as `world` colours the sides."
-  @spec items(World.t(), 1 | 2, stats(), choice(), {number(), number()}) :: [map()]
-  def items(%World{} = world, winner, stats, choice, window) do
+  @doc """
+  The GUI items for a bout won by side `winner` with `stats` and `choice` on the bottom
+  line, coloured as `world` colours the sides; `context` gives `language`, `devices` and
+  `frame`, and `seconds` the seconds left before the results go on by themselves, or `nil`.
+  """
+  @spec items(World.t(), 1 | 2, stats(), choice(), map(), number() | nil, Gui.window()) ::
+          [map()]
+  def items(%World{} = world, winner, stats, choice, context, seconds, window) do
+    font = Lang.font(context.language)
+
     List.flatten([
-      text("time##{Match.time(stats.steps)}", {@centre, @time_top}, @white, window),
-      Art.sprite("sWinner", 0, {@centre, @winner_at}, window, blend: colour(world, winner)),
-      Enum.map([1, 2], &side(world, &1, stats, window)),
-      text(label(choice), {@centre, @view_height - @continue_rise}, @white, window)
+      text(
+        font,
+        label(context, "time") <> "#" <> Match.time(stats.steps),
+        {@centre, @time_top},
+        @white,
+        window
+      ),
+      Gui.sprite("sWinner", 0, {@centre, @winner_at}, window,
+        scale: {2, 2},
+        blend: colour(world, winner)
+      ),
+      Enum.map([1, 2], &side(world, &1, stats, context, font, window)),
+      Gui.rich(font, bottom_line(choice, context, seconds), {@centre, @continue_top}, window,
+        halign: :center
+      )
     ])
   end
 
-  defp side(world, side, stats, window) do
+  defp bottom_line(:replay, _context, _seconds), do: "watch replay"
+
+  defp bottom_line(:continue, context, seconds) do
+    glyph = Gui.glyph(Glyphs.icon(context.devices[1], 8))
+    countdown = if seconds, do: " " <> countdown(seconds, context.frame), else: ""
+    glyph <> " " <> label(context, "continue") <> countdown
+  end
+
+  defp countdown(seconds, frame) do
+    tag = "(#{seconds})"
+    flash? = seconds <= @last_seconds and rem(div(trunc(frame), @flash_frames), 2) == 0
+    if flash?, do: "[c_red]" <> tag <> "[/c]", else: tag
+  end
+
+  defp side(world, side, stats, context, font, window) do
     sign = if side == 1, do: -1, else: 1
     middle = @centre + sign * @apart
     colour = colour(world, side)
 
     [
-      text("kills##{stats.kills[side]}", {middle - @half_apart, @rows_top}, colour, window),
-      text("suicides##{stats.suicides[side]}", {middle + @half_apart, @rows_top}, colour, window)
+      text(
+        font,
+        label(context, "kills") <> "##{stats.kills[side]}",
+        {middle - @half_apart, @rows_top},
+        colour,
+        window
+      ),
+      text(
+        font,
+        label(context, "suicides") <> "##{stats.suicides[side]}",
+        {middle + @half_apart, @rows_top},
+        colour,
+        window
+      )
     ]
   end
 
-  defp text(words, at, colour, window),
+  defp label(context, key), do: Lang.text(context.language, "match", key, key)
+
+  defp text(font, words, at, colour, window),
     do:
-      Art.text("fMenu", words, at, window,
-        halign: :center,
-        colour: colour,
-        separation: @separation
-      )
+      Gui.text(font, words, at, window, halign: :center, colour: colour, separation: @separation)
 
   defp colour(world, side) do
     {colour, _world} = PlayerColour.get(world, nil, side)

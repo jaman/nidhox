@@ -3,15 +3,15 @@ defmodule Nidhox.Objects.Ambience do
   The rooms' standing sounds, as the game's code plays them, each looping
   (`playSoundAtLoopEffect(sound, x, y, 1, …)`):
 
-    * `CenterRoomNoises` create: the edge of the centre (sound 94) 160 pixels in from
+    * `CenterRoomNoises` create: the edge of the centre (`sfxEdgeOfCenter`) 160 pixels in from
       each end of the room at the camera's middle height (`leftSound`, `rightSound`),
-      and the wind (93) following the `Ear` (`wind`)
-    * `BGFireRoomNoise` create: the background fire (92) following the `Ear` (`fire`)
-    * `WaterfallRoomEdges` create: the waterfall's edge (123) 160 pixels in from each
+      and the wind (`sfxWind`) following the `Ear` (`wind`)
+    * `BGFireRoomNoise` create: the background fire (`sfxFireBackground`) following the `Ear` (`fire`)
+    * `WaterfallRoomEdges` create: the waterfall's edge (`sndWaterfallEdge`) 160 pixels in from each
       end at the camera's middle height
     * these three stop their sounds in user event 0, which their destroy and room end
       run, so each room starts its own
-    * `WaterfallSounds` and `DroneSounds` create: the waterfall (122) or the drone (128)
+    * `WaterfallSounds` and `DroneSounds` create: the waterfall (`sfxWaterfall`) or the drone (`sfxDrone`)
       following the instance (`Nidhox.Objects.Ear.attach/3`, let go once it is gone),
       which then moves to the camera's middle height
 
@@ -19,19 +19,19 @@ defmodule Nidhox.Objects.Ambience do
   """
 
   alias Cauldron2D.Audio
-  alias Cauldron2D.GameMaker.{Instance, World}
+  alias Cauldron2D.GameMaker.{Data, Instance, World}
   alias Nidhox.Bout.Camera
   alias Nidhox.Gml
   alias Nidhox.Objects.Ear
 
   @tile 16
   @edge 160
-  @centre_edge 94
-  @wind 93
-  @fire 92
-  @waterfall_edge 123
-  @waterfall 122
-  @drone 128
+  @centre_edge "sfxEdgeOfCenter"
+  @wind "sfxWind"
+  @fire "sfxFireBackground"
+  @waterfall_edge "sndWaterfallEdge"
+  @waterfall "sfxWaterfall"
+  @drone "sfxDrone"
 
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
@@ -83,14 +83,14 @@ defmodule Nidhox.Objects.Ambience do
   end
 
   defp loop(world, key, sound, {x, y}) do
-    case Enum.at(world.data.sounds, sound) do
+    case Data.index(world.data, :sounds, sound) do
       nil ->
         world
 
-      %{name: name} ->
+      _index ->
         World.emit(
           world,
-          Audio.keyed(key, {:recording, name}, {x / @tile, y / @tile}, loop: true)
+          Audio.keyed(key, {:recording, sound}, {x / @tile, y / @tile}, loop: true)
         )
     end
   end

@@ -3,60 +3,68 @@ defmodule Nidhox.Man.States.Hurt do
   A fencer's states of being hit, stabbed, knocked down and dying, each step as
   `stateBehavior` runs them:
 
-    * disarmed (13): 214; moving back at 1 a step; off the ground it grabs a ledge or
+    * disarmed (13): 247; moving back at 1 a step; off the ground it grabs a ledge or
       falls; played once at 0.6, then the unarmed stance (78)
-    * dizzy (17) and punched in the face (38): 269 and 189; off the ground it grabs a ledge
+    * dizzy (17) and punched in the face (38): 288 and 299; off the ground it grabs a ledge
       or falls; played once at 0.4, then the unarmed stance
-    * knocked off its feet (40): 223; gravity 0.33; once played at 0.6 and on the ground it
+    * knocked off its feet (40): 277; gravity 0.33; once played at 0.6 and on the ground it
       lies down (47)
-    * punched upwards (41): 229 cycling at 0.4; rising its frame moves on 0.7 more; falling
+    * punched upwards (41): 300 cycling at 0.4; rising its frame moves on 0.7 more; falling
       it turns around and falls flat (28)
     * lying down (47): gravity 0.33; unarmed holding down it picks up a sword; its pose
-      plays on at 0.6, cycling, settling into lying (226). Lying: forward hops up (59);
+      plays on at 0.6, cycling, settling into lying (287). Lying: forward hops up (59);
       back turns and hops up; jump or up flips up (2); down crawls (9)
-    * getting up (33): 217; played once at 0.7 then crawls (9); meanwhile off the ground
+    * getting up (33): 264; played once at 0.7 then crawls (9); meanwhile off the ground
       it grabs a ledge or falls, else stands still
-    * tripping forward (77): 216; played once at 0.7 then gets up (33); meanwhile off the
+    * tripping forward (77): 263; played once at 0.7 then gets up (33); meanwhile off the
       ground it grabs a ledge or falls
-    * tripping backward (76): 235; played once at 0.7 then lies down (47); meanwhile off
+    * tripping backward (76): 350; played once at 0.7 then lies down (47); meanwhile off
       the ground it grabs a ledge or falls
-    * stabbed standing (65): its stance's hit (high 220, middle 222, low 221); in the air
+    * stabbed standing (65): its stance's hit (high 274, middle 276, low 275); in the air
       it falls dead (26). Unless the swords touch, `stabCounter` counts and past 6 it
       collapses (66); touching, the count restarts. Past 600 steps it collapses; with no
       opponent, or one already falling or stabbed, it collapses. Else the blade pushes it
-      (`Nidhox.Man.Push.pushed_by_sword/2`) and, after 10 steps in the state, it bleeds a
-      drop for each pixel the blade moved across, at the blade's height
-    * stabbed crouching (63): 219; in the air it falls dead; on the ground counting as
+      (`Nidhox.Man.Push.pushed_by_sword/2`) and, after 10 steps in the state, it bleeds
+      `irandom_range(0, 5 × pixels the blade moved across + 3)` drops at the blade's height
+    * stabbed crouching (63): 273; in the air it falls dead; on the ground counting as
       standing, past 6 it collapses ducking (20); with an opponent the blade pushes it and
       it bleeds a drop for each pixel the blade moved, after 10 steps in the state
-    * stabbed in the air (64): 227; on the ground it is stabbed standing (65); in the air
+    * stabbed in the air (64): 290; on the ground it is stabbed standing (65); in the air
       counting as standing, past 6 it collapses (66) on the ground or falls dead; played
       once at 0.6 it does the same
     * standing collapse (66): its own collapse (`collapseAnimation`), still; in the air it
-      falls dead; played once at 0.6, then evaporates (24)
-    * ducking collapse (20): 211, still; in the air it falls dead; played once at 0.6,
-      then evaporates
-    * falling dead (26): 213 played once at 0.6; landing it evaporates
-    * evaporating (24): 215 played once at 0.4, throwing up three drops of blood a step in
+      falls dead. Played once at 0.6: past 0.66 of the way to its last frame on stairs it
+      rolls down them (82); otherwise at the end it evaporates (24)
+    * ducking collapse (20): 238, still; in the air it falls dead; played as the standing
+      collapse is
+    * falling dead (26): 246 played once at 0.6; landing it evaporates
+    * evaporating (24): 261 played once at 0.4, throwing up three drops of blood a step in
       its body's colour, `random(width × 0.6)` across and `random_range(−2, 0)` down from
       its feet, `hspeed` `random_range(−1, 1)`, `vspeed` `random_range(0, −8)`; then it is
       gone
-    * hit by a flying sword standing (39): 218, driven back 1.6 a step; in the air the
+    * hit by a flying sword standing (39): 272, driven back 1.6 a step; in the air the
       sword falls from it and it falls dead; played once at 0.6 the sword falls and it
       evaporates turned around
-    * hit by a flying sword in the air (37): 228, driven back 1.6; in the air played once
+    * hit by a flying sword in the air (37): 291, driven back 1.6; in the air played once
       at 0.6 the sword falls and it falls dead (or evaporates turned around on the
       ground); on the ground it evaporates turned around
-    * stood on and stabbed (67): 168; an opponent is drawn onto its blade (7 pixels ahead,
+    * stood on and stabbed (67): 329; an opponent is drawn onto its blade (7 pixels ahead,
       at once); played once at 0.6, then it fences low
-    * stomped (68): drawn behind (depth −9); 233 played once at 0.6, then it evaporates
+    * stomped (68): drawn behind (depth −9); 332 played once at 0.6, then it evaporates
       turned around
     * killed without a body (46): nothing
+    * rolling down stairs (82): 306 cycling at `|hspd| × 0.2 + 0.05`. Standing still after
+      its first step it collapses (83). Beside stairs `hspd` approaches 3 down them by
+      0.04; elsewhere on the ground friction 0.08 slows it. Each step it throws up three
+      drops of blood `random_range(−8, 8)` across and `random_range(−2, 0)` down from its
+      position, `hspeed` `random_range(−1, 1)`, `vspeed` `random_range(0, −8)`
+    * rolled collapse (83): 305, still; in the air it falls dead; played once at 0.6 with
+      three drops of blood a step as when rolling, then it evaporates (24)
   """
 
   alias Cauldron2D.GameMaker.{Instance, World}
   alias Nidhox.Gml
-  alias Nidhox.Man.{Physics, Push, Query, State, Weapon}
+  alias Nidhox.Man.{Physics, Push, Query, Stairs, State, Weapon}
   alias Nidhox.Objects.BloodDrop
 
   @up 2
@@ -64,8 +72,8 @@ defmodule Nidhox.Man.States.Hurt do
   @jump 4
   @forward 8
   @back 9
-  @hits %{1 => 220, 3 => 222, 2 => 221}
-  @lying 226
+  @hits %{1 => 274, 3 => 276, 2 => 275}
+  @lying 287
   @noone -4
 
   @doc "The world after fencer `self`'s step in hurt state `state`."
@@ -73,21 +81,21 @@ defmodule Nidhox.Man.States.Hurt do
   def behave(world, self, 13) do
     world =
       world
-      |> State.pose(self, 214)
+      |> State.pose(self, 247)
       |> State.put(self, %{hspd: -State.get(world, self, :facingXScale)})
 
     grounded(world, self, &once(&1, &2, 0.6, 78))
   end
 
   def behave(world, self, state) when state in [17, 38] do
-    sprite = if state == 17, do: 269, else: 189
+    sprite = if state == 17, do: 288, else: 299
     world |> State.pose(self, sprite) |> grounded(self, &once(&1, &2, 0.4, 78))
   end
 
   def behave(world, self, 40) do
     {past, world} =
       world
-      |> State.pose(self, 223)
+      |> State.pose(self, 277)
       |> Physics.apply_gravity(self, 0.33)
       |> State.animate(self, 0.6, false)
 
@@ -95,7 +103,7 @@ defmodule Nidhox.Man.States.Hurt do
   end
 
   def behave(world, self, 41) do
-    {_past, world} = world |> State.pose(self, 229) |> State.animate(self, 0.4, true)
+    {_past, world} = world |> State.pose(self, 300) |> State.animate(self, 0.4, true)
 
     if State.get(world, self, :vspd) > 1.0e-5,
       do:
@@ -123,7 +131,7 @@ defmodule Nidhox.Man.States.Hurt do
   end
 
   def behave(world, self, 33) do
-    {past, world} = world |> State.pose(self, 217) |> State.animate(self, 0.7, false)
+    {past, world} = world |> State.pose(self, 264) |> State.animate(self, 0.7, false)
 
     cond do
       past -> State.go(world, self, 9)
@@ -133,7 +141,7 @@ defmodule Nidhox.Man.States.Hurt do
   end
 
   def behave(world, self, state) when state in [76, 77] do
-    sprite = if state == 76, do: 235, else: 216
+    sprite = if state == 76, do: 350, else: 263
     next = if state == 76, do: 47, else: 33
     {past, world} = world |> State.pose(self, sprite) |> State.animate(self, 0.7, false)
 
@@ -145,7 +153,7 @@ defmodule Nidhox.Man.States.Hurt do
   end
 
   def behave(world, self, 65) do
-    world = State.pose(world, self, Map.get(@hits, State.get(world, self, :stance), 222))
+    world = hit_pose(world, self)
 
     if State.on_ground?(world, self) do
       case count_stab(world, self) do
@@ -158,7 +166,7 @@ defmodule Nidhox.Man.States.Hurt do
   end
 
   def behave(world, self, 63) do
-    world = State.pose(world, self, 219)
+    world = State.pose(world, self, 273)
 
     if State.on_ground?(world, self) do
       case count_stab(world, self) do
@@ -171,7 +179,7 @@ defmodule Nidhox.Man.States.Hurt do
   end
 
   def behave(world, self, 64) do
-    world = State.pose(world, self, 227)
+    world = State.pose(world, self, 290)
 
     if State.on_ground?(world, self) do
       State.go(world, self, 65)
@@ -192,33 +200,27 @@ defmodule Nidhox.Man.States.Hurt do
       |> State.pose(self, State.get(world, self, :collapseAnimation))
       |> State.put(self, %{hspd: 0})
 
-    if State.on_ground?(world, self),
-      do: once(world, self, 0.6, 24),
-      else: State.go(world, self, 26)
+    collapsing(world, self)
   end
 
   def behave(world, self, 20) do
-    world = world |> State.put(self, %{hspd: 0}) |> State.pose(self, 211)
-
-    if State.on_ground?(world, self),
-      do: once(world, self, 0.6, 24),
-      else: State.go(world, self, 26)
+    world |> State.put(self, %{hspd: 0}) |> State.pose(self, 238) |> collapsing(self)
   end
 
   def behave(world, self, 26) do
-    {_past, world} = world |> State.pose(self, 213) |> State.animate(self, 0.6, false)
+    {_past, world} = world |> State.pose(self, 246) |> State.animate(self, 0.6, false)
     if State.on_ground?(world, self), do: State.go(world, self, 24), else: world
   end
 
   def behave(world, self, 24) do
-    case world |> State.pose(self, 215) |> State.animate(self, 0.4, false) do
+    case world |> State.pose(self, 261) |> State.animate(self, 0.4, false) do
       {true, world} -> World.destroy(world, self)
       {false, world} -> Enum.reduce(1..3, world, fn _drop, world -> spray(world, self) end)
     end
   end
 
   def behave(world, self, 39) do
-    world = hit_by_flying(world, self, 218)
+    world = hit_by_flying(world, self, 272)
 
     if State.on_ground?(world, self) do
       case State.animate(world, self, 0.6, false) do
@@ -231,7 +233,7 @@ defmodule Nidhox.Man.States.Hurt do
   end
 
   def behave(world, self, 37) do
-    world = hit_by_flying(world, self, 228)
+    world = hit_by_flying(world, self, 291)
 
     if State.on_ground?(world, self) do
       world |> turn_around(self) |> State.go(self, 24)
@@ -244,7 +246,7 @@ defmodule Nidhox.Man.States.Hurt do
   end
 
   def behave(world, self, 67) do
-    world = State.pose(world, self, 168)
+    world = State.pose(world, self, 329)
 
     world =
       case Query.by_player(world, Query.other_player(State.get(world, self, :playerIndex))) do
@@ -259,11 +261,37 @@ defmodule Nidhox.Man.States.Hurt do
   end
 
   def behave(world, self, 68) do
-    world = world |> World.update(self, &%{&1 | depth: -9}) |> State.pose(self, 233)
+    world = world |> World.update(self, &%{&1 | depth: -9}) |> State.pose(self, 332)
 
     case State.animate(world, self, 0.6, false) do
       {true, world} -> world |> turn_around(self) |> State.go(self, 24)
       {false, world} -> world
+    end
+  end
+
+  def behave(world, self, 82) do
+    {_past, world} =
+      world
+      |> State.pose(self, 306)
+      |> State.animate(self, abs(State.hspd(world, self)) * 0.2 + 0.05, true)
+
+    if Gml.eq?(State.hspd(world, self), 0) and Gml.gt?(State.get(world, self, :stateCounter), 0) do
+      State.go(world, self, 83)
+    else
+      world |> roll_down(self) |> tumble_sprays(self)
+    end
+  end
+
+  def behave(world, self, 83) do
+    world = world |> State.pose(self, 305) |> State.put(self, %{hspd: 0})
+
+    if State.on_ground?(world, self) do
+      case State.animate(world, self, 0.6, false) do
+        {true, world} -> State.go(world, self, 24)
+        {false, world} -> tumble_sprays(world, self)
+      end
+    else
+      State.go(world, self, 26)
     end
   end
 
@@ -336,7 +364,8 @@ defmodule Nidhox.Man.States.Hurt do
         world
 
       %Instance{x: x} = blade ->
-        drops = trunc(abs(x - Gml.var(world, blade.id, :previousX, x)))
+        reach = abs(x - Gml.var(world, blade.id, :previousX, x))
+        {drops, world} = Gml.irandom_range(world, 0, trunc(reach * 5 + 3))
         bleed(world, self, blade.y + 1, drops)
     end
   end
@@ -388,8 +417,18 @@ defmodule Nidhox.Man.States.Hurt do
 
   defp spray(world, self) do
     flesh = World.fetch(world, State.get(world, self, :flesh))
-    %Instance{x: x, y: y} = World.fetch(world, self)
     {across, world} = Gml.random(world, sprite_width(world, flesh) * 0.6)
+    spatter(world, self, across)
+  end
+
+  defp tumble_spray(world, self) do
+    {across, world} = Gml.random_range(world, -8, 8)
+    spatter(world, self, across)
+  end
+
+  defp spatter(world, self, across) do
+    flesh = World.fetch(world, State.get(world, self, :flesh))
+    %Instance{x: x, y: y} = World.fetch(world, self)
     {down, world} = Gml.random_range(world, -2, 0)
     object = World.object_index(world, "o_blood")
     {world, drop} = World.create(world, object, {x + across, y + down})
@@ -398,6 +437,59 @@ defmodule Nidhox.Man.States.Hurt do
     {vspeed, world} = Gml.random_range(world, 0, -8)
     World.update(world, drop, &%{&1 | vspeed: vspeed})
   end
+
+  defp hit_pose(world, self) do
+    case Map.fetch(@hits, State.get(world, self, :stance)) do
+      {:ok, sprite} -> State.pose(world, self, sprite)
+      :error -> world
+    end
+  end
+
+  defp collapsing(world, self) do
+    if State.on_ground?(world, self) do
+      {past, world} = State.animate(world, self, 0.6, false)
+      collapsed(world, self, past)
+    else
+      State.go(world, self, 26)
+    end
+  end
+
+  defp collapsed(world, self, past) do
+    cond do
+      Gml.lt?(State.get(world, self, :frame), last_frame(world, self) * 0.66) ->
+        evaporate_when(world, self, past)
+
+      Stairs.under(world, self) == nil ->
+        evaporate_when(world, self, past)
+
+      true ->
+        State.go(world, self, 82)
+    end
+  end
+
+  defp evaporate_when(world, self, true), do: State.go(world, self, 24)
+  defp evaporate_when(world, _self, false), do: world
+
+  defp last_frame(world, self) do
+    flesh = World.fetch(world, State.get(world, self, :flesh))
+    length(World.sprite(world, flesh.sprite_index).frames) - 1
+  end
+
+  defp roll_down(world, self) do
+    case Stairs.near(world, self) do
+      nil ->
+        if State.on_ground?(world, self),
+          do: Physics.apply_horizontal_friction(world, self, 0.08),
+          else: world
+
+      stairs ->
+        hspd = Gml.approach(State.hspd(world, self), -Stairs.dir(world, stairs) * 3, 0.04)
+        State.put(world, self, %{hspd: hspd})
+    end
+  end
+
+  defp tumble_sprays(world, self),
+    do: Enum.reduce(1..3, world, fn _drop, world -> tumble_spray(world, self) end)
 
   defp hit_by_flying(world, self, sprite) do
     world

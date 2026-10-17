@@ -1,41 +1,41 @@
 defmodule Nidhox.Objects.MinesCenterCamera do
   @moduledoc """
-  The game's `MinesCenterCamera`, in the mines' tall centre room: in a match's first
-  frames (`System.frame` under 3) the camera pans down (`pan`) 5 pixels a step until its
-  bottom reaches the room's; arriving later, the camera's centre is put at once half
-  the view's height above the room's bottom.
+  The game's `MinesCenterCamera`, in the mines' tall centre room: each step and each
+  user event 2, the camera's centre is put at the top of the room's first view plus half
+  the camera's height plus 5 pixels for every `System.frame`, and not below half the
+  camera's height above the room's bottom (`setCameraCenterY`).
+
+  The game pauses the step while a pause menu is up. NidhOX pauses by not stepping the
+  world, so the step never meets a pause.
   """
 
   alias Nidhox.Bout.Camera
-  alias Nidhox.Gml
   alias Nidhox.Objects.System
 
   @pan_step 5
-  @first_frames 3
 
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
   def handlers do
     [
-      {"gml_Object_MinesCenterCamera_Create_0", &start/3},
-      {"gml_Object_MinesCenterCamera_Step_0", &pan/3}
+      {"gml_Object_MinesCenterCamera_Step_0", &pan/3},
+      {"gml_Object_MinesCenterCamera_Other_12", &pan/3}
     ]
   end
 
-  defp start(world, self, _other) do
-    if System.get(world, :frame) < @first_frames,
-      do: Gml.put(world, self, %{pan: 1}),
-      else: world |> Gml.put(self, %{pan: 0}) |> Camera.put_center_y(bottom_centre(world))
+  defp pan(world, _self, _other) do
+    half = Camera.height(world) / 2
+    start = first_view_top(world) + half
+    finish = room_height(world) - half
+    Camera.put_center_y(world, min(start + @pan_step * System.get(world, :frame), finish))
   end
 
-  defp pan(world, self, _other) do
-    if Gml.truthy?(Gml.var(world, self, :pan)) and Camera.bottom(world) < room_height(world),
-      do:
-        Camera.put_center_y(world, min(bottom_centre(world), Camera.center_y(world) + @pan_step)),
-      else: world
+  defp first_view_top(world) do
+    case world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:views) do
+      [%{view: {_x, y, _width, _height}} | _] -> y
+      [] -> 0
+    end
   end
-
-  defp bottom_centre(world), do: room_height(world) - Camera.height(world) / 2
 
   defp room_height(world),
     do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(1)

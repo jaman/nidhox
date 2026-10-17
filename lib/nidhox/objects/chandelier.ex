@@ -4,13 +4,13 @@ defmodule Nidhox.Objects.Chandelier do
 
     * `o_chandelier` create: the parallax object's create, then `overrideDepth` 20,
       `spin_speed` 0, `angle` −10; an `Empty` made 250 pixels from it at `270 + angle`
-      degrees (`bottom`), carrying one of the creaks `choose(52, 53, 54)` round and round
+      degrees (`bottom`), carrying one of the creaks `choose(sfxChandelier1, sfxChandelier2, sfxChandelier3)` round and round
       (`playSoundAtLoopEffect(…, 1, 1, bottom)`, `soundLoop`); `dir` and `foo` 0; `pv` the
       view's angle; its alarm in 3 steps
     * alarm 0: again in 2 steps; its glow frame `foo` `choose(1, 2, 3)`
     * step: `spin_speed` falls by 0.01 while `angle` is above 0 and rises by 0.01
-      otherwise; each time it passes to the other side (`dir`) its chain squeaks (sound
-      55) 100 pixels below it; `angle` moves by `spin_speed`, `bottom` stays 250 pixels
+      otherwise; each time it passes to the other side (`dir`) its chain squeaks
+      (`sfxChainSqueak1`) 100 pixels below it; `angle` moves by `spin_speed`, `bottom` stays 250 pixels
       from it at `270 + angle` and it is turned `angle`
     * draw: its frame 0 turned by its angle in its blend, then added over it its glow
       frame `foo` turned `image_angle + pv × 3.5` in `make_color_hsv(random(40), 100,
@@ -24,7 +24,7 @@ defmodule Nidhox.Objects.Chandelier do
   """
 
   alias Cauldron2D.Audio
-  alias Cauldron2D.GameMaker.{Colour, Draw, Instance, World}
+  alias Cauldron2D.GameMaker.{Colour, Data, Draw, Instance, World}
   alias Nidhox.Bout.{Camera, Sound}
   alias Nidhox.{Chain, Gml}
   alias Nidhox.Objects.Ear
@@ -35,9 +35,9 @@ defmodule Nidhox.Objects.Chandelier do
   @first_flicker 3
   @flicker_steps 2
   @glow_alpha 0.35
-  @squeak 55
+  @squeak "sfxChainSqueak1"
   @squeak_drop 100
-  @creaks [52, 53, 54]
+  @creaks ["sfxChandelier1", "sfxChandelier2", "sfxChandelier3"]
   @hang 250
   @down 270
   @backdrop_lift 96
@@ -96,7 +96,7 @@ defmodule Nidhox.Objects.Chandelier do
     {spin, side} = if Gml.gt?(angle, 0), do: {spin - @pull, 1}, else: {spin + @pull, 0}
 
     world =
-      if Gml.eq?(dir, side), do: world, else: Sound.play(world, @squeak, {x, y + @squeak_drop})
+      if Gml.eq?(dir, side), do: world, else: squeak(world, {x, y + @squeak_drop})
 
     angle = angle + spin
 
@@ -105,6 +105,9 @@ defmodule Nidhox.Objects.Chandelier do
     |> move_bottom(Gml.var(world, self, :bottom), hung(chandelier, angle))
     |> World.update(self, &%{&1 | image_angle: angle / 1})
   end
+
+  defp squeak(world, position),
+    do: Sound.play(world, Data.index(world.data, :sounds, @squeak), position)
 
   defp move_bottom(world, bottom, {x, y}) do
     if World.fetch(world, bottom),

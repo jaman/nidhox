@@ -3,23 +3,27 @@ defmodule Nidhox.Objects.DefensiveBlock do
   The clouds' `DefensiveBlock`, as the game's code runs it: a wall of cloud that rises
   in front of the side that is behind, while the camera is away from it.
 
-    * create: off (`on` 0), no `block`, `ledgeLeft` or `ledgeRight`; user event 2 runs
-      at once and again on alarm 2, two steps on
+    * create: off (`on` 0), not rebuilding quietly (`quietRebuild` 0), no `block`,
+      `ledgeLeft` or `ledgeRight`, no `spawns`, `tiles` or `clouds`, not set up
+      (`setupDone` 0); alarm 0 runs at once
     * user event 2: every `RespawnPoint` its mask covers is taken (`spawns`), the last
       one's height kept as `BLOCK_Y`, and each set at its bottom
       (`y + sprite_get_height(mask_index)`)
-    * step: the side it defends is player 2 in rooms of `roomCode` 5 to 7, player 1 in
-      rooms of `roomCode` 2 to 4, and otherwise player 1 left of the room's middle
-      (`cameraCenterX() < room_width / 2`) and player 2 right of it. Off, it turns on
-      (user event 0) when the `Match`'s leading player is not that side and it is more
+    * user event 3, run each match frame (`Nidhox.Bout.Frame`): the first time, user
+      event 2 runs. On with its `block` gone, it is built again without clouds
+      (`quietRebuild` 1, user event 0). Off with a `block`, user event 1 runs. The side
+      it defends is player 2 in rooms of `roomCode` 5 to 7, player 1 in rooms of
+      `roomCode` 2 to 4, and otherwise player 1 left of the room's middle
+      (`cameraCenterX() < room_width / 2`) and player 2 right of it. With a `Match`, off,
+      it turns on (user event 0) when the leading player is not that side and it is more
       than 20 pixels off camera (`objectOffCameraBuffer`); on, it turns off (user
-      event 1) when the leading player is that side and it is off camera. It is shown
-      while on
+      event 1) when the leading player is that side and it is off camera
+    * step: shown while on
     * user event 0: a `Block` the size of its mask, a `Ledge` at its left and its
       right edge; its respawn points moved to its top; every `PickupContainer` at its
-      place replaced by a `DroppedWeapon` 16 pixels above its top; a `CloudPoof` every
-      16 pixels across and every 16 down from 8, each moved by `random_range(−2, 2)`
-      both ways (`clouds`)
+      place replaced by a `DroppedWeapon` 16 pixels above its top; unless
+      `quietRebuild`, a `CloudPoof` every 16 pixels across and every 16 down from 8,
+      each moved by `random_range(−2, 2)` both ways (`clouds`); then on
     * user event 1: the block, ledges and clouds gone, its respawn points back at
       `BLOCK_Y`
     * alarm 0: again in 5 steps, at a random frame (`image_single`)
@@ -31,7 +35,6 @@ defmodule Nidhox.Objects.DefensiveBlock do
   alias Nidhox.Objects.RoomCodes
 
   @buffer 20
-  @recheck 2
   @frame_again 5
   @spacing 16
   @first_row 8
@@ -44,21 +47,29 @@ defmodule Nidhox.Objects.DefensiveBlock do
   def handlers do
     [
       {"gml_Object_DefensiveBlock_Create_0", &start/3},
-      {"gml_Object_DefensiveBlock_Alarm_2",
-       fn world, self, _other -> World.perform(world, self, :other, 12) end},
       {"gml_Object_DefensiveBlock_Alarm_0", &random_frame/3},
       {"gml_Object_DefensiveBlock_Step_0", &step/3},
       {"gml_Object_DefensiveBlock_Other_12", &take_points/3},
       {"gml_Object_DefensiveBlock_Other_10", &rise/3},
-      {"gml_Object_DefensiveBlock_Other_11", &fall/3}
+      {"gml_Object_DefensiveBlock_Other_11", &fall/3},
+      {"gml_Object_DefensiveBlock_Other_13", &each_frame/3}
     ]
   end
 
   defp start(world, self, _other) do
     world
-    |> Gml.put(self, %{on: 0, block: -4, ledgeLeft: -4, ledgeRight: -4, spawns: [], clouds: []})
-    |> World.perform(self, :other, 12)
-    |> World.update(self, &Instance.put_alarm(&1, 2, @recheck))
+    |> Gml.put(self, %{
+      on: 0,
+      quietRebuild: 0,
+      block: -4,
+      ledgeLeft: -4,
+      ledgeRight: -4,
+      spawns: [],
+      tiles: [],
+      clouds: [],
+      setupDone: 0
+    })
+    |> random_frame(self, nil)
   end
 
   defp random_frame(world, self, _other) do
@@ -67,10 +78,41 @@ defmodule Nidhox.Objects.DefensiveBlock do
     World.update(world, self, &%{&1 | image_index: frame / 1, image_speed: 0.0})
   end
 
-  defp step(world, self, _other) do
-    world = switch(world, self, Gml.first(world, "Match"))
-    World.update(world, self, &%{&1 | visible: Gml.truthy?(Gml.var(world, self, :on))})
+  defp step(world, self, _other),
+    do: World.update(world, self, &%{&1 | visible: Gml.truthy?(Gml.var(world, self, :on))})
+
+  defp each_frame(world, self, _other) do
+    world
+    |> set_up(self)
+    |> rebuild_quietly(self)
+    |> tidy(self)
+    |> switch(self, Gml.first(world, "Match"))
   end
+
+  defp set_up(world, self) do
+    if Gml.truthy?(Gml.var(world, self, :setupDone)),
+      do: world,
+      else: world |> World.perform(self, :other, 12) |> Gml.put(self, %{setupDone: 1})
+  end
+
+  defp rebuild_quietly(world, self) do
+    if Gml.truthy?(Gml.var(world, self, :on)) and not built?(world, self) do
+      world
+      |> Gml.put(self, %{quietRebuild: 1})
+      |> World.perform(self, :other, 10)
+      |> Gml.put(self, %{quietRebuild: 0})
+    else
+      world
+    end
+  end
+
+  defp tidy(world, self) do
+    if not Gml.truthy?(Gml.var(world, self, :on)) and built?(world, self),
+      do: World.perform(world, self, :other, 11),
+      else: world
+  end
+
+  defp built?(world, self), do: World.fetch(world, Gml.var(world, self, :block, -4)) != nil
 
   defp switch(world, _self, nil), do: world
 
@@ -171,7 +213,13 @@ defmodule Nidhox.Objects.DefensiveBlock do
     end
   end
 
-  defp lay_clouds(world, self, {width, height}) do
+  defp lay_clouds(world, self, size) do
+    if Gml.truthy?(Gml.var(world, self, :quietRebuild)),
+      do: world,
+      else: lay_poofs(world, self, size)
+  end
+
+  defp lay_poofs(world, self, {width, height}) do
     %Instance{x: x, y: y} = World.fetch(world, self)
     poof = World.object_index(world, "CloudPoof")
 

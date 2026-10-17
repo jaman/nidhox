@@ -19,7 +19,7 @@ defmodule Nidhox.Objects.CheerControl do
   alias Nidhox.Gml
   alias Nidhox.Objects.{Ear, System}
 
-  @cheer 127
+  @cheer "sfxCheer"
   @sitting 57
   @inside 80
 

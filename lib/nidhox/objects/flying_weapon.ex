@@ -7,27 +7,41 @@ defmodule Nidhox.Objects.FlyingWeapon do
 
     * create: the physics variables, `type` 2, `playerIndex` 0 (1 or 2 for the coloured
       ones), `previousAngle` and `head` −1, the sword's sprite, its blade's bottom line
-      at its position, a whoosh (56 or 57), `timer` 360, `counter` 0, `reverseTimer` 30,
-      `reverse` 0, `startHSpd` 0
+      at its position, a whoosh (`sfxFlyingSword1` or `sfxFlyingSword2`), `timer` 360,
+      `counter` 0, `reverseTimer` 30, `reverse` 0, `startHSpd` 0
     * user event 2: counts on; turned by `hspd × 10` degrees; the bottom line of its
       blade (`bottomLineY`, `bottomLineX1`, `bottomLineX2`) found from its half-length
       along its angle, pointing the side its tip is on, with the last step's movement;
-      gone when `timer` runs out; the physics end step; with boomerang swords, after 30
-      steps it turns back, easing to its starting speed the other way by 0.2 a step
-    * user event 0 (a wall): a clang (58), and it drops back off the wall as a
-      `DroppedWeapon` at a quarter of its speed, 1 upwards; then it is gone
+      marked to be gone when `timer` runs out or it is more than 64 pixels left of, right
+      of or below the room. A `Stairs` on its path (`x`, `y` to `x + hspd`, `y + vspd`)
+      is a wall (user event 0). Otherwise the physics end step runs; with boomerang
+      swords, after 30 steps `playerIndex` becomes 0 and it turns back, easing to its
+      starting speed the other way by 0.2 a step. A weapon marked to be gone is removed
+      at the end of the step
+    * user event 0 (a wall across its path): `sfxFlyingSwordHitWall`, and it drops back
+      off the wall from where it was (`previousX`) as a `DroppedWeapon` at a quarter of
+      its speed turned round, 1 upwards; a throw that dodged the opponent counts as a
+      dodge in the challenge and in the tutorial (the tutorial only when the sword is
+      within 41 pixels of the first fencer's entry point, 13 pixels above it); then it is
+      gone
+    * user event 1 (a floor or ceiling): the same sound and a `DroppedWeapon` from where
+      it was above or below (`previousY`) at a quarter of its speed, 1 upwards; then it
+      is gone
     * leaving the room: gone; destroyed: dropped from the match's list
   """
 
-  alias Cauldron2D.GameMaker.{Instance, World}
+  alias Cauldron2D.GameMaker.{Collide, Instance, World}
   alias Nidhox.Bout.{Sound, Variants}
   alias Nidhox.Gml
   alias Nidhox.Man.{Physics, Weapon}
   alias Nidhox.Objects.{Challenge, DroppedWeapon, System}
 
-  @whoosh [56, 57]
-  @clang 58
+  @whoosh ["sfxFlyingSword1", "sfxFlyingSword2"]
+  @clang "sfxFlyingSwordHitWall"
   @dodge 8
+  @room_margin 64
+  @tutorial_reach 41
+  @tutorial_offset 13
 
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
@@ -38,6 +52,7 @@ defmodule Nidhox.Objects.FlyingWeapon do
       {"gml_Object_OrangeFlyingWeapon_Create_0", &coloured(&1, &2, &3, 2)},
       {"gml_Object_FlyingWeapon_Other_12", &update/3},
       {"gml_Object_FlyingWeapon_Other_10", &wall/3},
+      {"gml_Object_FlyingWeapon_Other_11", &floor/3},
       {"gml_Object_FlyingWeapon_Other_0", &gone/3},
       {"gml_Object_FlyingWeapon_Destroy_0", &finish/3}
     ]
@@ -55,7 +70,7 @@ defmodule Nidhox.Objects.FlyingWeapon do
 
     world
     |> Gml.put(self, %{bottomLineY: y, bottomLineX1: x, bottomLineX2: x})
-    |> Sound.play(whoosh, {x, y})
+    |> Sound.play_named(whoosh, {x, y})
     |> Gml.put(self, %{timer: 360, counter: 0, reverseTimer: 30, reverse: 0, startHSpd: 0})
     |> listed(self)
   end
@@ -100,14 +115,39 @@ defmodule Nidhox.Objects.FlyingWeapon do
 
     timer = Gml.var(world, self, :timer) - 1
     world = Gml.put(world, self, %{timer: timer})
+    gone? = not Gml.truthy?(timer) or outside_room?(world, self)
 
-    if Gml.truthy?(timer) do
+    world
+    |> carry_on(self)
+    |> then(&if(gone?, do: World.destroy(&1, self), else: &1))
+  end
+
+  defp carry_on(world, self) do
+    if stairs_ahead?(world, self) do
+      World.perform(world, self, :other, 10)
+    else
       world
       |> Physics.end_step(self)
       |> boomerang(self)
-    else
-      World.destroy(world, self)
     end
+  end
+
+  defp stairs_ahead?(world, self) do
+    %Instance{x: x, y: y} = World.fetch(world, self)
+    hspd = Gml.var(world, self, :hspd)
+    vspd = Gml.var(world, self, :vspd)
+
+    case World.object_index(world, "Stairs") do
+      nil -> false
+      stairs -> Collide.on_line(world, {x, y}, {x + hspd, y + vspd}, stairs) != nil
+    end
+  end
+
+  defp outside_room?(world, self) do
+    %Instance{x: x, y: y} = World.fetch(world, self)
+    {width, height} = world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size)
+
+    x < -@room_margin or x > width + @room_margin or y > height + @room_margin
   end
 
   defp bottom_line(world, self, hspd) do
@@ -144,6 +184,7 @@ defmodule Nidhox.Objects.FlyingWeapon do
       do:
         Gml.put(world, self, %{
           reverseTimer: 0,
+          playerIndex: 0,
           reverse: 1,
           startHSpd: Gml.var(world, self, :hspd)
         }),
@@ -160,14 +201,25 @@ defmodule Nidhox.Objects.FlyingWeapon do
   end
 
   defp wall(world, self, _other) do
-    %Instance{xprevious: x, y: y, image_xscale: xscale} = World.fetch(world, self)
+    %Instance{x: x, y: y, image_xscale: xscale} = World.fetch(world, self)
     hspd = Gml.var(world, self, :hspd)
 
     world
-    |> Sound.play(@clang, {World.fetch(world, self).x, y})
-    |> Weapon.spawn_dropped({x, y}, -hspd * 0.25, -1, xscale)
+    |> Sound.play_named(@clang, {x, y})
+    |> Weapon.spawn_dropped({Gml.var(world, self, :previousX, x), y}, -hspd * 0.25, -1, xscale)
     |> elem(0)
     |> dodged(self)
+    |> World.destroy(self)
+  end
+
+  defp floor(world, self, _other) do
+    %Instance{x: x, y: y, image_xscale: xscale} = World.fetch(world, self)
+    hspd = Gml.var(world, self, :hspd)
+
+    world
+    |> Sound.play_named(@clang, {x, y})
+    |> Weapon.spawn_dropped({x, Gml.var(world, self, :previousY, y)}, hspd * 0.25, -1, xscale)
+    |> elem(0)
     |> World.destroy(self)
   end
 
@@ -194,10 +246,17 @@ defmodule Nidhox.Objects.FlyingWeapon do
     end
   end
 
-  defp learner_dodged(world, thrower, at) do
-    if Gml.exists?(world, "Tutorial") and thrower != 1,
+  defp learner_dodged(world, thrower, {_x, y} = at) do
+    if Gml.exists?(world, "Tutorial") and thrower != 1 and near_entry?(world, y),
       do: Challenge.move_completed(world, 1, @dodge, at),
       else: world
+  end
+
+  defp near_entry?(world, y) do
+    case Gml.first(world, "YellowPlayerRoomEntryPoint") do
+      nil -> false
+      entry -> abs(y - World.fetch(world, entry).y - @tutorial_offset) < @tutorial_reach
+    end
   end
 
   defp gone(world, self, _other), do: World.destroy(world, self)

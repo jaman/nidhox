@@ -9,13 +9,15 @@ defmodule Nidhox.Objects.BloodSurface do
       rounded `w` and `h` — in the match's blood bank (`Match.bloodbank`), so blood
       stays in a room the bout comes back to; one made clear when there is none (and
       put in the bank with a match); and a clear `previous_blood` of the same size
-    * alarm 0, every 3 steps: while `active` (drops landed lately), the blood runs —
-      the surface copied to `previous_blood`, then 4 times a 10-pixel-wide strip from a
-      random place (`random(w − 10)`, `random(h − 10)`), as tall as its top is far down
+    * alarm 0, every 3 steps: while `active` (drops landed lately), a lost `blood` or
+      `previous_blood` is found again (user event 0) first; then the blood runs — the
+      surface copied to `previous_blood`, then 4 times a 10-pixel-wide strip from a random
+      place (`random(w − 10)`, `random(h − 10)`), as tall as its top is far down
       plus 10, drawn back 1 or 2 pixels higher and again 1 or 2 lower, one time in five
       shifted across by up to a tenth of its height (`irandom_range`); `active` counts
       down
-    * draw: the surface (made again if it was lost) at its place
+    * draw: the surface at its place; a lost surface is found again (user event 0) and not
+      drawn that step
     * room end, game end and destroy: `previous_blood` freed
 
   `free_bank/1` is the match's `Other_20`: every surface in the blood bank freed, which
@@ -155,9 +157,10 @@ defmodule Nidhox.Objects.BloodSurface do
   end
 
   defp ensure_blood(world, self) do
-    if Surfaces.exists?(world, Gml.var(world, self, :blood, -1)),
-      do: world,
-      else: world |> find_surface(self) |> ensure_blood(self)
+    if Surfaces.exists?(world, Gml.var(world, self, :blood, -1)) and
+         Surfaces.exists?(world, Gml.var(world, self, :previous_blood, -1)),
+       do: world,
+       else: find_surface(world, self)
   end
 
   defp strips(world, self, previous) do
@@ -196,17 +199,14 @@ defmodule Nidhox.Objects.BloodSurface do
   end
 
   defp draw(world, self, _other) do
-    world =
-      if Surfaces.exists?(world, Gml.var(world, self, :blood, -1)),
-        do: world,
-        else: find_surface(world, self)
+    blood = Gml.var(world, self, :blood, -1)
 
-    %Instance{x: x, y: y} = World.fetch(world, self)
-    blood = Gml.var(world, self, :blood)
-
-    if Surfaces.exists?(world, blood),
-      do: Draw.item(world, Surfaces.item(world, blood, {x, y})),
-      else: world
+    if Surfaces.exists?(world, blood) do
+      %Instance{x: x, y: y} = World.fetch(world, self)
+      Draw.item(world, Surfaces.item(world, blood, {x, y}))
+    else
+      find_surface(world, self)
+    end
   end
 
   defp free_previous(world, self, _other) do

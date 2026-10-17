@@ -3,7 +3,7 @@ defmodule Nidhox.Objects.Arcade do
   The single player run (`ArcadeMode`, kept across rooms) and its progress screen
   (`ShowProgress` in `rArcadeProgress`), as the game's code runs them.
 
-  `start/1` is `startArcadeMode`: a room transition (`FinalFantasyVIIITransition`) and
+  `start/1` is `startArcadeMode`: a screen wipe (`ScreenWipe`), `System.flow` 2, and
   an `ArcadeMode`.
 
     * `ArcadeMode` create: `level` 1, `framesElapsed` 0, sixteen levels
@@ -88,8 +88,9 @@ defmodule Nidhox.Objects.Arcade do
     "rMinesRightA" => 0.75,
     "rMinesRightB" => 0.875
   }
-  @standing 187
-  @fallen 208
+  @standing "sManNoWeaponStand"
+  @fallen "sManCollapse"
+  @font "fMenu"
   @band 32
   @mark 0.5
   @ease 0.1
@@ -98,7 +99,8 @@ defmodule Nidhox.Objects.Arcade do
   @spec start(World.t()) :: World.t()
   def start(%World{} = world) do
     world
-    |> make("FinalFantasyVIIITransition")
+    |> make("ScreenWipe")
+    |> System.put(%{flow: 2})
     |> make("ArcadeMode")
   end
 
@@ -120,7 +122,7 @@ defmodule Nidhox.Objects.Arcade do
     total = map_size(Gml.var(world, arcade, :personalityMap, %{}))
 
     {_x, y, _speed} =
-      Path.position(Enum.at(world.data.paths, 1), (Gml.var(world, arcade, :level) - 1) / total)
+      Path.position(path(world, "pDifficulty"), (Gml.var(world, arcade, :level) - 1) / total)
 
     base = (400 - y) / 400
     {room_width, screen_width} = {Camera.room_width(world), Camera.width(world)}
@@ -265,7 +267,11 @@ defmodule Nidhox.Objects.Arcade do
     if room_name(world) == "rBeatGameStats" do
       text = "GAME COMPLETE##TIME#" <> Match.time(Gml.var(world, self, :framesElapsed))
 
-      Draw.text(world, 1, text, {Camera.center_x(world), Camera.center_y(world) - 32},
+      Draw.text(
+        world,
+        Data.index(world.data, :fonts, @font),
+        text,
+        {Camera.center_x(world), Camera.center_y(world) - 32},
         halign: :center,
         valign: :middle
       )
@@ -296,7 +302,7 @@ defmodule Nidhox.Objects.Arcade do
   defp camera_to(world, area) do
     case Map.fetch(@map_points, area) do
       {:ok, point} ->
-        {px, py, _speed} = Enum.at(Enum.at(world.data.paths, 2).points, point)
+        {px, py, _speed} = Enum.at(path(world, "pProgress").points, point)
         {_width, room_height} = Enum.at(world.data.rooms, world.room).size
         to_x = Gml.clamp(px, 160, Camera.room_width(world) - 160)
         to_y = Gml.clamp(py, 100, room_height - 100)
@@ -345,15 +351,21 @@ defmodule Nidhox.Objects.Arcade do
 
     {sprite, frame} =
       if level > mark,
-        do: {@fallen, length(World.sprite(world, @fallen).frames) - 1},
-        else: {@standing, (System.get(world, :frame) + own_x) * 0.6}
+        do:
+          {sprite_index(world, @fallen),
+           length(World.sprite(world, sprite_index(world, @fallen)).frames) - 1},
+        else: {sprite_index(world, @standing), (System.get(world, :frame) + own_x) * 0.6}
 
     {colour, world} = colour_for_level(world, arcade, mark)
     world = Draw.sprite(world, sprite, frame, {x, y}, scale: {-@mark, @mark}, blend: colour)
 
     if Gml.eq?(level, mark) do
       {player, world} = PlayerColour.get(world, nil, 1)
-      Draw.sprite(world, @standing, frame, {x - 16, y}, scale: {@mark, @mark}, blend: player)
+
+      Draw.sprite(world, sprite_index(world, @standing), frame, {x - 16, y},
+        scale: {@mark, @mark},
+        blend: player
+      )
     else
       world
     end
@@ -380,7 +392,9 @@ defmodule Nidhox.Objects.Arcade do
         )
       end)
 
-    Draw.text(world, 1, text, {x, y}, [{:colour, {255, 255, 255}} | style])
+    Draw.text(world, Data.index(world.data, :fonts, @font), text, {x, y}, [
+      {:colour, {255, 255, 255}} | style
+    ])
   end
 
   defp rectangle({x1, y1}, {x2, y2}, colour),
@@ -393,4 +407,8 @@ defmodule Nidhox.Objects.Arcade do
 
   defp room_name(%World{room: nil}), do: nil
   defp room_name(world), do: Enum.at(world.data.rooms, world.room).name
+
+  defp sprite_index(world, name), do: Data.index(world.data, :sprites, name)
+
+  defp path(world, name), do: Enum.at(world.data.paths, Data.index(world.data, :paths, name))
 end

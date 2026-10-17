@@ -8,8 +8,8 @@ defmodule Nidhox.Objects.Tournament do
     * create: a bracket for `global.players` players (`playerCount`), `counter` 0, no
       winner waiting (`nextWinner` −9), `busyTimer` 60
     * room start: `counter` 0 and `busyTimer` 60; in `rShowLadder` alarm 0 in 60
-      steps; with no `Match`, a room transition (`FinalFantasyVIIITransition`)
-    * alarm 0: `sfxChangeLevel2` (66) at the `Ear`
+      steps; with no `Match`, a screen wipe (`ScreenWipe`)
+    * alarm 0: `sfxChangeLevel2` at the `Ear`
     * step: in `rShowLadder`, once `busyTimer` is down to 0 — the waiting winner wins
       their match; then with a champion, `inputdog` 8 or 10 goes to `rShowChampion`,
       and without one, 10 or 8 goes to `rPreMatch` and the camera's centre eases 0.1 of
@@ -33,7 +33,7 @@ defmodule Nidhox.Objects.Tournament do
   @object "Tournament"
   @no_winner -9
   @busy_steps 60
-  @level_sound 66
+  @level_sound "sfxChangeLevel2"
   @ladder "rShowLadder"
   @champion_room "rShowChampion"
   @pre_match "rPreMatch"
@@ -83,6 +83,45 @@ defmodule Nidhox.Objects.Tournament do
     end
   end
 
+  @doc """
+  The first `Tournament`'s bracket drawn in the box `{x, y, width, height}`
+  (`drawBracketsListXYWH`), as the draw list items it adds, in the box's units; `[]`
+  with no `Tournament`.
+  """
+  @spec drawn_bracket(World.t(), {number(), number(), number(), number()}) :: [map()]
+  def drawn_bracket(%World{} = world, box) do
+    case Gml.first(world, @object) do
+      nil ->
+        []
+
+      self ->
+        busy? = Gml.var(world, self, :busyTimer) > 0
+        drawn = Drawing.brackets(%{world | drawing: []}, self, bracket(world, self), box, busy?)
+        Enum.reverse(drawn.drawing)
+    end
+  end
+
+  @doc "The world with every `Tournament` gone and, for `players` above 1, a new one of that many players."
+  @spec remade(World.t(), non_neg_integer()) :: World.t()
+  def remade(%World{} = world, players) do
+    world = world |> Gml.all(@object) |> Enum.reduce(world, &World.destroy(&2, &1))
+
+    if players > 1 do
+      world = World.put_global(world, :players, players)
+      world |> World.create(World.object_index(world, @object), {0, 0}) |> elem(0)
+    else
+      world
+    end
+  end
+
+  @doc "The world with every `Tournament`'s `busyTimer` at 60, so nothing on its bracket flashes."
+  @spec held(World.t()) :: World.t()
+  def held(%World{} = world),
+    do:
+      world
+      |> Gml.all(@object)
+      |> Enum.reduce(world, &Gml.put(&2, &1, %{busyTimer: @busy_steps}))
+
   defp intro(world, _self, _other) do
     world = world |> Gml.all(@object) |> Enum.reduce(world, &World.destroy(&2, &1))
     {world, _tournament} = World.create(world, World.object_index(world, @object), {0, 0})
@@ -114,11 +153,12 @@ defmodule Nidhox.Objects.Tournament do
       do: world,
       else:
         world
-        |> World.create(World.object_index(world, "FinalFantasyVIIITransition"), {0, 0})
+        |> World.create(World.object_index(world, "ScreenWipe"), {0, 0})
         |> elem(0)
   end
 
-  defp alarm(world, _self, _other), do: Sound.play(world, @level_sound, Ear.position(world))
+  defp alarm(world, _self, _other),
+    do: Sound.play(world, Data.index(world.data, :sounds, @level_sound), Ear.position(world))
 
   defp step(world, self, _other) do
     world = if in_room?(world, @ladder), do: ladder(world, self), else: world

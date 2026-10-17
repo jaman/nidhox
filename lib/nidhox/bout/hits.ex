@@ -6,12 +6,13 @@ defmodule Nidhox.Bout.Hits do
   `orangeInstance`). An attacker already stabbed or falling does nothing. The
   defender's `swordCollision` is cleared, then by the attacker's state:
 
-    * fencing (29) or standing on a stab (67): a blade crossing the defender's body
+    * fencing (29, 30, 31) or standing on a stab (67): a blade crossing the defender's body
       with an impact of 1 or more (`Nidhox.Bout.Overlap.impact/3`) — or any impact on a
       defender already stabbed — marks the swords touching (`swordCollision`) and lifts
-      the blade's tip by its stance's stab offset (high 1, middle ⅓, low −1) × 4, less as
+      the blade's tip to its height less the fencer's `stairYModifier`, plus its stance's stab
+      offset (high 1, middle 0.333, low −1) × 4, less as
       the two stand further apart (none at 32 pixels). A defender not yet stabbed is run
-      through: a blood spurt (`BloodEffect`, sprite 280, its colour, the attacker's
+      through: a blood spurt (`BloodEffect`, sprite 167, its colour, the attacker's
       facing) where the blade is, it is drawn onto the blade (18 pixels, at once), and
       in the air (unless the attacker stands on a stab) it is caught on the sword (5)
       with the attacker catching (4); on the ground crouched it is stabbed crouching
@@ -36,21 +37,23 @@ defmodule Nidhox.Bout.Hits do
     * crane kick (8): a defender the kick reaches is knocked upwards (41, hit), drawn to
       14 pixels at once unless it already was
 
+  Fencing and lunging do nothing where `Nidhox.Bout.Clash.weapons_harmless?/1` holds.
+
   A blow that lands is the attacker's completed move
-  (`Nidhox.Objects.Challenge.move_completed/4`, 32 above the defender): running a
+  (`Nidhox.Objects.Challenge.move_completed/4`, 32 above the attacker): running a
   defender through while fencing GUARD, lunging LUNGE, the dive kick KICK, the sweep
   SWEEP and either punch PUNCH.
   """
 
   alias Cauldron2D.GameMaker.{Instance, World}
-  alias Nidhox.Bout.Overlap
+  alias Nidhox.Bout.{Clash, Overlap}
   alias Nidhox.Gml
   alias Nidhox.Man.{Push, Query, State}
   alias Nidhox.Objects.Challenge
 
   @noone -4
-  @stab_offset %{1 => 1.0, 3 => 0.3333333333333333, 2 => -1.0}
-  @spurt_sprite 280
+  @stab_offset %{1 => 1.0, 3 => 0.333, 2 => -1.0}
+  @spurt_sprite 167
   @lunge 0
   @kick 2
   @punch 3
@@ -102,7 +105,7 @@ defmodule Nidhox.Bout.Hits do
         do:
           world
           |> Push.tween_dist(attacker, defender, 14, 1)
-          |> scored(attacker, defender, @sweep)
+          |> scored(attacker, @sweep)
           |> hit(defender, 76),
         else: world
     else
@@ -129,8 +132,8 @@ defmodule Nidhox.Bout.Hits do
     if fresh?(world, defender) and not Query.knocked_down?(world, defender) and
          Overlap.divekick?(world, flesh(world, attacker), flesh(world, defender)) do
       world
-      |> scored(attacker, defender, @kick)
       |> Push.tween_dist(attacker, defender, 14, 1)
+      |> scored(attacker, @kick)
       |> hit(defender, 41)
       |> State.go(attacker, 15)
     else
@@ -138,10 +141,11 @@ defmodule Nidhox.Bout.Hits do
     end
   end
 
-  defp attack(world, attacker, defender, state) when state in [29, 67] do
+  defp attack(world, attacker, defender, state) when state in [29, 30, 31, 67] do
     weapon = Gml.var(world, attacker, :weapon, @noone)
 
-    with true <- World.fetch(world, weapon) != nil,
+    with false <- Clash.weapons_harmless?(world),
+         true <- World.fetch(world, weapon) != nil,
          true <- Overlap.held?(world, weapon, flesh(world, defender)),
          true <-
            Overlap.impact(world, weapon, flesh(world, defender)) - 1 >= -1.0e-5 or
@@ -158,7 +162,8 @@ defmodule Nidhox.Bout.Hits do
   defp attack(world, attacker, defender, 48) do
     weapon = Gml.var(world, attacker, :weapon, @noone)
 
-    with true <- World.fetch(world, weapon) != nil,
+    with false <- Clash.weapons_harmless?(world),
+         true <- World.fetch(world, weapon) != nil,
          true <- Overlap.held?(world, weapon, flesh(world, defender)),
          true <-
            Overlap.impact(world, weapon, flesh(world, defender)) - 1 >= -1.0e-5 or
@@ -202,7 +207,7 @@ defmodule Nidhox.Bout.Hits do
         do:
           world
           |> Push.tween_dist(attacker, defender, reach, 1)
-          |> scored(attacker, defender, move)
+          |> scored(attacker, move)
           |> knock.(defender),
         else: world
     else
@@ -229,7 +234,8 @@ defmodule Nidhox.Bout.Hits do
     %Instance{y: y} = World.fetch(world, weapon)
     apart = Gml.clamp(abs(World.fetch(world, attacker).x - World.fetch(world, defender).x), 0, 32)
     offset = Map.get(@stab_offset, Gml.var(world, attacker, :stance), 0) * 4
-    Gml.put(world, weapon, %{tipY: y + offset * (1 - apart / 32)})
+    lifted = y + Gml.var(world, attacker, :stairYModifier, 0)
+    Gml.put(world, weapon, %{tipY: lifted + offset * (1 - apart / 32)})
   end
 
   defp run_through(world, attacker, defender, weapon, how) do
@@ -239,14 +245,14 @@ defmodule Nidhox.Bout.Hits do
 
       how == :impale ->
         world
-        |> scored(attacker, defender, @guard)
+        |> scored(attacker, @guard)
         |> spurt(attacker, defender, weapon, true)
         |> Push.tween_min_dist(attacker, defender, 18, 1)
         |> impaled(attacker, defender)
 
       true ->
         world
-        |> scored(attacker, defender, @lunge)
+        |> scored(attacker, @lunge)
         |> Push.tween_min_dist(attacker, defender, 18, 1)
         |> spurt(attacker, defender, weapon, false)
         |> lunged(attacker, defender)
@@ -290,10 +296,10 @@ defmodule Nidhox.Bout.Hits do
     end
   end
 
-  defp scored(world, _attacker, _defender, nil), do: world
+  defp scored(world, _attacker, nil), do: world
 
-  defp scored(world, attacker, defender, move) do
-    %Instance{x: x, y: y} = World.fetch(world, defender)
+  defp scored(world, attacker, move) do
+    %Instance{x: x, y: y} = World.fetch(world, attacker)
 
     Challenge.move_completed(
       world,

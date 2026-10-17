@@ -4,9 +4,10 @@ defmodule Nidhox.Objects.DroppedWeapon do
   lands. A `PhysicsObject`, run by the match's frame as user event 2.
 
     * create: the physics variables, `type` 2, `previousAngle` −1, the sword's sprite
-      (153, `pick_droppedWeapon_graphic`)
+      (`sFlyingSword` at image speed 0.1, `pick_droppedWeapon_graphic`)
     * user event 2: the physics begin step; `vspd` eases towards 8 by 0.33; turned by
-      `hspd × 20` degrees; the physics end step; gone below the room
+      `hspd × 20` degrees; the physics end step; gone once below the room or more than
+      64 pixels left or right of it
     * user event 0 (a wall): pushed 3 pixels back from it and bounced at 0.7 of its speed
     * user event 1 (floor or ceiling): coming down it kicks up dust and comes to rest as a
       `PickupContainer` pointing the way its blade fell; going up it starts to fall
@@ -15,12 +16,14 @@ defmodule Nidhox.Objects.DroppedWeapon do
     * leaving the room: gone
   """
 
-  alias Cauldron2D.GameMaker.{Draw, Instance, World}
+  alias Cauldron2D.GameMaker.{Data, Draw, Instance, World}
   alias Nidhox.Gml
   alias Nidhox.Man.{Physics, Weapon}
   alias Nidhox.Objects.Particles
 
-  @sword_sprite 153
+  @sword_sprite "sFlyingSword"
+  @sword_image_speed 0.1
+  @room_margin 64
 
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
@@ -39,7 +42,16 @@ defmodule Nidhox.Objects.DroppedWeapon do
   @spec pick_graphic(World.t(), non_neg_integer()) :: World.t()
   def pick_graphic(world, self) do
     if Gml.var(world, self, :type) == 2,
-      do: World.update(world, self, &%{&1 | sprite_index: @sword_sprite}),
+      do:
+        World.update(
+          world,
+          self,
+          &%{
+            &1
+            | sprite_index: Data.index(world.data, :sprites, @sword_sprite),
+              image_speed: @sword_image_speed
+          }
+        ),
       else: world
   end
 
@@ -63,8 +75,11 @@ defmodule Nidhox.Objects.DroppedWeapon do
       |> Physics.end_step(self)
 
     case World.fetch(world, self) do
-      %Instance{y: y} -> if y > room_height(world), do: World.destroy(world, self), else: world
-      nil -> world
+      %Instance{} = weapon ->
+        if outside_room?(world, weapon), do: World.destroy(world, self), else: world
+
+      nil ->
+        world
     end
   end
 
@@ -94,6 +109,8 @@ defmodule Nidhox.Objects.DroppedWeapon do
 
   defp gone(world, self, _other), do: World.destroy(world, self)
 
-  defp room_height(world),
-    do: world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size) |> elem(1)
+  defp outside_room?(world, %Instance{x: x, y: y}) do
+    {width, height} = world.data.rooms |> Enum.at(world.room) |> Map.fetch!(:size)
+    y > height or x < -@room_margin or x > width + @room_margin
+  end
 end

@@ -6,14 +6,14 @@ defmodule Nidhox.Bout do
 
     * `start_arcade/1`: a single player run begun; `area_of_level/1` the area of a
       `System.level`
-    * `start/4`: `System`'s settings for the match — the flow (`4` versus and online,
+    * `start/4`: `System`'s settings for the match — the flow (`62831853` CPU BATTLE, `4` versus and online,
       `2` single player, `1` the title's demonstration), the area's level (castle 20,
-      mines 21, sky 22, wilds 23, cemetery 25), the time limit in frames and the variant
+      mines 21, sky 22, wilds 23, cemetery 25, castle stairs 26), the time limit in frames and the variant
       switches (`Nidhox.Rules.system/1`) — then the match started
       (`Nidhox.Objects.Match.start_match/1`) and the area's centre room entered
     * `start_tournament/4`: START TOURNAMENT as the main menu does it — `System`'s
       settings with flow 3 and the area's level, `global.players` the number of players,
-      a room transition (`FinalFantasyVIIITransition`) and `rTournamentIntro` entered,
+      a room transition (`ScreenWipe`) and `rTournamentIntro` entered,
       whose code makes the `Nidhox.Objects.Tournament`
     * `running?/1`: whether the match is still going (its `Match` exists)
     * `winner/1`: the winning player (`MatchStats.winningPlayerIndex`), `nil` before one
@@ -26,8 +26,15 @@ defmodule Nidhox.Bout do
   alias Nidhox.Objects.{Arcade, Match, MatchStats}
   alias Nidhox.Rules
 
-  @levels %{"Castle" => 20, "Mines" => 21, "Sky" => 22, "Wilds" => 23, "Cemetery" => 25}
-  @flows %{versus: 4, online: 4, tournament: 3, arcade: 2, demo: 1}
+  @levels %{
+    "Castle" => 20,
+    "Mines" => 21,
+    "Sky" => 22,
+    "Wilds" => 23,
+    "Cemetery" => 25,
+    "CastleStairs" => 26
+  }
+  @flows %{versus: 4, online: 4, tournament: 3, arcade: 2, demo: 1, cpu_battle: 62_831_853}
 
   @doc "The world with a match begun in area `area` under `rules`, for the screens' `mode`."
   @spec start(World.t(), String.t(), Rules.t(), atom()) :: World.t()
@@ -73,7 +80,7 @@ defmodule Nidhox.Bout do
 
     world
     |> World.put_global(:players, players)
-    |> World.create(World.object_index(world, "FinalFantasyVIIITransition"), {0, 0})
+    |> World.create(World.object_index(world, "ScreenWipe"), {0, 0})
     |> elem(0)
     |> Rooms.enter(Data.index(world.data, :rooms, "rTournamentIntro"))
   end
@@ -140,10 +147,11 @@ defmodule Nidhox.Bout do
   @doc "The area a room named `name` belongs to; `nil` for a room that is no area's, and for no room at all."
   @spec area(String.t() | nil) :: String.t() | nil
   def area(nil), do: nil
+  def area("rCastleStairs"), do: "CastleStairs"
 
   def area(name) do
     case Regex.run(
-           ~r/^r([A-Z][a-z]+)(LeftEnd|LeftC|LeftB|LeftA|Center|RightA|RightB|RightC|RightEnd|SuddenDeath)$/,
+           ~r/^r([A-Z][a-z]+(?:Stairs)?)(LeftEnd|LeftC|LeftB|LeftA|Center|RightA|RightB|RightC|RightEnd|SuddenDeath)$/,
            name
          ) do
       [_, area, _part] -> area

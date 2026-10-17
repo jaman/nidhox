@@ -1,6 +1,6 @@
 defmodule Nidhox.Objects.HeldWeapon do
   @moduledoc """
-  The game's `HeldWeapon` and its `YellowHeldWeapon` and `OrangeHeldWeapon`: the weapon a
+  The game's `HeldWeapon`: the weapon a
   fencer (`mother`) holds, placed each step by the fencer's update
   (`Nidhox.Man.Weapon.x_pos/2`, `y_pos/2`) and run by the match's frame as user event 2.
 
@@ -8,27 +8,30 @@ defmodule Nidhox.Objects.HeldWeapon do
       `waitToSmear` 1, cleared by alarm 0 a step later; `mother` none; `visiblePrevious`
       0, `xScalePrevious` 1; `previousX`, `previousY` where it is; its tip (`tipX`, `tipY`)
       a sprite's width ahead; `tipYSpd` and `bounce` 0
-    * user event 2: fists show sprite 292, a sword 150 (151 going down stairs, 152 going
-      up); `visiblePrevious` and `xScalePrevious` kept; the tip springs towards the
-      weapon's height (less the fencer's `stairYModifier`): fencing, it sways by
-      `sin(facing × System.frame × 0.2) × 0.5`, a pixel higher held high and lower held
-      low. Settled (`bounce` rounding to 0) the tip's speed keeps 0.6 of itself and takes
-      0.4 of the gap, held to ±30; bouncing, 0.3 and 0.6, held to ±50. The tip sits a
-      sprite's width ahead and moves by its speed
+    * user event 2: fists show `blankSprite`, a sword `sSword` at image speed 0.1;
+      `visiblePrevious` and `xScalePrevious` kept; the tip springs towards the weapon's
+      height (plus the fencer's `stairYModifier`): fencing (state 29, 30 or 31), it sways
+      by `sin(facing × System.frame × 0.2) × 0.5`, a pixel higher held high and lower
+      held low. Settled (`bounce` rounding to 0) the tip's speed keeps 0.6 of itself and
+      takes 0.4 of the gap, held to ±30; bouncing, 0.3 and 0.6, held to ±50. The tip sits
+      a sprite's width ahead and moves by its speed. `image_angle` is 0, or on stairs the
+      stairs' sword direction (`stairSwordDir`) with 180 degrees more when the weapon
+      faces left
     * draw: nothing for fists; a sword drawn at its place turned towards its tip (half a
       turn more facing left)
   """
 
-  alias Cauldron2D.GameMaker.{Draw, Instance, World}
+  alias Cauldron2D.GameMaker.{Data, Draw, Instance, World}
   alias Nidhox.Gml
+  alias Nidhox.Man.Stairs
   alias Nidhox.Objects.System
 
   @fist_x [0, 1, 2, 3, 4, 4, 5, 5, 5, 5, 4, 4, 3, 0]
   @sword_x [3, 5, 7, 11, 13, 17, 17, 17, 17, 13, 11, 7, 5, 3, 0, 0]
-  @fists_sprite 292
-  @sword_sprite 150
-  @down_stairs_sprite 151
-  @up_stairs_sprite 152
+  @fists_sprite "blankSprite"
+  @sword_sprite "sSword"
+  @sword_image_speed 0.1
+  @fencing_states [29, 30, 31]
 
   @doc "The compiled names this module answers for, with their functions."
   @spec handlers() :: [{String.t(), Cauldron2D.GameMaker.Code.handler()}]
@@ -66,7 +69,7 @@ defmodule Nidhox.Objects.HeldWeapon do
   defp smear_ready(world, self, _other), do: Gml.put(world, self, %{waitToSmear: 0})
 
   defp update(world, self, _other) do
-    world = World.update(world, self, &%{&1 | sprite_index: sprite(world, self)})
+    world = show_sprite(world, self)
     %Instance{y: y, visible: visible, image_xscale: xscale} = World.fetch(world, self)
     mother = Gml.var(world, self, :mother, -4)
 
@@ -77,32 +80,63 @@ defmodule Nidhox.Objects.HeldWeapon do
     world
     |> Gml.put(self, %{visiblePrevious: if(visible, do: 1, else: 0), xScalePrevious: xscale})
     |> spring(self, target)
+    |> lean_on_stairs(self, mother)
   end
 
-  defp sprite(world, self) do
+  defp show_sprite(world, self) do
     case Gml.var(world, self, :type) do
-      2 -> sword_sprite(world, Gml.var(world, self, :mother, -4))
-      _fists -> @fists_sprite
+      1 ->
+        World.update(world, self, &%{&1 | sprite_index: sprite_index(world, @fists_sprite)})
+
+      2 ->
+        World.update(
+          world,
+          self,
+          &%{
+            &1
+            | sprite_index: sprite_index(world, @sword_sprite),
+              image_speed: @sword_image_speed
+          }
+        )
+
+      _other ->
+        world
     end
   end
 
-  defp sword_sprite(world, mother) do
-    on_stairs =
-      World.fetch(world, mother) != nil and
-        World.object(world, World.fetch(world, mother).object).name in [
-          "YellowPlayer",
-          "OrangePlayer"
-        ]
+  defp sprite_index(world, name), do: Data.index(world.data, :sprites, name)
 
-    case on_stairs && Gml.var(world, mother, :state) do
-      31 -> @down_stairs_sprite
-      30 -> @up_stairs_sprite
-      _other -> @sword_sprite
+  defp lean_on_stairs(world, self, mother) do
+    world = World.update(world, self, &%{&1 | image_angle: 0})
+
+    with %Instance{} <- World.fetch(world, mother),
+         stairs when stairs != nil <- Stairs.under(world, mother) do
+      turn = if World.fetch(world, self).image_xscale < 0, do: 180, else: 0
+
+      World.update(
+        world,
+        self,
+        &%{&1 | image_angle: sword_direction(world, mother, stairs) + turn}
+      )
+    else
+      _off_stairs -> world
+    end
+  end
+
+  defp sword_direction(world, mother, stairs) do
+    rise = :math.atan(Stairs.ratio(world, stairs)) * 180 / :math.pi()
+    up? = Stairs.facing_up?(world, mother, stairs)
+
+    case {Gml.var(world, mother, :facingXScale) > 0, up?} do
+      {true, true} -> rise
+      {true, false} -> -rise
+      {false, true} -> 180 - rise
+      {false, false} -> 180 + rise
     end
   end
 
   defp sway(target, world, mother) do
-    if Gml.var(world, mother, :state) == 29 do
+    if Gml.var(world, mother, :state) in @fencing_states do
       facing = Gml.var(world, mother, :facingXScale, 1)
       wobble = :math.sin(facing * System.get(world, :frame) * 0.2) * 0.5
 

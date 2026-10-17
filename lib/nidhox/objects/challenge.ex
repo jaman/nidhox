@@ -41,7 +41,7 @@ defmodule Nidhox.Objects.Challenge do
   one pixel to each side in the outline colour, then over them in its own.
   """
 
-  alias Cauldron2D.GameMaker.{Colour, Draw, Instance, World}
+  alias Cauldron2D.GameMaker.{Colour, Data, Draw, Instance, World}
   alias Nidhox.Bout.{Camera, PlayerColour, Sound}
   alias Nidhox.Gml
   alias Nidhox.Objects.{Particles, System}
@@ -64,8 +64,8 @@ defmodule Nidhox.Objects.Challenge do
   @recovery_every 20
   @tween_up 3
   @tween_down 9
-  @good 124
-  @new_highscore 125
+  @good "sfx8bitGood"
+  @new_highscore "sfx8bitNewHighscore"
   @popup_rise 48
   @popup_turn 20
   @popup_life 60
@@ -310,8 +310,15 @@ defmodule Nidhox.Objects.Challenge do
 
   defp sound(world, sound) do
     case Gml.first(world, "Ear") do
-      nil -> world
-      ear -> Sound.play(world, sound, {World.fetch(world, ear).x, World.fetch(world, ear).y})
+      nil ->
+        world
+
+      ear ->
+        Sound.play(
+          world,
+          Data.index(world.data, :sounds, sound),
+          {World.fetch(world, ear).x, World.fetch(world, ear).y}
+        )
     end
   end
 

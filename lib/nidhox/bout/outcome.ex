@@ -3,27 +3,29 @@ defmodule Nidhox.Bout.Outcome do
   How a match is decided, as the game's scripts decide it:
 
     * `faceoff/2` (`update_faceoff`): while the match is in its faceoff, `faceoffTimer`
-      counts down and the faceoff ends at 0; every 60th count the tick is heard at the
-      `Ear` (24)
+      counts down and the faceoff ends at 0; every 60th count the tick (`sndPickup`) is heard at
+      the `Ear`
     * `victory_lap?/1` (`inVictoryLap`): in an end room (room codes 4 and 7)
     * `sudden_death/2` (`startSuddenDeath`): the clock stops (`countDownTimer` 0), a
       fresh faceoff (`faceoff` 1, `faceoffTimer` 0), nobody leads, `sudden_death` 1,
       and the bout goes to the area's sudden death room by `System.level`: 20 the
-      castle's, 21 the mines', 22 the sky's, 23 the wilds', 25 the cemetery's
-    * `winner/2` (`showWinningPlayerIndex`): unless a winner is already shown
-      (`ShowMatchStats`), the player is the match's winner (`MatchStats`), the match is
-      `finished` and ends 180 steps on (its alarm 0), the winner is shown
-      (`ShowMatchStats`), a tournament's `nextWinner` is the tournament player on
-      that side (`Nidhox.Objects.Tournament.won/2`), and
-      `System.winningPlayerHistory` and `System.wins` (by player and level) record it
+      castle's, 21 the mines', 22 the sky's, 23 the wilds', 25 the cemetery's, 26 the castle
+      stairs'
+    * `winner/2` (`showWinningPlayerIndex`): the `Match` is `finished` with the player as
+      its `winner`; unless a winner is already shown (`ShowMatchStats`), the player is
+      the match's winner (`MatchStats`), the winner is shown (`ShowMatchStats`), a
+      tournament's `nextWinner` is the tournament player on that side
+      (`Nidhox.Objects.Tournament.won/2`), and `System.winningPlayerHistory` and
+      `System.wins` (by player and level) record it. The match ends once
+      `Nidhox.Bout.Frame` sets its `matchOver`.
   """
 
-  alias Cauldron2D.GameMaker.{Instance, World}
+  alias Cauldron2D.GameMaker.World
   alias Nidhox.Bout.{Rooms, Sound}
   alias Nidhox.Gml
   alias Nidhox.Objects.{Ear, MatchStats, RoomCodes, System, Tournament}
 
-  @tick 24
+  @tick "sndPickup"
   @tick_every 60
   @end_rooms [4, 7]
   @sudden_death_rooms %{
@@ -31,9 +33,9 @@ defmodule Nidhox.Bout.Outcome do
     21 => "rMinesSuddenDeath",
     22 => "rSkySuddenDeath",
     23 => "rWildsSuddenDeath",
-    25 => "rCemeterySuddenDeath"
+    25 => "rCemeterySuddenDeath",
+    26 => "rCastleStairsSuddenDeath"
   }
-  @ending_steps 180
 
   @doc "The world after the match `match`'s faceoff counts down (`update_faceoff`)."
   @spec faceoff(World.t(), non_neg_integer()) :: World.t()
@@ -44,7 +46,7 @@ defmodule Nidhox.Bout.Outcome do
       world = if timer <= 0, do: Gml.put(world, match, %{faceoff: 0}), else: world
 
       if Gml.eq?(:math.fmod(timer, @tick_every), 0),
-        do: Sound.play(world, @tick, Ear.position(world)),
+        do: Sound.play_named(world, @tick, Ear.position(world)),
         else: world
     else
       world
@@ -76,26 +78,23 @@ defmodule Nidhox.Bout.Outcome do
   @doc "The world with `player` shown as the match's winner (`showWinningPlayerIndex`)."
   @spec winner(World.t(), integer()) :: World.t()
   def winner(%World{} = world, player) do
+    world = finish(world, player)
+
     if Gml.exists?(world, "ShowMatchStats") do
       world
     else
       world
       |> MatchStats.put_winner(player)
-      |> finish()
       |> then(&elem(World.create(&1, World.object_index(&1, "ShowMatchStats"), {0, 0}), 0))
       |> Tournament.won(player)
       |> record(player)
     end
   end
 
-  defp finish(world) do
+  defp finish(world, player) do
     world
     |> Gml.all("Match")
-    |> Enum.reduce(world, fn match, world ->
-      world
-      |> Gml.put(match, %{finished: 1})
-      |> World.update(match, &Instance.put_alarm(&1, 0, @ending_steps))
-    end)
+    |> Enum.reduce(world, &Gml.put(&2, &1, %{finished: 1, winner: player}))
   end
 
   defp record(world, player) do

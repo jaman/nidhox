@@ -1,8 +1,9 @@
 defmodule Nidhox.Assets do
   @moduledoc """
   The game's data file, read once from the player's own copy and shared by every
-  process: its resources, every picture cut from its texture pages, and the depths its
-  objects are created at (`Nidhox.ObjectDepths`).
+  process: its resources, every picture cut from its texture pages, the depths its
+  objects are created at (`Nidhox.ObjectDepths`), and its news (`Nidhox.News`), read from
+  the game's executable.
 
       {:ok, assets} = Nidhox.Assets.load("path/to/data.win")
       Nidhox.Assets.get().data.rooms
@@ -19,13 +20,14 @@ defmodule Nidhox.Assets do
   @knee 6
 
   @enforce_keys [:path, :data, :pictures, :object_depths]
-  defstruct [:path, :data, :pictures, :pages, :object_depths]
+  defstruct [:path, :data, :pictures, :pages, :object_depths, news: []]
 
   @type t :: %__MODULE__{
           path: Path.t(),
           data: Data.t(),
           pictures: %{term() => FrenchCurve.Raster.t()},
-          object_depths: %{String.t() => number()}
+          object_depths: %{String.t() => number()},
+          news: [Nidhox.News.item()]
         }
 
   @doc "The data file to read, or `nil` when none is given, configured or installed."
@@ -33,13 +35,15 @@ defmodule Nidhox.Assets do
   def find(path), do: path || Application.get_env(:nidhox, :data)
 
   @doc """
-  Read the data file at `path`, its object depths (`Nidhox.ObjectDepths.read/2`) and cut
-  its pictures, and install them for every process. Returns the first error met.
+  Read the data file at `path`, its object depths (`Nidhox.ObjectDepths.read/2`) and its
+  news (`Nidhox.News.read/1`), cut its pictures, and install them for every process. A
+  copy whose executable has no news has none. Returns the first error met.
   """
   @spec load(Path.t()) :: {:ok, t()} | {:error, term()}
   def load(path) do
     with {:ok, data} <- Data.read(path),
          {:ok, object_depths} <- Nidhox.ObjectDepths.read(path, data),
+         {:ok, news} <- news(path, data),
          {:ok, pages} <- Pictures.new(data) do
       pictures = Pictures.table(pages, data)
 
@@ -48,11 +52,24 @@ defmodule Nidhox.Assets do
         data: data,
         pictures: pictures,
         pages: pages,
-        object_depths: object_depths
+        object_depths: object_depths,
+        news: news
       }
 
       :persistent_term.put(@key, assets)
       {:ok, assets}
+    end
+  end
+
+  defp news(_path, %Data{general: %{format: :gms1}}), do: {:ok, []}
+
+  defp news(path, _data) do
+    with {:ok, executable} <- Nidhox.ObjectDepths.executable(path) do
+      case Nidhox.News.read(executable) do
+        {:ok, items} -> {:ok, items}
+        {:error, :no_news} -> {:ok, []}
+        {:error, reason} -> {:error, reason}
+      end
     end
   end
 

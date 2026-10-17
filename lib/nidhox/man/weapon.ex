@@ -5,32 +5,32 @@ defmodule Nidhox.Man.Weapon do
 
     * `set_type/3` (`set_weapon_type`)
     * `x_pos/2` (`lookup_weapon_x_pos`): 8 pixels ahead of the fencer, 2 fewer going down
-      stairs (31) and 2 more going up (30); lunging (48) or in the unarmed stance (78), the
+      stairs (31) and 5 more going up (30); lunging (48) or in the unarmed stance (78), the
       fist (`fistX`) or sword (`swordX`) reach for the frame, the sword's one more from
       high
     * `y_pos/2` (`lookup_weapon_y_pos`): fists 19 above the feet; a sword 6 above
-      crouched, 34 in the air, by stance while fencing or lunging (high 25, middle 19,
-      low 12), 34 cocked to throw (54), and on stairs the stance height less 2 going down
-      (high 27, middle 19, low 12) or more 11 going up (14, 8, 1); 19 otherwise. It keeps
-      the weapon's height before as `weaponYPrevious`
+      crouched, 34 in the air, by stance while fencing, lunging or on stairs (30, 31)
+      (high 25, middle 19, low 12), 34 cocked to throw (54); 19 otherwise. The world comes
+      back as given
     * `drop/2` (`drop_weapon`): a sword falls from where it is held as a
       `DroppedWeapon` with the fencer's speed (2 more upwards), and the fencer is left
       with its fists
     * `spawn_dropped/5` (`spawn_DroppedWeapon`): a `DroppedWeapon` at a point with a
       speed, its `image_xscale` held to ±1
     * `throw/2` (`throwSword`): the fencer lets go of its sword (fists), plays the throw
-      (59, 114), faces its opponent and sends a flying sword of its colour from its
-      weapon's reach, 25 above its feet, at a quarter of its own speed plus 4 ahead; the
-      fencer then moves 1.5 forward
+      (115, 114), faces its opponent and sends a flying sword of its colour from its
+      weapon's reach, 25 above its feet, at a quarter of its own speed plus 4 ahead, with
+      the weapon's type as the fists leave it; the flying sword follows the slope of stairs
+      near the fencer; the fencer then moves 1.5 forward
     * `spawn_pickup/3` (`spawn_PickupContainer`): a sword lying on the ground
-    * `try_pickup/2` (`tryToPickup`): a lying sword the fencer's body crosses is taken
-      up — the weapon becomes its type, the sword is gone, `buttonHeldCounter` is 2 and
-      the pick-up sound (64) plays
+    * `try_pickup/2` (`tryToPickup`): the lying sword the fencer's body crosses that lies
+      furthest left, the highest of those, is taken up — the weapon becomes its type, the
+      sword is gone, `stance` is 2 and the pick-up sound (73) plays
   """
 
   alias Cauldron2D.GameMaker.{Collide, Instance, World}
   alias Nidhox.Gml
-  alias Nidhox.Man.{Actions, Query}
+  alias Nidhox.Man.{Actions, Query, Stairs}
 
   @noone -4
   @fist_x [0, 1, 2, 3, 4, 4, 5, 5, 5, 5, 4, 4, 3, 0]
@@ -38,8 +38,6 @@ defmodule Nidhox.Man.Weapon do
   @reach 8
   @attacking [48, 78]
   @stance_y %{1 => 25, 3 => 19, 2 => 12}
-  @up_stairs_y %{1 => 27, 3 => 19, 2 => 12}
-  @down_stairs_y %{1 => 14, 3 => 8, 2 => 1}
 
   @doc "The world with fencer `man`'s weapon of type `type` (`set_weapon_type`)."
   @spec set_type(World.t(), non_neg_integer(), number()) :: World.t()
@@ -59,17 +57,10 @@ defmodule Nidhox.Man.Weapon do
     x + stairs * facing + reach(world, man, vars) * facing
   end
 
-  @doc "`{y, world}`: where down fencer `man`'s weapon is held, its height before kept (`lookup_weapon_y_pos`)."
+  @doc "`{y, world}`: where down fencer `man`'s weapon is held (`lookup_weapon_y_pos`)."
   @spec y_pos(World.t(), non_neg_integer()) :: {number(), World.t()}
   def y_pos(world, man) do
     %Instance{y: y} = World.fetch(world, man)
-
-    world =
-      case weapon(world, man) do
-        nil -> world
-        weapon -> Gml.put(world, man, %{weaponYPrevious: World.fetch(world, weapon).y})
-      end
-
     {y - held_height(world, man), world}
   end
 
@@ -118,15 +109,14 @@ defmodule Nidhox.Man.Weapon do
   @doc "The world after fencer `man` throws its sword (`throwSword`)."
   @spec throw(World.t(), non_neg_integer()) :: World.t()
   def throw(world, man) do
-    type = World.fetch(world, weapon(world, man)).vars |> Map.get(:type, 1)
-
     world =
       world
       |> set_type(man, 1)
-      |> Actions.play(man, 59)
+      |> Actions.play(man, 115)
       |> Actions.play(man, 114)
       |> Query.face_opponent(man)
 
+    type = World.fetch(world, weapon(world, man)).vars |> Map.get(:type, 1)
     vars = World.fetch(world, man).vars
     facing = Map.get(vars, :facingXScale, 1)
     hspd = Map.get(vars, :hspd, 0)
@@ -147,7 +137,10 @@ defmodule Nidhox.Man.Weapon do
   def try_pickup(world, man) do
     flesh = Gml.var(world, man, :flesh, @noone)
 
-    case Enum.find(pickups(world), &crossing?(world, &1, flesh)) do
+    case world
+         |> pickups()
+         |> Enum.filter(&crossing?(world, &1, flesh))
+         |> leftmost_highest(world) do
       nil ->
         world
 
@@ -157,8 +150,8 @@ defmodule Nidhox.Man.Weapon do
         world
         |> set_type(man, type)
         |> World.destroy(pickup)
-        |> Gml.put(man, %{buttonHeldCounter: 2})
-        |> Actions.play(man, 64)
+        |> Gml.put(man, %{stance: 2})
+        |> Actions.play(man, 73)
     end
   end
 
@@ -173,7 +166,12 @@ defmodule Nidhox.Man.Weapon do
       end
 
     {world, id} = World.create(world, object, {x_pos(world, man), y - 25})
-    world = Gml.put(world, id, %{hspd: hspd, type: type})
+
+    world =
+      world
+      |> Gml.put(id, %{hspd: hspd, type: type})
+      |> follow_stairs(man, id, hspd)
+
     %Instance{x: fx, y: fy} = World.fetch(world, id)
 
     world =
@@ -184,6 +182,31 @@ defmodule Nidhox.Man.Weapon do
     {world, id}
   end
 
+  defp follow_stairs(world, man, flying, hspd) do
+    case Stairs.near(world, man) do
+      nil ->
+        world
+
+      stairs ->
+        slope = Stairs.slope(world, stairs)
+        %Instance{x: man_x} = World.fetch(world, man)
+
+        world
+        |> World.update(flying, &%{&1 | y: &1.y + slope * (&1.x - man_x)})
+        |> Gml.put(flying, %{vspd: hspd * slope})
+    end
+  end
+
+  defp leftmost_highest([], _world), do: nil
+
+  defp leftmost_highest(pickups, world),
+    do: Enum.min_by(pickups, &pickup_order(world, &1))
+
+  defp pickup_order(world, pickup) do
+    %Instance{x: x, y: y} = World.fetch(world, pickup)
+    Gml.round(x * 100) * 1_000_000 + Gml.round(y * 100)
+  end
+
   defp weapon(world, man) do
     case Gml.var(world, man, :weapon, @noone) do
       id when is_integer(id) and id >= 0 -> if World.fetch(world, id), do: id
@@ -192,7 +215,7 @@ defmodule Nidhox.Man.Weapon do
   end
 
   defp stairs_offset(31), do: -2
-  defp stairs_offset(30), do: 2
+  defp stairs_offset(30), do: 5
   defp stairs_offset(_state), do: 0
 
   defp reach(world, man, vars) do
@@ -241,10 +264,10 @@ defmodule Nidhox.Man.Weapon do
     end
   end
 
-  defp standing_height(state, stance) when state in [29, 48], do: Map.get(@stance_y, stance, 19)
+  defp standing_height(state, stance) when state in [29, 48, 31, 30],
+    do: Map.get(@stance_y, stance, 19)
+
   defp standing_height(54, _stance), do: 34
-  defp standing_height(31, stance), do: Map.get(@up_stairs_y, stance, 19)
-  defp standing_height(30, stance), do: Map.get(@down_stairs_y, stance, 19)
   defp standing_height(_state, _stance), do: 19
 
   defp pickups(world) do

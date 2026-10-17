@@ -8,28 +8,33 @@ defmodule Nidhox.Man do
     * create: the physics variables; a body made where it stands, its `mother`; no
       weapon; on the ground; stance middle (3), facing right, entering the screen (23)
       with 180 steps to do it in; its collapse picked by `System.frame`
-      (`collapseAnimation`, 208–210); `forceOutTimer` 120; the rest of its counters and
-      flags 0. Yellow: player 1, its weapon a hidden `YellowHeldWeapon`, the match's
+      (`collapseAnimation`, `sManCollapse` to `sManCollapse4`); `forceOutTimer` 120;
+      `weaponYRel` and `weaponYRelPrevious` 0; `onLog` and `inLog` from where it stands;
+      the rest of its counters and flags 0. Yellow: player 1, its body tinted by
+      `Nidhox.Man.Flesh.color/3`, its weapon a hidden `YellowHeldWeapon`, the match's
       `yellowInstance`. Orange: player 2 facing left, an `OrangeHeldWeapon`, the match's
       `orangeInstance`
     * user events 0 and 1: run into a wall, onto a floor or a ceiling
       (`Nidhox.Man.Physics.collide_x/2`, `collide_y/2`)
     * user event 2, its update: whether it crouched (`lastCrouched`); crouching (9, 58,
-      10, 11) and not hurt it takes the low mask (270), else the full one (269); entering
+      10, 11) and not hurt it takes the low mask (`sManMaskDucking`), else the full one (`sManMask`); entering
       the screen too long (`timeEnteringScreen`) it runs (52); the physics begin step;
       `stairYModifier` 0; its next state (`Nidhox.Man.Enter`), its state's behaviour
       (`Nidhox.Man.Behave`) and friction (`Nidhox.Man.Friction`); the physics end step;
       its body brought to where it is; its weapon placed (`Nidhox.Man.Weapon.x_pos/2`,
-      `y_pos/2`), set bouncing (`random_range(0, 1)`) when its height changed, facing its
-      way, and — shown, off stairs — pushing it back 2 pixels when its blade's end is in
+      `y_pos/2`, then raised by `Nidhox.Man.Stairs.hand_rise/2`), set bouncing
+      (`random_range(0, 1)`) when its height above the fencer (`weaponYRel`, before the
+      stairs' rise) changed, facing its way, and — shown, off stairs
+      (`Nidhox.Man.Stairs.on?/2`) — pushing it back 2 pixels when its blade's end is in
       a wall. Warping in (79) nothing more; otherwise, not collapsing, a `Smoosher` above
       its head pushes it down a pixel at a time while there is room below its feet and
       crushes it (66) when there is none, a `SpikeSmoosher` the same; every 120 steps
       (`forceOutTimer`) one stuck in a wall is put out of it (`force_out`) and falls
-      (18); with the AI about, whether it stands on or in a log (`onLog`, `inLog`); in
+      (18); with the AI about, whether it stands on or in a log (`onLog`, `inLog`: a `TopOfLogArea` or
+      an `InsideLogArea` 8 pixels above its feet); in
       level 22 a cloud underfoot is `touched`
-    * end step: with trails on, a fading copy of its body (`Trail`); every tenth
-      `System.metaFrame` it is lifted out of any `Block` it is in
+    * end step: with trails on, or player 2 on a level against personality 5646466, a
+      fading copy of its body (`Trail`)
     * draw: while a blade it is stabbed on touches (`swordCollision`), the blade going in
       (`sSwordOverlay`) drawn where the blade is, its frame the depth (held to 0–16)
     * destroy: its body and weapon go with it; the match forgets it
@@ -39,15 +44,16 @@ defmodule Nidhox.Man do
   alias Nidhox.Bout.Variants
   alias Nidhox.Brain.Personality
   alias Nidhox.Gml
-  alias Nidhox.Man.{Behave, Enter, Friction, Physics, Push, Query, State, Weapon}
-  alias Nidhox.Objects.{Challenge, System}
+  alias Nidhox.Man.{Behave, Enter, Flesh, Friction, Physics, Push, Query, Stairs, State, Weapon}
+  alias Nidhox.Objects.{Arcade, Challenge, System}
 
   @noone -4
-  @low_mask 270
-  @full_mask 269
+  @low_mask 289
+  @full_mask 288
   @crouching [9, 58, 10, 11]
-  @collapses [208, 209, 210, 369]
-  @overlay 155
+  @collapses [234, 235, 236, 237]
+  @overlay 469
+  @changing_personality 5_646_466
   @force_out_every 120
 
   @doc "The compiled names this module answers for, with their functions."
@@ -106,10 +112,12 @@ defmodule Nidhox.Man do
       turnAroundTimer: 0,
       stairYModifier: 0,
       forceOutTimer: @force_out_every,
+      weaponYRel: 0,
+      weaponYRelPrevious: 0,
       lastCrouched: 0,
       stateCounter: 0
     })
-    |> logs(self)
+    |> log_flags(self)
   end
 
   defp player(world, self, _other, index) do
@@ -126,6 +134,8 @@ defmodule Nidhox.Man do
       )
 
     world = Gml.put(world, self, %{playerIndex: index})
+    {colour, world} = Flesh.color(world, self, self)
+    world = World.update(world, State.get(world, self, :flesh), &%{&1 | image_blend: colour})
     world = if index == 2, do: Gml.put(world, self, %{facingXScale: -1}), else: world
     world = with_match(world, &Gml.put(&1, &2, %{slot => self}))
     %Instance{x: x, y: y} = World.fetch(world, self)
@@ -224,17 +234,24 @@ defmodule Nidhox.Man do
 
     case World.fetch(world, weapon) do
       nil -> world
-      %Instance{y: before} -> hold(world, self, weapon, before)
+      %Instance{} -> hold(world, self, weapon)
     end
   end
 
-  defp hold(world, self, weapon, before) do
+  defp hold(world, self, weapon) do
     world = World.update(world, weapon, &%{&1 | x: Weapon.x_pos(world, self)})
+    previous = State.get(world, self, :weaponYRel)
+    world = State.put(world, self, %{weaponYRelPrevious: previous})
     {y, world} = Weapon.y_pos(world, self)
     world = World.update(world, weapon, &%{&1 | y: y})
+    %Instance{y: man_y} = World.fetch(world, self)
+    relative = Gml.round(y - man_y)
+    world = State.put(world, self, %{weaponYRel: relative})
+    rise = Stairs.hand_rise(world, self)
+    world = World.update(world, weapon, &%{&1 | y: &1.y + rise})
 
     world =
-      if Gml.eq?(y, before) do
+      if relative == previous do
         world
       else
         {bounce, world} = Gml.random_range(world, 0, 1)
@@ -249,7 +266,7 @@ defmodule Nidhox.Man do
   defp blade_in_wall(world, self, weapon, facing) do
     %Instance{x: x, y: y, visible: visible} = blade = World.fetch(world, weapon)
 
-    if visible and not on_stairs?(world, self) and
+    if visible and not Stairs.on?(world, self) and
          Physics.block_at?(world, {x + sprite_width(world, blade) * 0.9, y}),
        do: world |> Push.force_shift(self, -facing * 2) |> elem(1),
        else: world
@@ -329,17 +346,15 @@ defmodule Nidhox.Man do
     end
   end
 
-  defp logs(world, self) do
-    if exists?(world, "Brain") do
-      %Instance{x: x, y: y} = World.fetch(world, self)
+  defp logs(world, self), do: if(exists?(world, "Brain"), do: log_flags(world, self), else: world)
 
-      State.put(world, self, %{
-        onLog: if(at_point(world, {x, y - 8}, "TopOfLog"), do: 1, else: 0),
-        inLog: if(at_point(world, {x, y - 8}, "InsideLog"), do: 1, else: 0)
-      })
-    else
-      world
-    end
+  defp log_flags(world, self) do
+    %Instance{x: x, y: y} = World.fetch(world, self)
+
+    State.put(world, self, %{
+      onLog: if(at_point(world, {x, y - 8}, "TopOfLogArea"), do: 1, else: 0),
+      inLog: if(at_point(world, {x, y - 8}, "InsideLogArea"), do: 1, else: 0)
+    })
   end
 
   defp touch_cloud(world, self) do
@@ -356,14 +371,22 @@ defmodule Nidhox.Man do
     end
   end
 
-  defp end_step(world, self, _other) do
-    world
-    |> trail(self)
-    |> lift_when_stuck(self)
+  defp end_step(world, self, _other), do: trail(world, self)
+
+  defp trails?(world, self) do
+    (Variants.active?(world) and Gml.truthy?(System.get(world, :trails))) or
+      (State.get(world, self, :playerIndex) == 2 and changing_personality?(world))
+  end
+
+  defp changing_personality?(world) do
+    case Gml.first(world, "ArcadeMode") do
+      nil -> false
+      arcade -> Arcade.contains?(world, Gml.var(world, arcade, :level), @changing_personality)
+    end
   end
 
   defp trail(world, self) do
-    if Variants.active?(world) and Gml.truthy?(System.get(world, :trails)) do
+    if trails?(world, self) do
       %Instance{x: x, y: y} = World.fetch(world, self)
       body = World.fetch(world, State.get(world, self, :flesh))
       {world, trail} = World.create(world, World.object_index(world, "Trail"), {x, y})
@@ -381,20 +404,6 @@ defmodule Nidhox.Man do
     else
       world
     end
-  end
-
-  defp lift_when_stuck(world, self) do
-    if rem(trunc(System.get(world, :metaFrame)), 10) == 0 and exists?(world, "Block"),
-      do: lift(world, self),
-      else: world
-  end
-
-  defp lift(world, self) do
-    %Instance{x: x, y: y} = World.fetch(world, self)
-
-    if meeting?(world, self, {x, y}, "Block"),
-      do: world |> World.update(self, &%{&1 | y: Float.floor(&1.y * 1.0) - 1}) |> lift(self),
-      else: world
   end
 
   defp draw(world, self, _other) do
@@ -460,8 +469,6 @@ defmodule Nidhox.Man do
       _none -> world
     end
   end
-
-  defp on_stairs?(world, self), do: State.get(world, self, :state) in [30, 31]
 
   defp exists?(world, name) do
     case World.object_index(world, name) do

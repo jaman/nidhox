@@ -4,9 +4,15 @@ defmodule Nidhox.Objects.LayeredMusic do
   as layers that play together, each at its own level.
 
     * create: `mode` "random", `counter`, `maximumVol`, `movementCounter` 0,
-      `firstChoice` 1, `dipLevels` 1, not playing; its `layers` by `System.level` —
-      Cemetery (25) drums, distant melody, melody (sounds 1, 154, 0); Castle (20) 130–133;
-      Mines (21) 138–141, 135–137; Sky (22) 149–152, 148; Wilds (23) 143–146
+      `firstChoice` 1, `dipLevels` 1, not playing; its `layers` by `System.level`, each a
+      sound of the data file named here — Cemetery (25) `music_Cemetery_Drums`,
+      `music_Cemetery_Distant`, `music_Cemetery_Melody`; Castle (20) and Castle Stairs
+      (26) `music_Castle_Drms1`, `music_Castle_Drms2`, `music_Castle_Synth1`,
+      `music_Castle_Synth2`; Mines (21) `music_Mines_Synth1`, `music_Mines_Synth2`,
+      `music_Mines_Synth4Part2`, `music_Mines_Synth4Part3`, `music_Mines_BasicDrums`,
+      `music_Mines_Drums4Part2`, `music_Mines_MechanicalLayer`; Sky (22)
+      `music_Clouds_SynthsPart1` to `Part4` and `music_Clouds_Drums`; Wilds (23)
+      `music_Forest_Drums`, `music_Forest_Synth1` to `Synth3`
     * room start, the first time: every layer starts looping (`audio_play_sound(layer,
       1, true)`), its `mixer` and `volumes` 0
     * end step, while playing: `dipMusic` by the fencers — with two, `0.25 +
@@ -18,28 +24,54 @@ defmodule Nidhox.Objects.LayeredMusic do
       room_width)²` in 7, × 0.25, nothing without a fencer; `counter` counts on,
       `maximumVol` and `dipLevels` move towards 1 (by 0.05 and 0.015 of the way). Then
       each layer's `volumes` moves 0.05 of the way to `mixer × fade × maximumVol` and the
-      layer plays at `volumes × System.musicVol` (`audio_sound_gain`)
+      layer plays at `volumes × musicGain` (`audio_sound_gain`), `musicGain` being `System.musicVol`, or 0 while the news menu (`NewsMenu`) plays a video
     * destroy and game end: every layer stopped
 
   Each layer is the copy's recording, looping at the client's music level
   (`Cauldron2D.Audio.keyed/4`'s `music: true`), all started together.
 
-  `dip/3` is `dipMusic`.
+  `dip/3` is `dipMusic`; `gain/1` is `musicGain`.
   """
 
   alias Cauldron2D.Audio
-  alias Cauldron2D.GameMaker.{Instance, World}
+  alias Cauldron2D.GameMaker.{Data, Instance, World}
   alias Nidhox.Bout.Camera
   alias Nidhox.Gml
   alias Nidhox.Music.Mixer
   alias Nidhox.Objects.{RoomCodes, System}
 
+  @castle [
+    "music_Castle_Drms1",
+    "music_Castle_Drms2",
+    "music_Castle_Synth1",
+    "music_Castle_Synth2"
+  ]
   @layers %{
-    25 => [1, 154, 0],
-    20 => [130, 131, 132, 133],
-    21 => [138, 139, 140, 141, 135, 136, 137],
-    22 => [149, 150, 151, 152, 148],
-    23 => [143, 144, 145, 146]
+    25 => ["music_Cemetery_Drums", "music_Cemetery_Distant", "music_Cemetery_Melody"],
+    20 => @castle,
+    26 => @castle,
+    21 => [
+      "music_Mines_Synth1",
+      "music_Mines_Synth2",
+      "music_Mines_Synth4Part2",
+      "music_Mines_Synth4Part3",
+      "music_Mines_BasicDrums",
+      "music_Mines_Drums4Part2",
+      "music_Mines_MechanicalLayer"
+    ],
+    22 => [
+      "music_Clouds_SynthsPart1",
+      "music_Clouds_SynthsPart2",
+      "music_Clouds_SynthsPart3",
+      "music_Clouds_SynthsPart4",
+      "music_Clouds_Drums"
+    ],
+    23 => [
+      "music_Forest_Drums",
+      "music_Forest_Synth1",
+      "music_Forest_Synth2",
+      "music_Forest_Synth3"
+    ]
   }
   @apart 280
   @pair_dip 0.25
@@ -82,6 +114,29 @@ defmodule Nidhox.Objects.LayeredMusic do
     end)
   end
 
+  @doc """
+  `musicGain`: the level music plays at, `System.musicVol`, or 0 while the news menu
+  (`NewsMenu`) has a video playing.
+  """
+  @spec gain(World.t()) :: number()
+  def gain(%World{} = world) do
+    if trailer_playing?(world), do: 0, else: System.get(world, :musicVol, 1)
+  end
+
+  defp trailer_playing?(world) do
+    case Gml.first(world, "NewsMenu") do
+      nil -> false
+      news -> Gml.var(world, news, :video, "") != ""
+    end
+  end
+
+  defp layer_sounds(world, level) do
+    @layers
+    |> Map.get(level, [])
+    |> Enum.map(&Data.index(world.data, :sounds, &1))
+    |> Enum.reject(&is_nil/1)
+  end
+
   defp start(world, self, _other) do
     Gml.put(world, self, %{
       mode: "random",
@@ -90,7 +145,7 @@ defmodule Nidhox.Objects.LayeredMusic do
       maximumVol: 0,
       movementCounter: 0,
       z: ear_z(world),
-      layers: Map.get(@layers, round(System.get(world, :level)), []),
+      layers: layer_sounds(world, round(System.get(world, :level))),
       mixer: %{},
       volumes: %{},
       playingMusic: 0,
@@ -215,7 +270,7 @@ defmodule Nidhox.Objects.LayeredMusic do
   end
 
   defp sounded(world, self) do
-    music_volume = System.get(world, :musicVol, 1)
+    music_volume = gain(world)
     gains = Gml.var(world, self, :gains, %{})
 
     {world, gains} =

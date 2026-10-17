@@ -10,7 +10,7 @@ defmodule Nidhox.Bout.Spawn do
       `System.noSwords` on; else a sword (2) where the rooms hand out swords
       (`global.swords`), fists otherwise
     * `reset_timer/2` (`reset_spawn_timer(delay)`): the match's `spawnTimer` set to
-      `delay`, never under 120
+      `delay`, or to 120 when `delay` is not above 0
     * `respawns/2` (`manageRespawns`), each frame, outside sudden death and the tutorial:
       a fencer alone on its feet takes the right of way; the spawn timer counts down,
       and at 0 starts again from `spawnDelay` and, in a room with a `RespawnPoint` that
@@ -22,12 +22,13 @@ defmodule Nidhox.Bout.Spawn do
           weapon, and player 1 comes in past the left edge, player 2 past the right
         * every fencer still entering (23) — when two are up and it stands within 160
           pixels of the other across, it first moves past the camera's other edge — is
-          put on the `RespawnPoint` nearest it, takes the spawn weapon and is heard
-          coming in (27)
+          put on the `RespawnPoint` nearest it (in the wide view of the castle stairs, the one
+          with the least `|dy| + 8|dx|` from it), takes the spawn weapon and is heard coming
+          in (`sndSpawn`)
   """
 
   alias Cauldron2D.GameMaker.{Instance, World}
-  alias Nidhox.Bout.{Camera, Sound}
+  alias Nidhox.Bout.{Camera, Sound, Spiral}
   alias Nidhox.Gml
   alias Nidhox.Man.{Query, Weapon}
   alias Nidhox.Objects.{RoomCodes, System}
@@ -37,12 +38,13 @@ defmodule Nidhox.Bout.Spawn do
   @entering 23
   @fists 1
   @sword 2
-  @least_delay 120
+  @default_delay 120
+  @point_row_weight 8
   @outside 64
   @spawn_height 300
   @too_close 160
   @end_rooms [4, 7]
-  @coming_in 27
+  @coming_in "sndSpawn"
 
   @doc "`{id, world}` with player `player`'s fencer made at `{x, y}` (`spawn_player`)."
   @spec player(World.t(), {number(), number()}, 1 | 2) :: {non_neg_integer(), World.t()}
@@ -83,7 +85,7 @@ defmodule Nidhox.Bout.Spawn do
 
       match ->
         Gml.put(world, match, %{
-          spawnTimer: if(delay > @least_delay, do: delay, else: @least_delay)
+          spawnTimer: if(delay > 0, do: delay, else: @default_delay)
         })
     end
   end
@@ -164,7 +166,7 @@ defmodule Nidhox.Bout.Spawn do
     %Instance{x: x, y: y} = World.fetch(world, man)
 
     world =
-      case Gml.nearest(world, {x, y}, "RespawnPoint") do
+      case respawn_point(world, {x, y}) do
         nil ->
           world
 
@@ -180,7 +182,25 @@ defmodule Nidhox.Bout.Spawn do
 
     world
     |> Weapon.set_type(man, weapon(world))
-    |> Sound.play(@coming_in, {x, y})
+    |> Sound.play_named(@coming_in, {x, y})
+  end
+
+  defp respawn_point(world, position) do
+    if Spiral.active?(world),
+      do: weighted_point(world, position),
+      else: Gml.nearest(world, position, "RespawnPoint")
+  end
+
+  defp weighted_point(world, {x, y}) do
+    world
+    |> Gml.all("RespawnPoint")
+    |> Enum.min_by(
+      fn point ->
+        %Instance{x: px, y: py} = World.fetch(world, point)
+        abs(y - py) + abs(x - px) * @point_row_weight
+      end,
+      fn -> nil end
+    )
   end
 
   defp away_from_other(world, man) do

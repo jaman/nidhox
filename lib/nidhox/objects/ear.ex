@@ -8,12 +8,12 @@ defmodule Nidhox.Objects.Ear do
       following sound moved to where its instance is, or let go once the instance is gone
 
   `attach/3` (`playSoundAtLoopEffect(sound, x, y, 1, 1, owner)`) starts the copy's sound
-  number `sound` going round and round at instance `owner` and following it.
+  called `sound` going round and round at instance `owner` and following it.
   `position/1` is where the `Ear` is, the camera's centre when there is none.
   """
 
   alias Cauldron2D.Audio
-  alias Cauldron2D.GameMaker.{Instance, World}
+  alias Cauldron2D.GameMaker.{Data, Instance, World}
   alias Nidhox.Bout.Camera
   alias Nidhox.Gml
 
@@ -38,19 +38,19 @@ defmodule Nidhox.Objects.Ear do
     end
   end
 
-  @doc "`{key, world}` with the copy's sound number `sound` going round at instance `owner` and following it."
-  @spec attach(World.t(), non_neg_integer(), non_neg_integer()) :: {term(), World.t()}
+  @doc "`{key, world}` with the copy's sound called `sound` going round at instance `owner` and following it."
+  @spec attach(World.t(), non_neg_integer(), String.t()) :: {term(), World.t()}
   def attach(%World{} = world, owner, sound) do
     key = {:attached, owner, sound}
     %Instance{x: x, y: y} = World.fetch(world, owner)
 
     world =
-      case Enum.at(world.data.sounds, sound) do
+      case Data.index(world.data, :sounds, sound) do
         nil ->
           world
 
-        %{name: name} ->
-          World.emit(world, Audio.keyed(key, {:recording, name}, at(x, y), loop: true))
+        _index ->
+          World.emit(world, Audio.keyed(key, {:recording, sound}, at(x, y), loop: true))
       end
 
     case Gml.first(world, "Ear") do

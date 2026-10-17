@@ -7,7 +7,10 @@ defmodule Nidhox.Tutorial.Lessons do
   (38968458) and throws its sword whenever it holds one.
 
   `check/4` runs the current lesson for one frame: it sets the lesson's marks (`check`,
-  three of them) and `COMPLETED_MOVE` once the lesson is done.
+  three of them) and `COMPLETED_MOVE` once the lesson is done. `line/1` gives a lesson's
+  instruction as the game builds it (`tutorialBuildMoveStrings`): its key in the
+  `"tutorial"` section, its English, and the menu buttons (`Nidhox.Glyphs`) whose glyphs
+  fill its `{0}` and `{1}`. The instructions below name those buttons in their place.
 
   | lesson | instruction | done once |
   | --- | --- | --- |
@@ -23,12 +26,10 @@ defmodule Nidhox.Tutorial.Lessons do
   | 11 | PRESS up AND down TO CHANGE YOUR SWORD HEIGHT | it has held its sword high, middle and low |
   | 10 | PRESS attack WITH A SWORD TO LUNGE | it lunges (48) while the partner is stabbed standing (65) |
   | 12 | IN CLOSE QUARTERS MOVING UP OR DOWN INTO A SWORD WILL DISARM | the partner is disarmed (13) |
-  | 18 | PRESS UP AND attack TO THROW YOUR SWORD | it throws (72, 73) |
+  | 18 | PRESS up AND attack TO THROW YOUR SWORD | it throws (72, 73) |
   | 2 | BLOCK THROWN SWORDS WITH YOUR SWORD, DUCK UNDER THEM, OR JUMP OVER THEM | a thrown sword was blocked or missed it (`block/2`) |
   | 1 | THE ARROW SHOWS THE RIGHT OF WAY. TO GET IT, KILL YOUR OPPONENT. IF YOU HAVE IT, RUN! | the partner is gone; the learner then leads |
   | 6 | THAT'S IT! follow that arrow! | 240 frames have passed |
-
-  The button names are the game's own (`input_constant_to_string`).
   """
 
   alias Cauldron2D.GameMaker.World
@@ -43,23 +44,28 @@ defmodule Nidhox.Tutorial.Lessons do
   @fists 1
   @sword 2
   @order [7, 14, 15, 8, 3, 4, 16, 13, 17, 11, 10, 12, 18, 2, 1, 6]
-  @instructions %{
-    17 => "TAP left OR right TO FENCE",
-    7 => "HOLD left OR right TO RUN",
-    11 => "PRESS up AND down TO CHANGE YOUR SWORD HEIGHT",
-    4 => "HOLD down TO DUCK",
-    8 => "PRESS jump TO JUMP",
-    10 => "PRESS attack WITH A SWORD TO LUNGE",
-    12 => "IN CLOSE QUARTERS MOVING UP OR DOWN INTO A SWORD WILL DISARM",
-    13 => "PRESS down TO PICK UP SWORDS",
-    18 => "PRESS UP AND attack TO THROW YOUR SWORD",
-    2 => "BLOCK THROWN SWORDS WITH YOUR SWORD, DUCK UNDER THEM, OR JUMP OVER THEM",
-    3 => "PRESS attack IN THE AIR TO DIVEKICK",
-    15 => "PRESS attack NEAR A KNOCKED DOWN OPPONENT TO REMOVE HEART",
-    16 => "PRESS attack WHILE DUCKING TO SWEEP THE LEG",
-    14 => "PRESS attack WHILE UNARMED TO PUNCH",
-    1 => "THE ARROW SHOWS THE RIGHT OF WAY. TO GET IT, KILL YOUR OPPONENT. IF YOU HAVE IT, RUN!",
-    6 => "THAT'S IT! follow that arrow!"
+  @lines %{
+    17 => {"tutorial_tap_left_right", "TAP {0} OR {1} TO FENCE", [0, 1]},
+    7 => {"tutorial_hold_left_right", "HOLD {0} OR {1} TO RUN", [0, 1]},
+    11 => {"tutorial_move_sword", "PRESS {0} AND {1} TO CHANGE YOUR SWORD HEIGHT", [2, 3]},
+    4 => {"tutorial_duck", "HOLD {0} TO DUCK", [3]},
+    8 => {"tutorial_jump", "PRESS {0} TO JUMP", [4]},
+    10 => {"tutorial_lunge", "PRESS {0} WITH A SWORD TO LUNGE", [5]},
+    12 => {"tutorial_parry", "IN CLOSE QUARTERS MOVING UP OR DOWN INTO A SWORD WILL DISARM", []},
+    13 => {"tutorial_pick_up_sword", "PRESS {0} TO PICK UP SWORDS", [3]},
+    18 => {"tutorial_throw_sword", "PRESS {0} AND {1} TO THROW YOUR SWORD", [2, 5]},
+    2 =>
+      {"tutorial_block_thrown_sword",
+       "BLOCK THROWN SWORDS WITH YOUR SWORD, DUCK UNDER THEM, OR JUMP OVER THEM", []},
+    3 => {"tutorial_dive_kick", "PRESS {0} IN THE AIR TO DIVEKICK", [5]},
+    15 => {"tutorial_stomp", "PRESS {0} NEAR A KNOCKED DOWN OPPONENT TO REMOVE HEART", [5]},
+    16 => {"tutorial_sweep_kick", "PRESS {0} WHILE DUCKING TO SWEEP THE LEG", [5]},
+    14 => {"tutorial_punch", "PRESS {0} WHILE UNARMED TO PUNCH", [5]},
+    1 =>
+      {"tutorial_arrows",
+       "THE ARROW SHOWS THE RIGHT OF WAY. TO GET IT, KILL YOUR OPPONENT. IF YOU HAVE IT, RUN!",
+       []},
+    6 => {"tutorial_finished", "THAT'S IT! follow that arrow!", []}
   }
   @block_lesson 2
 
@@ -67,9 +73,9 @@ defmodule Nidhox.Tutorial.Lessons do
   @spec order() :: [pos_integer()]
   def order, do: @order
 
-  @doc "The instruction shown for lesson `move`."
-  @spec instruction(pos_integer()) :: String.t()
-  def instruction(move), do: Map.fetch!(@instructions, move)
+  @doc "Lesson `move`'s instruction: `{key, english, buttons}`."
+  @spec line(pos_integer()) :: {String.t(), String.t(), [non_neg_integer()]}
+  def line(move), do: Map.fetch!(@lines, move)
 
   @doc "The world after lesson `move` is checked for `Tutorial` `self`, learner `yellow` and partner `orange` (`-4` for none)."
   @spec check(World.t(), non_neg_integer(), number(), number()) :: World.t()

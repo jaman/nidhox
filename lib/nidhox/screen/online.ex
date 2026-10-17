@@ -1,19 +1,15 @@
 defmodule Nidhox.Screen.Online do
   @moduledoc """
-  ONLINE VERSUS's screens under the title's logo, as GUI items for a window
+  The online menu's own NidhOX screens under the title's logo, as GUI items for a window
   `{width, height}`:
 
-    * `hosting/2` — HOST, this machine's address and the join code to tell the player
-      joining, and "waiting for player.." until they join (or why hosting failed), with
-      the status under it, such as that the last player left
     * `ssh_hosting/2` — HOST OVER SSH: the command the other player connects with, one
       for each of this machine's addresses (the other player uses the one on a network
       they share), and
       "waiting for player.." until they join (or why serving failed)
-    * `notice/2` — the status line under ONLINE VERSUS's menu, such as why a hosted
-      game ended
-    * `entry/3` — an address or a join code being typed (typed on a client, `Nidhox.Typing`), with
-      the joining's status under it
+    * `notice/2` — the status line under those screens, such as why a hosted game ended
+    * `entry/3` — JOIN BY ADDRESS's `address:port` being typed (on a client,
+      `Nidhox.Typing`), with the joining's status under it
   """
 
   alias Nidhox.Screen.Art
@@ -23,21 +19,6 @@ defmodule Nidhox.Screen.Online do
   @spacing 14
   @status_y 150
   @notice_y 186
-
-  @doc "The hosting screen's GUI items for `online` (`Nidhox.Online`)."
-  @spec hosting(map(), {number(), number()}) :: [map()]
-  def hosting(%{host: nil, status: status}, window),
-    do: [logo(window) | lines(["HOST", status || "starting.."], window)]
-
-  def hosting(%{host: host, status: status}, window),
-    do:
-      [
-        logo(window)
-        | lines(
-            ["HOST", "ADDRESS: #{host.address}", "CODE: #{host.code}", "waiting for player.."],
-            window
-          )
-      ] ++ notice(status, window)
 
   @doc "The GUI items of serving the game over ssh, from the state's `online`."
   @spec ssh_hosting(map(), {number(), number()}) :: [map()]
@@ -75,7 +56,7 @@ defmodule Nidhox.Screen.Online do
     [logo(window) | lines([label, "start to type, jump to go back"], window)] ++ status_items
   end
 
-  @doc "The GUI items of the status line under ONLINE VERSUS's menu: `status`, nothing when `nil`."
+  @doc "The GUI items of a status line: `status`, nothing when `nil`."
   @spec notice(String.t() | nil, {number(), number()}) :: [map()]
   def notice(nil, _window), do: []
 

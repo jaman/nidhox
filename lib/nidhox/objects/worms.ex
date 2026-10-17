@@ -4,11 +4,11 @@ defmodule Nidhox.Objects.Worms do
 
     * `MiniWorm` create: `beat` `choose(10, 40, 80, 100)`, turned `random(360)`, held
       at frame 0 (`image_single`); ten `WormPiece`s made at its place, the `i`th at
-      frame `i` (`pieces`); its user event 0; `holdSpeed` 0
+      frame `i` (`pieces`); its user event 0; `holdSpeed` 0; `offset` `random(10000)`
     * `MiniWorm` step: a held speed is given back; then, looking 16 pixels ahead at 45°
       to its left, with no `Block` there it turns 2° right; else with no `Block` 16
       pixels ahead at 45° to its right it turns 2° left; else it turns `sin(frame /
-      beat + id × 10) × random_range(2, 4)`. It crawls 0.2 a step the way it faces;
+      beat + offset × 10) × random_range(2, 4)`. It crawls 0.2 a step the way it faces;
       whenever `System.frame` is a multiple of `beat × 5`, `beat` becomes
       `choose(1, 6, 10, 40, 80)`; then its user event 0
     * `MiniWorm` user event 0: each piece more than 2 pixels from the one before it (the
@@ -19,7 +19,7 @@ defmodule Nidhox.Objects.Worms do
     * `WormPiece` create: frames at 0.1 a step
     * `WormSurface` create: a clear surface the size of the room (`wormSurface`), then
       its step 120 times; step: every `MiniWorm` drawn onto it in black, at its frame and
-      angle (made again if it was lost); draw: the surface at the room's corner;
+      angle (made again if it was lost); draw: the surface at the room's corner at alpha 0.1;
       destroy, room end and game end: the surface freed
   """
 
@@ -34,6 +34,8 @@ defmodule Nidhox.Objects.Worms do
   @crawl 0.2
   @gap 2
   @prime_steps 120
+  @offset_range 10_000
+  @surface_alpha 0.1
   @black {0, 0, 0}
 
   @doc "The compiled names this module answers for, with their functions."
@@ -72,10 +74,14 @@ defmodule Nidhox.Objects.Worms do
         {World.update(world, id, &%{&1 | image_index: index / 1}), pieces ++ [id]}
       end)
 
-    world
-    |> Gml.put(self, %{pieces: pieces})
-    |> World.perform(self, :other, 10)
-    |> Gml.put(self, %{holdSpeed: 0})
+    world =
+      world
+      |> Gml.put(self, %{pieces: pieces})
+      |> World.perform(self, :other, 10)
+      |> Gml.put(self, %{holdSpeed: 0})
+
+    {offset, world} = Gml.random(world, @offset_range)
+    Gml.put(world, self, %{offset: offset})
   end
 
   defp dark_start(world, self, _other) do
@@ -141,8 +147,9 @@ defmodule Nidhox.Objects.Worms do
   defp wander(world, self) do
     frame = System.get(world, :frame)
     beat = Gml.var(world, self, :beat)
+    offset = Gml.var(world, self, :offset)
     {swing, world} = Gml.random_range(world, 2, 4)
-    turn(world, self, :math.sin(frame / beat + self * 10) * swing)
+    turn(world, self, :math.sin(frame / beat + offset * 10) * swing)
   end
 
   defp new_beat(world, self) do
@@ -248,7 +255,7 @@ defmodule Nidhox.Objects.Worms do
     surface = Gml.var(world, self, :wormSurface, -1)
 
     if Surfaces.exists?(world, surface),
-      do: Draw.item(world, Surfaces.item(world, surface, {0, 0})),
+      do: Draw.item(world, Surfaces.item(world, surface, {0, 0}, alpha: @surface_alpha)),
       else: world
   end
 

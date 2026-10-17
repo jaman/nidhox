@@ -5,9 +5,10 @@ defmodule Nidhox.Bout.Overlap do
   against an instance's shape.
 
     * `held?/3` (`check_HeldWeapon_overlap(weapon, target)`): the blade from a fifth of
-      its length to its end along the weapon's height (on stairs, along its tip's
-      direction turned 25 degrees). A sword shown going up or down stairs measures as
-      the level one (sprite 150)
+      its length to its end along the weapon's height; when its fencer stands on stairs
+      (`Nidhox.Man.Stairs.under/2`), along the stairs' sword direction (`stairSwordDir`):
+      the angle of the stairs' slope, facing the way they rise upwards, the other way
+      downwards, mirrored for a fencer facing left
     * `flying?/3` (`check_FlyingWeapon_overlap(weapon, target)`): the thrown sword's
       length along its angle, or its blade's bottom line
     * `punch?/3`, `kick?/3`, `sweep?/3` (`check_punch_overlap`, `check_kick_overlap`,
@@ -18,7 +19,8 @@ defmodule Nidhox.Bout.Overlap do
     * `ground_pound?/3` (`checkGroundPoundOverlap(flesh, flesh)`): from 3 above the body's
       origin to 3 below
     * `impact/3` (`getImpactVelocitySwordFlesh(weapon, flesh)`): how hard a blade meets a
-      body — 0 when the weapon turned around this step; 3 when it moved up or down; 4 when
+      body — 0 when the weapon turned around this step; 3 when its fencer's `weaponYRel`
+      changed; 4 when
       it was hidden last step; else whichever of the blade and the body moved further
       across, less what they moved together (both eased towards 0 by 0.1 until the
       other's movement is gone), when that carries it into the other; 0 otherwise
@@ -26,32 +28,31 @@ defmodule Nidhox.Bout.Overlap do
 
   alias Cauldron2D.GameMaker.{Collide, Instance, World}
   alias Nidhox.Gml
+  alias Nidhox.Man.Stairs
 
-  @level_sword 150
-  @stairs_swords [151, 152]
   @noone -4
 
   @doc "Whether `weapon`'s blade crosses instance `target` (`check_HeldWeapon_overlap`)."
   @spec held?(World.t(), non_neg_integer(), non_neg_integer()) :: boolean()
   def held?(%World{} = world, weapon, target) do
-    %Instance{x: x, y: y, sprite_index: sprite} = blade = World.fetch(world, weapon)
-
-    width =
-      if sprite in @stairs_swords,
-        do: sprite_size(world, @level_sword),
-        else: sprite_width(world, blade)
-
+    %Instance{x: x, y: y} = blade = World.fetch(world, weapon)
+    width = sprite_width(world, blade)
     mother = Gml.var(world, weapon, :mother, @noone)
 
-    if on_stairs?(world, mother) do
-      length = abs(width)
-      tip = {Gml.var(world, weapon, :tipX, x), Gml.var(world, weapon, :tipY, y)}
-      angle = Gml.point_direction({x, y}, tip) + 25
-      from = {x + Gml.lengthdir_x(length * 0.2, angle), y + Gml.lengthdir_y(length * 0.2, angle)}
-      to = {x + Gml.lengthdir_x(length, angle), y + Gml.lengthdir_y(length, angle)}
-      line?(world, from, to, target)
-    else
-      line?(world, {x + width * 0.2, y}, {x + width, y}, target)
+    case stairs_under(world, mother) do
+      nil ->
+        line?(world, {x + width * 0.2, y}, {x + width, y}, target)
+
+      stairs ->
+        length = abs(width)
+        direction = sword_direction(world, mother, stairs)
+
+        from =
+          {x + Gml.lengthdir_x(length * 0.2, direction),
+           y + Gml.lengthdir_y(length * 0.2, direction)}
+
+        to = {x + Gml.lengthdir_x(length, direction), y + Gml.lengthdir_y(length, direction)}
+        line?(world, from, to, target)
     end
   end
 
@@ -106,7 +107,7 @@ defmodule Nidhox.Bout.Overlap do
 
     cond do
       not Gml.eq?(Gml.var(world, weapon, :xScalePrevious, 1), blade.image_xscale) -> 0
-      abs(blade.y - Gml.var(world, weapon, :previousY, blade.y)) > 1.0e-5 -> 3
+      weapon_moved?(world, Gml.var(world, weapon, :mother, @noone)) -> 3
       not Gml.truthy?(Gml.var(world, weapon, :visiblePrevious, 0)) -> 4
       true -> closing(world, blade, World.fetch(world, flesh))
     end
@@ -153,14 +154,25 @@ defmodule Nidhox.Bout.Overlap do
   defp line?(world, from, to, target),
     do: Collide.on_line(world, from, to, {:id, target}) != nil
 
-  defp on_stairs?(world, mother) do
-    case World.fetch(world, mother) do
-      %Instance{object: object, vars: vars} ->
-        World.object(world, object).name in ["YellowPlayer", "OrangePlayer"] and
-          Map.get(vars, :state) in [30, 31]
+  defp weapon_moved?(world, mother) do
+    not Gml.eq?(
+      Gml.var(world, mother, :weaponYRel, 0),
+      Gml.var(world, mother, :weaponYRelPrevious, 0)
+    )
+  end
 
-      nil ->
-        false
+  defp stairs_under(world, mother),
+    do: if(World.fetch(world, mother) != nil, do: Stairs.under(world, mother))
+
+  defp sword_direction(world, mother, stairs) do
+    angle = :math.atan(Stairs.ratio(world, stairs)) * 180 / :math.pi()
+    up? = Stairs.facing_up?(world, mother, stairs)
+
+    case {Gml.var(world, mother, :facingXScale, 1) > 0, up?} do
+      {true, true} -> angle
+      {true, false} -> -angle
+      {false, true} -> 180 - angle
+      {false, false} -> 180 + angle
     end
   end
 

@@ -8,12 +8,12 @@ defmodule Nidhox.Man.Actions do
     * `skids/2` (`playSkids`): `sfxRunSkid1` when left is pressed moving right, or right
       moving left
     * `footwork/4` (`stepLeftAndRightAccelFric(accel, fric)`): a step sound is picked
-      (`choose(45, 48, 49, 50, 51)`); pressing right adds `accel × 0.5` moving left,
+      (`choose(70, 58, 59, 60, 61)`); pressing right adds `accel × 0.5` moving left,
       `× 0.75` standing, `× 1.8` moving right, and plays it; left the same the other
       way; then `hspd` eases to 0 by `fric`
-    * `slide_or_crawl/2` (`landSlidingOrCrawling`): holding down, forward while running
-      slides (61), forward otherwise crawls on (58), else crawls (9); `{true, world}`
-      when it set a state
+    * `slide_or_crawl/2` (`landSlidingOrCrawling`): holding down, a speed above 0.1 with
+      forward held slides (61) while running and crawls on (58) otherwise, else crawls
+      (9); `{true, world}` when it set a state
     * `lunge_or_butt/2` (`lungeOrSwordButt`): 49 when the opponent is on the ground,
       neither low, collapsing nor stabbed, within 16 pixels across; else 48
     * `try_stomp/2` (`tryToStomp`): the fencers within 20 pixels and the opponent
@@ -35,12 +35,12 @@ defmodule Nidhox.Man.Actions do
 
   @step_frames [11, 0, 16, 5]
   @run_cycle 23
-  @steps 35..41
-  @rustles [88, 91, 89, 90]
-  @skid 42
-  @footwork [45, 48, 49, 50, 51]
-  @stance_sounds 65..73
-  @cloth [85, 86, 87]
+  @steps for number <- 1..7, do: "sfxRunStep#{number}"
+  @rustles for number <- 1..4, do: "sfxClothRun#{number}"
+  @skid "sfxRunSkid1"
+  @footwork ["sfxLand1" | for(number <- 1..4, do: "sfxFenceStep#{number}")]
+  @stance_sounds for number <- 1..9, do: "sfxChangeLevel#{number}"
+  @cloth for number <- 1..3, do: "sfxClothLevel#{number}"
 
   @doc "`playFootsteps` for fencer `self`."
   @spec footsteps(World.t(), non_neg_integer()) :: World.t()
@@ -49,7 +49,7 @@ defmodule Nidhox.Man.Actions do
 
     if frame in @step_frames and Gml.var(world, self, :lastStepFrame, -1) != frame do
       world = Gml.put(world, self, %{lastStepFrame: frame})
-      {step, world} = Gml.choose(world, Enum.to_list(@steps))
+      {step, world} = Gml.choose(world, @steps)
       world = play(world, self, step)
       {rustle, world} = Gml.choose(world, @rustles)
       play(world, self, rustle)
@@ -89,8 +89,9 @@ defmodule Nidhox.Man.Actions do
 
     cond do
       not Input.down?(world, self, player, 3) -> {false, world}
+      abs(Gml.var(world, self, :hspd)) <= 0.1 -> {true, Physics.next_state(world, self, 9)}
       not Input.down?(world, self, player, 8) -> {true, Physics.next_state(world, self, 9)}
-      Gml.var(world, self, :state) in [52, 54] -> {true, Physics.next_state(world, self, 61)}
+      Query.running?(world, self) -> {true, Physics.next_state(world, self, 61)}
       true -> {true, Physics.next_state(world, self, 58)}
     end
   end
@@ -144,7 +145,7 @@ defmodule Nidhox.Man.Actions do
     world = raise_or_lower(world, self, way, stance)
 
     if Gml.var(world, self, :stance) != stance do
-      {change, world} = Gml.choose(world, Enum.to_list(@stance_sounds))
+      {change, world} = Gml.choose(world, @stance_sounds)
       world = play(world, self, change)
       {cloth, world} = Gml.choose(world, @cloth)
 
@@ -166,12 +167,17 @@ defmodule Nidhox.Man.Actions do
       else: Gml.put(world, self, %{turnAroundTimer: timer})
   end
 
-  @doc "Sound number `sound` played where fencer `self` stands."
-  @spec play(World.t(), non_neg_integer(), non_neg_integer()) :: World.t()
+  @doc "Sound `sound`, an index or a name, played where fencer `self` stands."
+  @spec play(World.t(), non_neg_integer(), non_neg_integer() | String.t()) :: World.t()
   def play(%World{} = world, self, sound) do
     %Instance{x: x, y: y} = World.fetch(world, self)
-    Sound.play(world, sound, {x, y})
+    play_at(world, sound, {x, y})
   end
+
+  defp play_at(world, sound, position) when is_binary(sound),
+    do: Sound.play_named(world, sound, position)
+
+  defp play_at(world, sound, position), do: Sound.play(world, sound, position)
 
   defp raise_or_lower(world, self, 2, 2),
     do: Gml.put(world, self, %{stance: 3, inBetweenHeight: -1})

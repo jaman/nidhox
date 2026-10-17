@@ -32,7 +32,7 @@ defmodule Nidhox.Brain.Plan do
   | 107 | take the high ground | plan 102 once standing out of the low ground; climbs, throws, backs off, runs at the wall and dive kicks in turn |
   | 106 | suicide | while the opponent leads, run to death (25) when it runs for its goal; else plan 102 |
   | 102 | close the gap | run at the opponent (27); there, thrust now and then (19 at 30) and fence (103) with a sword or brawl (101) without |
-  | 103 | fence | brawl when it loses its sword; close the gap past 90; guard (15) against a lunge, throw (29), dive kick (9) and sweep kick (28) now and then; else guard, look for an opening (18), lunge (19), back off (4), pause (20) or jump over (16) |
+  | 103 | fence | brawl when it loses its sword; close the gap past 90; guard (15) against a lunge off the half beat, throw (29), dive kick (9) and sweep kick (28) now and then; else guard, look for an opening (18), lunge (19), back off (4), pause (20) or jump over (16) |
   | 101 | brawl | fence once it has a sword; else melee actions in turn |
   | 105 | run to the goal | fence or brawl when the opponent stands ahead; close the gap when not leading; else run to the goal (26), now and then taunting (7) |
 
@@ -457,27 +457,35 @@ defmodule Nidhox.Brain.Plan do
   end
 
   defp fence_on_beat(world, self) do
-    other = opponent(world, self)
-
-    with {:no, world} <-
-           beat_action(world, self, 0.5, 15, 60, Gml.var(world, other, :state) == @lunging),
+    with {:no, world} <- guard_lunge(world, self),
          {:no, world} <- beat_throw(world, self),
-         {:no, world} <- beat_action(world, self, 1, 9, 4, true),
-         {:no, world} <- beat_action(world, self, 1, 28, 4, true) do
+         {:no, world} <- beat_action(world, self, 1, 9, 4),
+         {:no, world} <- beat_action(world, self, 1, 28, 4) do
       when_free(world, self, &fencing/3)
     else
       {:yes, world} -> world
     end
   end
 
-  defp beat_action(world, self, times, action, chance, condition) do
-    if Clock.every?(world, self, :stateCounter, times) and condition do
-      case Personality.chance(world, self, action, chance) do
-        {true, world} -> {:yes, Intent.set(world, self, action)}
-        {false, world} -> {:no, world}
-      end
-    else
-      {:no, world}
+  defp guard_lunge(world, self) do
+    count = Gml.var(world, self, :stateCounter)
+
+    if Clock.between?(count, Clock.period(world, self, 0.5)) and
+         Gml.var(world, opponent(world, self), :state) == @lunging,
+       do: take_action(world, self, 15, 60),
+       else: {:no, world}
+  end
+
+  defp beat_action(world, self, times, action, chance) do
+    if Clock.every?(world, self, :stateCounter, times),
+      do: take_action(world, self, action, chance),
+      else: {:no, world}
+  end
+
+  defp take_action(world, self, action, chance) do
+    case Personality.chance(world, self, action, chance) do
+      {true, world} -> {:yes, Intent.set(world, self, action)}
+      {false, world} -> {:no, world}
     end
   end
 

@@ -3,12 +3,9 @@ defmodule Nidhox.Man.Flesh do
   A fencer's body, the game's `FleshCollisionMask`: the instance a fencer (`mother`)
   makes when it is made, drawn in its player's colour and posed by the fencer's states.
 
-    * create: `ducking`, `craneKicking`, `hasSword` 0; `stabbedWeapon` 2; `mother`
-      none; `previousX`, `previousY` where it stands
-    * draw: tinted its player's colour (`Nidhox.Bout.PlayerColour`) — in a tournament
-      the colour of the tournament's player on that side (`Tournament.currentPlayer`
-      + 1), in a single player run the computer's colour for a player the computer
-      plays — drawn as itself; holding a sword,
+    * create: `ducking`, `craneKicking`, `hasSword` 0; `stabbedWeapon` the array 0, 2, 1, 2;
+      `mother` none; `previousX`, `previousY` where it stands
+    * draw: tinted `color/3`, drawn as itself; holding a sword,
       or in `sManHitByFlying` or `sManMidairHitByFlying`, the sword drawn for its sprite
       (`@swords`) over it in white, at its frame, place, scale, angle and alpha
 
@@ -27,51 +24,53 @@ defmodule Nidhox.Man.Flesh do
   alias Nidhox.Objects.Tournament
 
   @swords %{
-    202 => 203,
-    200 => 201,
-    234 => 146,
-    168 => 143,
-    159 => 109,
-    217 => 118,
-    263 => 139,
-    244 => 119,
-    245 => 120,
-    248 => 123,
-    247 => 122,
-    246 => 121,
-    242 => 115,
-    258 => 135,
-    236 => 108,
-    264 => 140,
-    241 => 114,
-    218 => 124,
-    228 => 129,
-    261 => 138,
-    266 => 144,
-    259 => 136,
-    255 => 131,
-    257 => 134,
-    267 => 145,
-    256 => 133,
-    237 => 110,
-    260 => 130,
-    169 => 148,
-    161 => 113,
-    174 => 149,
-    167 => 142,
-    206 => 149,
-    173 => 149,
-    249 => 125,
-    243 => 116,
-    238 => 111,
-    239 => 112,
-    265 => 141,
-    250 => 126,
-    216 => 117,
-    251 => 127,
-    252 => 128
+    326 => 481,
+    314 => 431,
+    333 => 486,
+    329 => 483,
+    231 => 448,
+    264 => 457,
+    322 => 478,
+    266 => 458,
+    267 => 459,
+    270 => 462,
+    269 => 461,
+    268 => 460,
+    260 => 454,
+    313 => 474,
+    228 => 447,
+    323 => 479,
+    250 => 453,
+    272 => 463,
+    291 => 468,
+    320 => 477,
+    330 => 484,
+    318 => 475,
+    308 => 471,
+    311 => 473,
+    312 => 473,
+    310 => 471,
+    331 => 485,
+    309 => 472,
+    240 => 449,
+    319 => 470,
+    334 => 488,
+    248 => 452,
+    349 => 489,
+    328 => 482,
+    362 => 489,
+    348 => 489,
+    282 => 464,
+    262 => 455,
+    241 => 450,
+    242 => 451,
+    324 => 480,
+    283 => 465,
+    263 => 456,
+    284 => 466,
+    285 => 467
   }
-  @hit_by_flying [218, 228]
+  @hit_by_flying [272, 291]
   @white {255, 255, 255}
   @computer 123_456
 
@@ -127,17 +126,30 @@ defmodule Nidhox.Man.Flesh do
       ducking: 0,
       craneKicking: 0,
       hasSword: 0,
-      stabbedWeapon: 2,
+      stabbedWeapon: [0, 2, 1, 2],
       mother: -4,
       previousX: x,
       previousY: y
     })
   end
 
+  @doc """
+  `fleshColor(man)` as run by instance `caller`: `{colour, world}`, the colour a fencer's
+  body is tinted. In a tournament it is the colour of the tournament's player on the
+  fencer's side (`Tournament.currentPlayer` + 1). In a single player run it is the
+  computer's colour for a player the computer plays. Otherwise it is the colour of the
+  fencer's player. The colours come from `Nidhox.Bout.PlayerColour`.
+  """
+  @spec color(World.t(), non_neg_integer() | nil, non_neg_integer()) ::
+          {{byte(), byte(), byte()}, World.t()}
+  def color(%World{} = world, caller, man) do
+    player = Gml.var(world, man, :playerIndex, 1)
+    PlayerColour.get(world, caller, colour_index(world, player))
+  end
+
   defp draw(world, self, _other) do
     %Instance{vars: vars, sprite_index: sprite} = World.fetch(world, self)
-    player = Gml.var(world, Map.get(vars, :mother, -4), :playerIndex, 1)
-    {colour, world} = PlayerColour.get(world, self, colour_index(world, player))
+    {colour, world} = color(world, self, Map.get(vars, :mother, -4))
     world = World.update(world, self, &%{&1 | image_blend: colour})
     world = Draw.self(world, self)
 
